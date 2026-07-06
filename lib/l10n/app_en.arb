@@ -2204,5 +2204,70 @@
       }
     }
   },
-  "mobileExitBackHint": "Go back again to exit"
+  "mobileExitBackHint": "Go back again to exit",
+  "navMultichain": "Multichain",
+  "multichainTitle": "Multichain balances",
+  "multichainPublicChainsNote": "These are public chains. Balances and activity at these addresses are visible to everyone.",
+  "multichainPublicChainLabel": "Public chain — visible to everyone",
+  "multichainUnavailable": "Multichain balances are not available for this account.",
+  "multichainBalanceError": "Unavailable",
+  "multichainRefresh": "Refresh",
+  "multichainSend": "Send",
+  "multichainAddressCopied": "{symbol} address copied",
+  "@multichainAddressCopied": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainSendTitle": "Send {symbol}",
+  "@multichainSendTitle": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainRecipientLabel": "Recipient",
+  "multichainRecipientHint": "{chainName} address",
+  "@multichainRecipientHint": {
+    "placeholders": {
+      "chainName": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainAmountLabel": "Amount",
+  "multichainAmountHint": "Amount in {symbol}",
+  "@multichainAmountHint": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainFeeLine": "Estimated fee: {fee}",
+  "@multichainFeeLine": {
+    "placeholders": {
+      "fee": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainEstimatingFee": "Estimating fee…",
+  "multichainPreviewSend": "Preview send",
+  "multichainConfirmSend": "Confirm send",
+  "multichainSending": "Sending…",
+  "multichainSentSuccess": "{symbol} transaction broadcast",
+  "@multichainSentSuccess": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainBackToBalances": "Back to multichain balances",
+  "multichainOptInTitle": "Enable multichain balances",
+  "multichainOptInSubtitle": "Adds BTC, ETH, ATOM, and SOL addresses derived from this wallet's seed. These are public chains — activity at them is visible to everyone. You can change this later."
 }

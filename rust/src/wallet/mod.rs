@@ -1,4 +1,5 @@
 pub(crate) mod db;
+pub mod chains;
 pub mod keys;
 pub mod keystone;
 pub mod network;

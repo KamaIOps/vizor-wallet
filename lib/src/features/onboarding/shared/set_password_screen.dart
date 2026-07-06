@@ -10,6 +10,8 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/password_text_field.dart';
+import '../../../features/multichain/providers/multichain_providers.dart';
+import '../../../features/multichain/widgets/multichain_optin_row.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
 import '../../../providers/router_refresh_provider.dart';
@@ -37,6 +39,12 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
   final _confirmController = TextEditingController();
   _SetPasswordSubmitPhase _submitPhase = _SetPasswordSubmitPhase.idle;
   String? _submitError;
+  bool _multichainOptIn = false;
+
+  /// Hardware (Keystone) accounts have no seed on the device, so there is
+  /// nothing to derive other chains from.
+  bool get _showMultichainOptIn =>
+      widget.args.flow != SetPasswordFlow.importKeystone;
 
   @override
   void dispose() {
@@ -135,6 +143,17 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
 
         securityNotifier.commitPasswordSetup();
         passwordCommitted = true;
+        if (_showMultichainOptIn) {
+          // Best-effort: the opt-in is changeable later, so a storage
+          // failure here must not fail wallet creation.
+          try {
+            await ref
+                .read(multichainEnabledProvider.notifier)
+                .setEnabled(_multichainOptIn);
+          } catch (e) {
+            log('SetPasswordScreen._submit: multichain opt-in save failed: $e');
+          }
+        }
         if (args.flow == SetPasswordFlow.importKeystone) {
           ref.read(keystoneOnboardingProvider.notifier).resetScan();
         }
@@ -175,6 +194,12 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
       passwordMessage: _passwordMessage,
       confirmMessage: _confirmMessage,
       submitError: _submitError,
+      multichainOptIn: _showMultichainOptIn ? _multichainOptIn : null,
+      onMultichainOptInChanged: _submitPhase == _SetPasswordSubmitPhase.idle
+          ? (value) => setState(() {
+              _multichainOptIn = value;
+            })
+          : null,
       onChanged: () => setState(() {
         _submitError = null;
       }),
@@ -222,6 +247,8 @@ class _SetPasswordContent extends StatelessWidget {
     required this.passwordMessage,
     required this.confirmMessage,
     required this.submitError,
+    required this.multichainOptIn,
+    required this.onMultichainOptInChanged,
     required this.onChanged,
     required this.onSubmit,
   });
@@ -233,6 +260,10 @@ class _SetPasswordContent extends StatelessWidget {
   final String? passwordMessage;
   final String? confirmMessage;
   final String? submitError;
+
+  /// Null hides the row (Keystone flow — no seed on this device).
+  final bool? multichainOptIn;
+  final ValueChanged<bool>? onMultichainOptInChanged;
   final VoidCallback onChanged;
   final Future<void> Function() onSubmit;
 
@@ -266,6 +297,14 @@ class _SetPasswordContent extends StatelessWidget {
                     onSubmit: onSubmit,
                   ),
                 ),
+                if (multichainOptIn != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                    child: MultichainOptInRow(
+                      value: multichainOptIn!,
+                      onChanged: onMultichainOptInChanged,
+                    ),
+                  ),
                 _SetPasswordBottomActions(
                   submitPhase: submitPhase,
                   canSubmit: canSubmit,

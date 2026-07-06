@@ -28,6 +28,9 @@ import 'src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'src/features/accounts/screens/accounts_screen.dart';
 import 'src/features/address_book/screens/address_book_screen.dart';
 import 'src/features/home/screens/home_screen.dart';
+import 'src/features/multichain/domain/multichain_chain.dart';
+import 'src/features/multichain/screens/multichain_screen.dart';
+import 'src/features/multichain/screens/multichain_send_screen.dart';
 import 'src/features/about/screens/about_screen.dart';
 import 'src/features/about/screens/mobile/mobile_about_screens.dart';
 import 'src/features/onboarding/create/address_types_screen.dart';
@@ -678,6 +681,16 @@ List<RouteBase> appDesktopOnboardingRoutes(Ref ref) => [
 /// Main application routes for the desktop (large-form-factor) tree.
 List<RouteBase> _desktopRoutes() => [
   GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
+  GoRoute(path: '/multichain', builder: (_, _) => const MultichainScreen()),
+  GoRoute(
+    path: '/multichain/send/:chain',
+    builder: (_, state) {
+      final chain = MultichainChain.values.asNameMap()[state
+          .pathParameters['chain']];
+      if (chain == null) return const MultichainScreen();
+      return MultichainSendScreen(chain: chain);
+    },
+  ),
   GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
   GoRoute(path: '/address-book', builder: (_, _) => const AddressBookScreen()),
   GoRoute(path: '/activity', builder: (_, _) => const ActivityScreen()),

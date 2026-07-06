@@ -1251,5 +1251,70 @@
   "votingEndsToday": "오늘 종료",
   "votingOneDayLeft": "1일 남음",
   "votingDaysLeft": "{days}일 남음",
-  "mobileExitBackHint": "종료하려면 뒤로 가기를 한 번 더 누르세요"
+  "mobileExitBackHint": "종료하려면 뒤로 가기를 한 번 더 누르세요",
+  "navMultichain": "멀티체인",
+  "multichainTitle": "멀티체인 잔액",
+  "multichainPublicChainsNote": "이 체인들은 공개 체인입니다. 이 주소들의 잔액과 활동 내역은 누구나 볼 수 있습니다.",
+  "multichainPublicChainLabel": "공개 체인 — 모두에게 공개됩니다",
+  "multichainUnavailable": "이 계정에서는 멀티체인 잔액을 사용할 수 없습니다.",
+  "multichainBalanceError": "조회 실패",
+  "multichainRefresh": "새로고침",
+  "multichainSend": "보내기",
+  "multichainAddressCopied": "{symbol} 주소가 복사되었습니다",
+  "@multichainAddressCopied": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainSendTitle": "{symbol} 보내기",
+  "@multichainSendTitle": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainRecipientLabel": "받는 주소",
+  "multichainRecipientHint": "{chainName} 주소",
+  "@multichainRecipientHint": {
+    "placeholders": {
+      "chainName": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainAmountLabel": "금액",
+  "multichainAmountHint": "{symbol} 금액",
+  "@multichainAmountHint": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainFeeLine": "예상 수수료: {fee}",
+  "@multichainFeeLine": {
+    "placeholders": {
+      "fee": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainEstimatingFee": "수수료 계산 중…",
+  "multichainPreviewSend": "보내기 미리보기",
+  "multichainConfirmSend": "보내기 확인",
+  "multichainSending": "보내는 중…",
+  "multichainSentSuccess": "{symbol} 트랜잭션이 전송되었습니다",
+  "@multichainSentSuccess": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "multichainBackToBalances": "멀티체인 잔액으로 돌아가기",
+  "multichainOptInTitle": "멀티체인 잔액 사용",
+  "multichainOptInSubtitle": "이 지갑의 시드에서 파생된 BTC, ETH, ATOM, SOL 주소를 추가합니다. 이 체인들은 공개 체인으로, 활동 내역이 모두에게 공개됩니다. 나중에 변경할 수 있습니다."
 }

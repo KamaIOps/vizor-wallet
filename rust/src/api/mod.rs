@@ -1,3 +1,4 @@
+pub mod chains;
 pub mod keystone;
 pub mod secret;
 pub mod simple;

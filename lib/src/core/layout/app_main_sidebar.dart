@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../main.dart' show log;
+import '../../features/multichain/providers/multichain_providers.dart';
 import '../../providers/account_provider.dart';
 import '../../providers/app_security_provider.dart';
 import '../../providers/privacy_mode_provider.dart';
@@ -406,6 +407,18 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                         iconName: AppIcons.swapArrows,
                         active: _matches('/swap'),
                         onTap: isImporting ? null : () => _navigateTo('/swap'),
+                      ),
+                    ],
+                    if (ref.watch(multichainAvailableProvider)) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      AppSidebarItem(
+                        key: const ValueKey('sidebar_multichain_button'),
+                        label: AppLocalizations.of(context).navMultichain,
+                        iconName: AppIcons.coins,
+                        active: _matches('/multichain'),
+                        onTap: isImporting
+                            ? null
+                            : () => _navigateTo('/multichain'),
                       ),
                     ],
                     const SizedBox(height: AppSpacing.xs),

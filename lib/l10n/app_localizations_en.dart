@@ -4344,4 +4344,88 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mobileExitBackHint => 'Go back again to exit';
+
+  @override
+  String get navMultichain => 'Multichain';
+
+  @override
+  String get multichainTitle => 'Multichain balances';
+
+  @override
+  String get multichainPublicChainsNote =>
+      'These are public chains. Balances and activity at these addresses are visible to everyone.';
+
+  @override
+  String get multichainPublicChainLabel => 'Public chain — visible to everyone';
+
+  @override
+  String get multichainUnavailable =>
+      'Multichain balances are not available for this account.';
+
+  @override
+  String get multichainBalanceError => 'Unavailable';
+
+  @override
+  String get multichainRefresh => 'Refresh';
+
+  @override
+  String get multichainSend => 'Send';
+
+  @override
+  String multichainAddressCopied(String symbol) {
+    return '$symbol address copied';
+  }
+
+  @override
+  String multichainSendTitle(String symbol) {
+    return 'Send $symbol';
+  }
+
+  @override
+  String get multichainRecipientLabel => 'Recipient';
+
+  @override
+  String multichainRecipientHint(String chainName) {
+    return '$chainName address';
+  }
+
+  @override
+  String get multichainAmountLabel => 'Amount';
+
+  @override
+  String multichainAmountHint(String symbol) {
+    return 'Amount in $symbol';
+  }
+
+  @override
+  String multichainFeeLine(String fee) {
+    return 'Estimated fee: $fee';
+  }
+
+  @override
+  String get multichainEstimatingFee => 'Estimating fee…';
+
+  @override
+  String get multichainPreviewSend => 'Preview send';
+
+  @override
+  String get multichainConfirmSend => 'Confirm send';
+
+  @override
+  String get multichainSending => 'Sending…';
+
+  @override
+  String multichainSentSuccess(String symbol) {
+    return '$symbol transaction broadcast';
+  }
+
+  @override
+  String get multichainBackToBalances => 'Back to multichain balances';
+
+  @override
+  String get multichainOptInTitle => 'Enable multichain balances';
+
+  @override
+  String get multichainOptInSubtitle =>
+      'Adds BTC, ETH, ATOM, and SOL addresses derived from this wallet\'s seed. These are public chains — activity at them is visible to everyone. You can change this later.';
 }

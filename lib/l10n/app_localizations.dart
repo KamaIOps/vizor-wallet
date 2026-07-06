@@ -7609,6 +7609,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Go back again to exit'**
   String get mobileExitBackHint;
+
+  /// No description provided for @navMultichain.
+  ///
+  /// In en, this message translates to:
+  /// **'Multichain'**
+  String get navMultichain;
+
+  /// No description provided for @multichainTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Multichain balances'**
+  String get multichainTitle;
+
+  /// No description provided for @multichainPublicChainsNote.
+  ///
+  /// In en, this message translates to:
+  /// **'These are public chains. Balances and activity at these addresses are visible to everyone.'**
+  String get multichainPublicChainsNote;
+
+  /// No description provided for @multichainPublicChainLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Public chain — visible to everyone'**
+  String get multichainPublicChainLabel;
+
+  /// No description provided for @multichainUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Multichain balances are not available for this account.'**
+  String get multichainUnavailable;
+
+  /// No description provided for @multichainBalanceError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get multichainBalanceError;
+
+  /// No description provided for @multichainRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get multichainRefresh;
+
+  /// No description provided for @multichainSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get multichainSend;
+
+  /// No description provided for @multichainAddressCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'{symbol} address copied'**
+  String multichainAddressCopied(String symbol);
+
+  /// No description provided for @multichainSendTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send {symbol}'**
+  String multichainSendTitle(String symbol);
+
+  /// No description provided for @multichainRecipientLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Recipient'**
+  String get multichainRecipientLabel;
+
+  /// No description provided for @multichainRecipientHint.
+  ///
+  /// In en, this message translates to:
+  /// **'{chainName} address'**
+  String multichainRecipientHint(String chainName);
+
+  /// No description provided for @multichainAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount'**
+  String get multichainAmountLabel;
+
+  /// No description provided for @multichainAmountHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount in {symbol}'**
+  String multichainAmountHint(String symbol);
+
+  /// No description provided for @multichainFeeLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated fee: {fee}'**
+  String multichainFeeLine(String fee);
+
+  /// No description provided for @multichainEstimatingFee.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimating fee…'**
+  String get multichainEstimatingFee;
+
+  /// No description provided for @multichainPreviewSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview send'**
+  String get multichainPreviewSend;
+
+  /// No description provided for @multichainConfirmSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm send'**
+  String get multichainConfirmSend;
+
+  /// No description provided for @multichainSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending…'**
+  String get multichainSending;
+
+  /// No description provided for @multichainSentSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'{symbol} transaction broadcast'**
+  String multichainSentSuccess(String symbol);
+
+  /// No description provided for @multichainBackToBalances.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to multichain balances'**
+  String get multichainBackToBalances;
+
+  /// No description provided for @multichainOptInTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable multichain balances'**
+  String get multichainOptInTitle;
+
+  /// No description provided for @multichainOptInSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Adds BTC, ETH, ATOM, and SOL addresses derived from this wallet\'s seed. These are public chains — activity at them is visible to everyone. You can change this later.'**
+  String get multichainOptInSubtitle;
 }
 
 class _AppLocalizationsDelegate

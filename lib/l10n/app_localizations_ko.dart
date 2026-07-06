@@ -4168,4 +4168,87 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get mobileExitBackHint => '종료하려면 뒤로 가기를 한 번 더 누르세요';
+
+  @override
+  String get navMultichain => '멀티체인';
+
+  @override
+  String get multichainTitle => '멀티체인 잔액';
+
+  @override
+  String get multichainPublicChainsNote =>
+      '이 체인들은 공개 체인입니다. 이 주소들의 잔액과 활동 내역은 누구나 볼 수 있습니다.';
+
+  @override
+  String get multichainPublicChainLabel => '공개 체인 — 모두에게 공개됩니다';
+
+  @override
+  String get multichainUnavailable => '이 계정에서는 멀티체인 잔액을 사용할 수 없습니다.';
+
+  @override
+  String get multichainBalanceError => '조회 실패';
+
+  @override
+  String get multichainRefresh => '새로고침';
+
+  @override
+  String get multichainSend => '보내기';
+
+  @override
+  String multichainAddressCopied(String symbol) {
+    return '$symbol 주소가 복사되었습니다';
+  }
+
+  @override
+  String multichainSendTitle(String symbol) {
+    return '$symbol 보내기';
+  }
+
+  @override
+  String get multichainRecipientLabel => '받는 주소';
+
+  @override
+  String multichainRecipientHint(String chainName) {
+    return '$chainName 주소';
+  }
+
+  @override
+  String get multichainAmountLabel => '금액';
+
+  @override
+  String multichainAmountHint(String symbol) {
+    return '$symbol 금액';
+  }
+
+  @override
+  String multichainFeeLine(String fee) {
+    return '예상 수수료: $fee';
+  }
+
+  @override
+  String get multichainEstimatingFee => '수수료 계산 중…';
+
+  @override
+  String get multichainPreviewSend => '보내기 미리보기';
+
+  @override
+  String get multichainConfirmSend => '보내기 확인';
+
+  @override
+  String get multichainSending => '보내는 중…';
+
+  @override
+  String multichainSentSuccess(String symbol) {
+    return '$symbol 트랜잭션이 전송되었습니다';
+  }
+
+  @override
+  String get multichainBackToBalances => '멀티체인 잔액으로 돌아가기';
+
+  @override
+  String get multichainOptInTitle => '멀티체인 잔액 사용';
+
+  @override
+  String get multichainOptInSubtitle =>
+      '이 지갑의 시드에서 파생된 BTC, ETH, ATOM, SOL 주소를 추가합니다. 이 체인들은 공개 체인으로, 활동 내역이 모두에게 공개됩니다. 나중에 변경할 수 있습니다.';
 }

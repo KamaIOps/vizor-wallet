@@ -6,6 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/chains.dart';
 import 'api/keystone.dart';
 import 'api/secret.dart';
 import 'api/simple.dart';
@@ -63,6 +64,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AddressValidationResult dco_decode_address_validation_result(dynamic raw);
+
+  @protected
+  ApiBtcUtxo dco_decode_api_btc_utxo(dynamic raw);
 
   @protected
   ApiDelegationProofEvent dco_decode_api_delegation_proof_event(dynamic raw);
@@ -213,6 +217,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<AccountInfo> dco_decode_list_account_info(dynamic raw);
 
   @protected
+  List<ApiBtcUtxo> dco_decode_list_api_btc_utxo(dynamic raw);
+
+  @protected
   List<AuthenticatedRound> dco_decode_list_authenticated_round(dynamic raw);
 
   @protected
@@ -332,6 +339,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<WireEncryptedShare> dco_decode_list_wire_encrypted_share(dynamic raw);
+
+  @protected
+  MultichainAddresses dco_decode_multichain_addresses(dynamic raw);
 
   @protected
   NextStepView dco_decode_next_step_view(dynamic raw);
@@ -573,6 +583,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ApiBtcUtxo sse_decode_api_btc_utxo(SseDeserializer deserializer);
+
+  @protected
   ApiDelegationProofEvent sse_decode_api_delegation_proof_event(
     SseDeserializer deserializer,
   );
@@ -765,6 +778,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<AccountInfo> sse_decode_list_account_info(SseDeserializer deserializer);
 
   @protected
+  List<ApiBtcUtxo> sse_decode_list_api_btc_utxo(SseDeserializer deserializer);
+
+  @protected
   List<AuthenticatedRound> sse_decode_list_authenticated_round(
     SseDeserializer deserializer,
   );
@@ -912,6 +928,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<WireEncryptedShare> sse_decode_list_wire_encrypted_share(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MultichainAddresses sse_decode_multichain_addresses(
     SseDeserializer deserializer,
   );
 
@@ -1206,6 +1227,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_api_btc_utxo(ApiBtcUtxo self, SseSerializer serializer);
+
+  @protected
   void sse_encode_api_delegation_proof_event(
     ApiDelegationProofEvent self,
     SseSerializer serializer,
@@ -1437,6 +1461,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_api_btc_utxo(
+    List<ApiBtcUtxo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_authenticated_round(
     List<AuthenticatedRound> self,
     SseSerializer serializer,
@@ -1628,6 +1658,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_wire_encrypted_share(
     List<WireEncryptedShare> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_multichain_addresses(
+    MultichainAddresses self,
     SseSerializer serializer,
   );
 
