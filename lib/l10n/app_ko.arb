@@ -1277,6 +1277,32 @@
     }
   },
   "multichainRecipientLabel": "받는 주소",
+  "multichainDestinationLabel": "받는 체인",
+  "multichainDestinationSameChain": "같은 체인",
+  "multichainAddChain": "체인 추가",
+  "multichainAddChainTitle": "체인 추가",
+  "multichainAddChainNote": "{count}개의 EVM 및 코스모스 SDK 체인을 둘러보고 사용하는 체인을 추가하세요. 추가한 체인은 멀티체인 잔액 화면에 표시됩니다.",
+  "@multichainAddChainNote": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "multichainSearchChainsLabel": "검색",
+  "multichainSearchChainsHint": "체인 이름 또는 심볼",
+  "multichainAddedChainsHeader": "추가된 체인",
+  "multichainRemoveChain": "제거",
+  "multichainBuiltInChain": "기본 제공",
+  "multichainNoSearchResults": "검색과 일치하는 체인이 없습니다.",
+  "multichainRefineSearch": "{count}개 일치 — 더 보려면 검색어를 구체화하세요.",
+  "@multichainRefineSearch": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "multichainRecipientHint": "{chainName} 주소",
   "@multichainRecipientHint": {
     "placeholders": {
@@ -1316,5 +1342,5 @@
   },
   "multichainBackToBalances": "멀티체인 잔액으로 돌아가기",
   "multichainOptInTitle": "멀티체인 잔액 사용",
-  "multichainOptInSubtitle": "이 지갑의 시드에서 파생된 BTC, ETH, ATOM, SOL 주소를 추가합니다. 이 체인들은 공개 체인으로, 활동 내역이 모두에게 공개됩니다. 나중에 변경할 수 있습니다."
+  "multichainOptInSubtitle": "이 지갑의 시드에서 파생된 BTC, DOGE, ETH 및 기타 EVM 체인, 코스모스 체인, SOL, SUI, APT 주소를 추가합니다. 이 체인들은 공개 체인으로, 활동 내역이 모두에게 공개됩니다. 나중에 변경할 수 있습니다."
 }

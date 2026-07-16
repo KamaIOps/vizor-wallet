@@ -2230,6 +2230,32 @@
     }
   },
   "multichainRecipientLabel": "Recipient",
+  "multichainDestinationLabel": "Destination",
+  "multichainDestinationSameChain": "Same chain",
+  "multichainAddChain": "Add chain",
+  "multichainAddChainTitle": "Add chains",
+  "multichainAddChainNote": "Browse {count} EVM and Cosmos SDK chains and add the ones you use. Added chains appear on the multichain balances screen.",
+  "@multichainAddChainNote": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "multichainSearchChainsLabel": "Search",
+  "multichainSearchChainsHint": "Chain name or symbol",
+  "multichainAddedChainsHeader": "Added chains",
+  "multichainRemoveChain": "Remove",
+  "multichainBuiltInChain": "Built in",
+  "multichainNoSearchResults": "No chains match your search.",
+  "multichainRefineSearch": "{count} matches — refine your search to see more.",
+  "@multichainRefineSearch": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "multichainRecipientHint": "{chainName} address",
   "@multichainRecipientHint": {
     "placeholders": {
@@ -2269,5 +2295,5 @@
   },
   "multichainBackToBalances": "Back to multichain balances",
   "multichainOptInTitle": "Enable multichain balances",
-  "multichainOptInSubtitle": "Adds BTC, ETH, ATOM, and SOL addresses derived from this wallet's seed. These are public chains — activity at them is visible to everyone. You can change this later."
+  "multichainOptInSubtitle": "Adds addresses for BTC, DOGE, ETH and other EVM chains, Cosmos chains, SOL, SUI, and APT derived from this wallet's seed. These are public chains — activity at them is visible to everyone. You can change this later."
 }

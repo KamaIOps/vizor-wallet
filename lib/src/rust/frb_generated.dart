@@ -80,7 +80,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1242241193;
+  int get rustContentHash => 994352864;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -391,6 +391,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<MultichainAddresses> crateApiChainsGetMultichainAddresses({
     required String mnemonic,
+    required List<ApiCosmosAddressSpec> cosmosSpecs,
   });
 
   Future<String> crateApiSyncGetNextAvailableAddress({
@@ -744,18 +745,54 @@ abstract class RustLibApi extends BaseApi {
     required String password,
   });
 
+  Future<ApiAptosSignedTransfer> crateApiChainsSignAptosTransfer({
+    required String mnemonic,
+    required BigInt sequenceNumber,
+    required String toAddress,
+    required BigInt amountOctas,
+    required BigInt maxGasAmount,
+    required BigInt gasUnitPrice,
+    required BigInt expirationTimestampSecs,
+    required int chainId,
+  });
+
   Future<String> crateApiChainsSignBtcTransaction({
     required String mnemonic,
     required List<ApiBtcUtxo> utxos,
     required String toAddress,
     required BigInt amountSats,
     required BigInt changeSats,
+    required bool legacy,
+  });
+
+  Future<String> crateApiChainsSignCosmosIbcTransfer({
+    required String mnemonic,
+    required String chainId,
+    required String hrp,
+    required int coinType,
+    required bool ethKey,
+    required String pubkeyTypeUrl,
+    required BigInt accountNumber,
+    required BigInt sequence,
+    required String sourceChannel,
+    required String toAddress,
+    required String amount,
+    required String denom,
+    required String feeAmount,
+    required String feeDenom,
+    required BigInt gasLimit,
+    required BigInt timeoutRevisionNumber,
+    required BigInt timeoutRevisionHeight,
+    required String memo,
   });
 
   Future<String> crateApiChainsSignCosmosSend({
     required String mnemonic,
     required String chainId,
     required String hrp,
+    required int coinType,
+    required bool ethKey,
+    required String pubkeyTypeUrl,
     required BigInt accountNumber,
     required BigInt sequence,
     required String toAddress,
@@ -765,6 +802,24 @@ abstract class RustLibApi extends BaseApi {
     required String feeDenom,
     required BigInt gasLimit,
     required String memo,
+  });
+
+  Future<String> crateApiChainsSignDogeTransaction({
+    required String mnemonic,
+    required List<ApiBtcUtxo> utxos,
+    required String toAddress,
+    required BigInt amountKoinu,
+    required BigInt changeKoinu,
+  });
+
+  Future<String> crateApiChainsSignEthLegacyTransaction({
+    required String mnemonic,
+    required BigInt chainId,
+    required BigInt nonce,
+    required String gasPriceWei,
+    required BigInt gasLimit,
+    required String to,
+    required String valueWei,
   });
 
   Future<String> crateApiChainsSignEthTransaction({
@@ -783,6 +838,15 @@ abstract class RustLibApi extends BaseApi {
     required String recentBlockhash,
     required String toAddress,
     required BigInt lamports,
+  });
+
+  Future<ApiSuiSignedTransfer> crateApiChainsSignSuiTransfer({
+    required String mnemonic,
+    required String recipient,
+    required BigInt amountMist,
+    required BigInt gasBudget,
+    required BigInt gasPrice,
+    required List<ApiSuiGasObject> gasObjects,
   });
 
   Stream<ApiSyncProgressEvent> crateApiSyncStartFullSync({
@@ -2853,12 +2917,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<MultichainAddresses> crateApiChainsGetMultichainAddresses({
     required String mnemonic,
+    required List<ApiCosmosAddressSpec> cosmosSpecs,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(mnemonic, serializer);
+          sse_encode_list_api_cosmos_address_spec(cosmosSpecs, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2871,7 +2937,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiChainsGetMultichainAddressesConstMeta,
-        argValues: [mnemonic],
+        argValues: [mnemonic, cosmosSpecs],
         apiImpl: this,
       ),
     );
@@ -2880,7 +2946,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiChainsGetMultichainAddressesConstMeta =>
       const TaskConstMeta(
         debugName: "get_multichain_addresses",
-        argNames: ["mnemonic"],
+        argNames: ["mnemonic", "cosmosSpecs"],
       );
 
   @override
@@ -5108,12 +5174,78 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<ApiAptosSignedTransfer> crateApiChainsSignAptosTransfer({
+    required String mnemonic,
+    required BigInt sequenceNumber,
+    required String toAddress,
+    required BigInt amountOctas,
+    required BigInt maxGasAmount,
+    required BigInt gasUnitPrice,
+    required BigInt expirationTimestampSecs,
+    required int chainId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mnemonic, serializer);
+          sse_encode_u_64(sequenceNumber, serializer);
+          sse_encode_String(toAddress, serializer);
+          sse_encode_u_64(amountOctas, serializer);
+          sse_encode_u_64(maxGasAmount, serializer);
+          sse_encode_u_64(gasUnitPrice, serializer);
+          sse_encode_u_64(expirationTimestampSecs, serializer);
+          sse_encode_u_8(chainId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 105,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_api_aptos_signed_transfer,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiChainsSignAptosTransferConstMeta,
+        argValues: [
+          mnemonic,
+          sequenceNumber,
+          toAddress,
+          amountOctas,
+          maxGasAmount,
+          gasUnitPrice,
+          expirationTimestampSecs,
+          chainId,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiChainsSignAptosTransferConstMeta =>
+      const TaskConstMeta(
+        debugName: "sign_aptos_transfer",
+        argNames: [
+          "mnemonic",
+          "sequenceNumber",
+          "toAddress",
+          "amountOctas",
+          "maxGasAmount",
+          "gasUnitPrice",
+          "expirationTimestampSecs",
+          "chainId",
+        ],
+      );
+
+  @override
   Future<String> crateApiChainsSignBtcTransaction({
     required String mnemonic,
     required List<ApiBtcUtxo> utxos,
     required String toAddress,
     required BigInt amountSats,
     required BigInt changeSats,
+    required bool legacy,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -5124,10 +5256,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(toAddress, serializer);
           sse_encode_u_64(amountSats, serializer);
           sse_encode_u_64(changeSats, serializer);
+          sse_encode_bool(legacy, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 105,
+            funcId: 106,
             port: port_,
           );
         },
@@ -5136,7 +5269,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiChainsSignBtcTransactionConstMeta,
-        argValues: [mnemonic, utxos, toAddress, amountSats, changeSats],
+        argValues: [mnemonic, utxos, toAddress, amountSats, changeSats, legacy],
         apiImpl: this,
       ),
     );
@@ -5151,6 +5284,112 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "toAddress",
           "amountSats",
           "changeSats",
+          "legacy",
+        ],
+      );
+
+  @override
+  Future<String> crateApiChainsSignCosmosIbcTransfer({
+    required String mnemonic,
+    required String chainId,
+    required String hrp,
+    required int coinType,
+    required bool ethKey,
+    required String pubkeyTypeUrl,
+    required BigInt accountNumber,
+    required BigInt sequence,
+    required String sourceChannel,
+    required String toAddress,
+    required String amount,
+    required String denom,
+    required String feeAmount,
+    required String feeDenom,
+    required BigInt gasLimit,
+    required BigInt timeoutRevisionNumber,
+    required BigInt timeoutRevisionHeight,
+    required String memo,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mnemonic, serializer);
+          sse_encode_String(chainId, serializer);
+          sse_encode_String(hrp, serializer);
+          sse_encode_u_32(coinType, serializer);
+          sse_encode_bool(ethKey, serializer);
+          sse_encode_String(pubkeyTypeUrl, serializer);
+          sse_encode_u_64(accountNumber, serializer);
+          sse_encode_u_64(sequence, serializer);
+          sse_encode_String(sourceChannel, serializer);
+          sse_encode_String(toAddress, serializer);
+          sse_encode_String(amount, serializer);
+          sse_encode_String(denom, serializer);
+          sse_encode_String(feeAmount, serializer);
+          sse_encode_String(feeDenom, serializer);
+          sse_encode_u_64(gasLimit, serializer);
+          sse_encode_u_64(timeoutRevisionNumber, serializer);
+          sse_encode_u_64(timeoutRevisionHeight, serializer);
+          sse_encode_String(memo, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 107,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiChainsSignCosmosIbcTransferConstMeta,
+        argValues: [
+          mnemonic,
+          chainId,
+          hrp,
+          coinType,
+          ethKey,
+          pubkeyTypeUrl,
+          accountNumber,
+          sequence,
+          sourceChannel,
+          toAddress,
+          amount,
+          denom,
+          feeAmount,
+          feeDenom,
+          gasLimit,
+          timeoutRevisionNumber,
+          timeoutRevisionHeight,
+          memo,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiChainsSignCosmosIbcTransferConstMeta =>
+      const TaskConstMeta(
+        debugName: "sign_cosmos_ibc_transfer",
+        argNames: [
+          "mnemonic",
+          "chainId",
+          "hrp",
+          "coinType",
+          "ethKey",
+          "pubkeyTypeUrl",
+          "accountNumber",
+          "sequence",
+          "sourceChannel",
+          "toAddress",
+          "amount",
+          "denom",
+          "feeAmount",
+          "feeDenom",
+          "gasLimit",
+          "timeoutRevisionNumber",
+          "timeoutRevisionHeight",
+          "memo",
         ],
       );
 
@@ -5159,6 +5398,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required String mnemonic,
     required String chainId,
     required String hrp,
+    required int coinType,
+    required bool ethKey,
+    required String pubkeyTypeUrl,
     required BigInt accountNumber,
     required BigInt sequence,
     required String toAddress,
@@ -5176,6 +5418,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(mnemonic, serializer);
           sse_encode_String(chainId, serializer);
           sse_encode_String(hrp, serializer);
+          sse_encode_u_32(coinType, serializer);
+          sse_encode_bool(ethKey, serializer);
+          sse_encode_String(pubkeyTypeUrl, serializer);
           sse_encode_u_64(accountNumber, serializer);
           sse_encode_u_64(sequence, serializer);
           sse_encode_String(toAddress, serializer);
@@ -5188,7 +5433,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 106,
+            funcId: 108,
             port: port_,
           );
         },
@@ -5201,6 +5446,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           mnemonic,
           chainId,
           hrp,
+          coinType,
+          ethKey,
+          pubkeyTypeUrl,
           accountNumber,
           sequence,
           toAddress,
@@ -5223,6 +5471,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "mnemonic",
           "chainId",
           "hrp",
+          "coinType",
+          "ethKey",
+          "pubkeyTypeUrl",
           "accountNumber",
           "sequence",
           "toAddress",
@@ -5232,6 +5483,114 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "feeDenom",
           "gasLimit",
           "memo",
+        ],
+      );
+
+  @override
+  Future<String> crateApiChainsSignDogeTransaction({
+    required String mnemonic,
+    required List<ApiBtcUtxo> utxos,
+    required String toAddress,
+    required BigInt amountKoinu,
+    required BigInt changeKoinu,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mnemonic, serializer);
+          sse_encode_list_api_btc_utxo(utxos, serializer);
+          sse_encode_String(toAddress, serializer);
+          sse_encode_u_64(amountKoinu, serializer);
+          sse_encode_u_64(changeKoinu, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 109,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiChainsSignDogeTransactionConstMeta,
+        argValues: [mnemonic, utxos, toAddress, amountKoinu, changeKoinu],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiChainsSignDogeTransactionConstMeta =>
+      const TaskConstMeta(
+        debugName: "sign_doge_transaction",
+        argNames: [
+          "mnemonic",
+          "utxos",
+          "toAddress",
+          "amountKoinu",
+          "changeKoinu",
+        ],
+      );
+
+  @override
+  Future<String> crateApiChainsSignEthLegacyTransaction({
+    required String mnemonic,
+    required BigInt chainId,
+    required BigInt nonce,
+    required String gasPriceWei,
+    required BigInt gasLimit,
+    required String to,
+    required String valueWei,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mnemonic, serializer);
+          sse_encode_u_64(chainId, serializer);
+          sse_encode_u_64(nonce, serializer);
+          sse_encode_String(gasPriceWei, serializer);
+          sse_encode_u_64(gasLimit, serializer);
+          sse_encode_String(to, serializer);
+          sse_encode_String(valueWei, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 110,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiChainsSignEthLegacyTransactionConstMeta,
+        argValues: [
+          mnemonic,
+          chainId,
+          nonce,
+          gasPriceWei,
+          gasLimit,
+          to,
+          valueWei,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiChainsSignEthLegacyTransactionConstMeta =>
+      const TaskConstMeta(
+        debugName: "sign_eth_legacy_transaction",
+        argNames: [
+          "mnemonic",
+          "chainId",
+          "nonce",
+          "gasPriceWei",
+          "gasLimit",
+          "to",
+          "valueWei",
         ],
       );
 
@@ -5261,7 +5620,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 107,
+            funcId: 111,
             port: port_,
           );
         },
@@ -5318,7 +5677,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 108,
+            funcId: 112,
             port: port_,
           );
         },
@@ -5337,6 +5696,63 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(
         debugName: "sign_sol_transfer",
         argNames: ["mnemonic", "recentBlockhash", "toAddress", "lamports"],
+      );
+
+  @override
+  Future<ApiSuiSignedTransfer> crateApiChainsSignSuiTransfer({
+    required String mnemonic,
+    required String recipient,
+    required BigInt amountMist,
+    required BigInt gasBudget,
+    required BigInt gasPrice,
+    required List<ApiSuiGasObject> gasObjects,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mnemonic, serializer);
+          sse_encode_String(recipient, serializer);
+          sse_encode_u_64(amountMist, serializer);
+          sse_encode_u_64(gasBudget, serializer);
+          sse_encode_u_64(gasPrice, serializer);
+          sse_encode_list_api_sui_gas_object(gasObjects, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 113,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_api_sui_signed_transfer,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiChainsSignSuiTransferConstMeta,
+        argValues: [
+          mnemonic,
+          recipient,
+          amountMist,
+          gasBudget,
+          gasPrice,
+          gasObjects,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiChainsSignSuiTransferConstMeta =>
+      const TaskConstMeta(
+        debugName: "sign_sui_transfer",
+        argNames: [
+          "mnemonic",
+          "recipient",
+          "amountMist",
+          "gasBudget",
+          "gasPrice",
+          "gasObjects",
+        ],
       );
 
   @override
@@ -5360,7 +5776,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 109,
+              funcId: 114,
               port: port_,
             );
           },
@@ -5401,7 +5817,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 110,
+              funcId: 115,
               port: port_,
             );
           },
@@ -5433,7 +5849,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 111,
+            funcId: 116,
           )!;
         },
         codec: SseCodec(
@@ -5474,7 +5890,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 112,
+            funcId: 117,
             port: port_,
           );
         },
@@ -5525,7 +5941,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 113,
+            funcId: 118,
             port: port_,
           );
         },
@@ -5564,7 +5980,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 114,
+            funcId: 119,
             port: port_,
           );
         },
@@ -5607,7 +6023,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 115,
+            funcId: 120,
             port: port_,
           );
         },
@@ -5657,7 +6073,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 116,
+            funcId: 121,
             port: port_,
           );
         },
@@ -5689,7 +6105,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 117,
+            funcId: 122,
             port: port_,
           );
         },
@@ -5717,7 +6133,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 118,
+            funcId: 123,
           )!;
         },
         codec: SseCodec(
@@ -5749,7 +6165,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 119,
+            funcId: 124,
             port: port_,
           );
         },
@@ -5786,7 +6202,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 120,
+            funcId: 125,
             port: port_,
           );
         },
@@ -5817,7 +6233,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 121,
+            funcId: 126,
           )!;
         },
         codec: SseCodec(
@@ -5848,7 +6264,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 122,
+            funcId: 127,
             port: port_,
           );
         },
@@ -5949,6 +6365,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ApiAptosSignedTransfer dco_decode_api_aptos_signed_transfer(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ApiAptosSignedTransfer(
+      publicKeyHex: dco_decode_String(arr[0]),
+      signatureHex: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
   ApiBtcUtxo dco_decode_api_btc_utxo(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -5958,6 +6386,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       txid: dco_decode_String(arr[0]),
       vout: dco_decode_u_32(arr[1]),
       valueSats: dco_decode_u_64(arr[2]),
+    );
+  }
+
+  @protected
+  ApiCosmosAddressSpec dco_decode_api_cosmos_address_spec(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ApiCosmosAddressSpec(
+      hrp: dco_decode_String(arr[0]),
+      coinType: dco_decode_u_32(arr[1]),
+      ethKey: dco_decode_bool(arr[2]),
     );
   }
 
@@ -5985,6 +6426,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       txidHex: dco_decode_String(arr[0]),
       accountUuids: dco_decode_list_String(arr[1]),
       matched: dco_decode_bool(arr[2]),
+    );
+  }
+
+  @protected
+  ApiSuiGasObject dco_decode_api_sui_gas_object(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ApiSuiGasObject(
+      objectId: dco_decode_String(arr[0]),
+      version: dco_decode_u_64(arr[1]),
+      digest: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  ApiSuiSignedTransfer dco_decode_api_sui_signed_transfer(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ApiSuiSignedTransfer(
+      txBytesBase64: dco_decode_String(arr[0]),
+      signatureBase64: dco_decode_String(arr[1]),
     );
   }
 
@@ -6452,6 +6918,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ApiCosmosAddressSpec> dco_decode_list_api_cosmos_address_spec(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_api_cosmos_address_spec)
+        .toList();
+  }
+
+  @protected
+  List<ApiSuiGasObject> dco_decode_list_api_sui_gas_object(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_api_sui_gas_object).toList();
+  }
+
+  @protected
   List<AuthenticatedRound> dco_decode_list_authenticated_round(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_authenticated_round).toList();
@@ -6705,13 +7187,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   MultichainAddresses dco_decode_multichain_addresses(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return MultichainAddresses(
       btc: dco_decode_String(arr[0]),
-      eth: dco_decode_String(arr[1]),
-      cosmos: dco_decode_String(arr[2]),
-      sol: dco_decode_String(arr[3]),
+      btcLegacy: dco_decode_String(arr[1]),
+      doge: dco_decode_String(arr[2]),
+      eth: dco_decode_String(arr[3]),
+      cosmos: dco_decode_list_String(arr[4]),
+      sol: dco_decode_String(arr[5]),
+      sui: dco_decode_String(arr[6]),
+      aptos: dco_decode_String(arr[7]),
     );
   }
 
@@ -7589,12 +8075,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ApiAptosSignedTransfer sse_decode_api_aptos_signed_transfer(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_publicKeyHex = sse_decode_String(deserializer);
+    var var_signatureHex = sse_decode_String(deserializer);
+    return ApiAptosSignedTransfer(
+      publicKeyHex: var_publicKeyHex,
+      signatureHex: var_signatureHex,
+    );
+  }
+
+  @protected
   ApiBtcUtxo sse_decode_api_btc_utxo(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_txid = sse_decode_String(deserializer);
     var var_vout = sse_decode_u_32(deserializer);
     var var_valueSats = sse_decode_u_64(deserializer);
     return ApiBtcUtxo(txid: var_txid, vout: var_vout, valueSats: var_valueSats);
+  }
+
+  @protected
+  ApiCosmosAddressSpec sse_decode_api_cosmos_address_spec(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_hrp = sse_decode_String(deserializer);
+    var var_coinType = sse_decode_u_32(deserializer);
+    var var_ethKey = sse_decode_bool(deserializer);
+    return ApiCosmosAddressSpec(
+      hrp: var_hrp,
+      coinType: var_coinType,
+      ethKey: var_ethKey,
+    );
   }
 
   @protected
@@ -7625,6 +8139,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       txidHex: var_txidHex,
       accountUuids: var_accountUuids,
       matched: var_matched,
+    );
+  }
+
+  @protected
+  ApiSuiGasObject sse_decode_api_sui_gas_object(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_objectId = sse_decode_String(deserializer);
+    var var_version = sse_decode_u_64(deserializer);
+    var var_digest = sse_decode_String(deserializer);
+    return ApiSuiGasObject(
+      objectId: var_objectId,
+      version: var_version,
+      digest: var_digest,
+    );
+  }
+
+  @protected
+  ApiSuiSignedTransfer sse_decode_api_sui_signed_transfer(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_txBytesBase64 = sse_decode_String(deserializer);
+    var var_signatureBase64 = sse_decode_String(deserializer);
+    return ApiSuiSignedTransfer(
+      txBytesBase64: var_txBytesBase64,
+      signatureBase64: var_signatureBase64,
     );
   }
 
@@ -8180,6 +8720,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ApiCosmosAddressSpec> sse_decode_list_api_cosmos_address_spec(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ApiCosmosAddressSpec>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_api_cosmos_address_spec(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ApiSuiGasObject> sse_decode_list_api_sui_gas_object(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ApiSuiGasObject>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_api_sui_gas_object(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<AuthenticatedRound> sse_decode_list_authenticated_round(
     SseDeserializer deserializer,
   ) {
@@ -8613,14 +9181,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_btc = sse_decode_String(deserializer);
+    var var_btcLegacy = sse_decode_String(deserializer);
+    var var_doge = sse_decode_String(deserializer);
     var var_eth = sse_decode_String(deserializer);
-    var var_cosmos = sse_decode_String(deserializer);
+    var var_cosmos = sse_decode_list_String(deserializer);
     var var_sol = sse_decode_String(deserializer);
+    var var_sui = sse_decode_String(deserializer);
+    var var_aptos = sse_decode_String(deserializer);
     return MultichainAddresses(
       btc: var_btc,
+      btcLegacy: var_btcLegacy,
+      doge: var_doge,
       eth: var_eth,
       cosmos: var_cosmos,
       sol: var_sol,
+      sui: var_sui,
+      aptos: var_aptos,
     );
   }
 
@@ -9698,11 +10274,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_api_aptos_signed_transfer(
+    ApiAptosSignedTransfer self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.publicKeyHex, serializer);
+    sse_encode_String(self.signatureHex, serializer);
+  }
+
+  @protected
   void sse_encode_api_btc_utxo(ApiBtcUtxo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.txid, serializer);
     sse_encode_u_32(self.vout, serializer);
     sse_encode_u_64(self.valueSats, serializer);
+  }
+
+  @protected
+  void sse_encode_api_cosmos_address_spec(
+    ApiCosmosAddressSpec self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.hrp, serializer);
+    sse_encode_u_32(self.coinType, serializer);
+    sse_encode_bool(self.ethKey, serializer);
   }
 
   @protected
@@ -9728,6 +10325,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.txidHex, serializer);
     sse_encode_list_String(self.accountUuids, serializer);
     sse_encode_bool(self.matched, serializer);
+  }
+
+  @protected
+  void sse_encode_api_sui_gas_object(
+    ApiSuiGasObject self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.objectId, serializer);
+    sse_encode_u_64(self.version, serializer);
+    sse_encode_String(self.digest, serializer);
+  }
+
+  @protected
+  void sse_encode_api_sui_signed_transfer(
+    ApiSuiSignedTransfer self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.txBytesBase64, serializer);
+    sse_encode_String(self.signatureBase64, serializer);
   }
 
   @protected
@@ -10177,6 +10795,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_api_cosmos_address_spec(
+    List<ApiCosmosAddressSpec> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_api_cosmos_address_spec(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_api_sui_gas_object(
+    List<ApiSuiGasObject> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_api_sui_gas_object(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_authenticated_round(
     List<AuthenticatedRound> self,
     SseSerializer serializer,
@@ -10575,9 +11217,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.btc, serializer);
+    sse_encode_String(self.btcLegacy, serializer);
+    sse_encode_String(self.doge, serializer);
     sse_encode_String(self.eth, serializer);
-    sse_encode_String(self.cosmos, serializer);
+    sse_encode_list_String(self.cosmos, serializer);
     sse_encode_String(self.sol, serializer);
+    sse_encode_String(self.sui, serializer);
+    sse_encode_String(self.aptos, serializer);
   }
 
   @protected

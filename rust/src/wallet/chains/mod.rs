@@ -12,10 +12,13 @@
 //! - SLIP-0010 ed25519 (SOL, hardened-only), validated against the SLIP-0010
 //!   published test vectors.
 
+pub mod aptos;
 pub mod btc;
 pub mod cosmos;
+pub mod doge;
 pub mod eth;
 pub mod sol;
+pub mod sui;
 
 use hmac::{Hmac, Mac};
 use secp256k1::{PublicKey, Scalar, Secp256k1, SecretKey};

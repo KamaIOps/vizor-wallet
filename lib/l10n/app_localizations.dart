@@ -7676,6 +7676,78 @@ abstract class AppLocalizations {
   /// **'Recipient'**
   String get multichainRecipientLabel;
 
+  /// No description provided for @multichainDestinationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Destination'**
+  String get multichainDestinationLabel;
+
+  /// No description provided for @multichainDestinationSameChain.
+  ///
+  /// In en, this message translates to:
+  /// **'Same chain'**
+  String get multichainDestinationSameChain;
+
+  /// No description provided for @multichainAddChain.
+  ///
+  /// In en, this message translates to:
+  /// **'Add chain'**
+  String get multichainAddChain;
+
+  /// No description provided for @multichainAddChainTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add chains'**
+  String get multichainAddChainTitle;
+
+  /// No description provided for @multichainAddChainNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse {count} EVM and Cosmos SDK chains and add the ones you use. Added chains appear on the multichain balances screen.'**
+  String multichainAddChainNote(int count);
+
+  /// No description provided for @multichainSearchChainsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get multichainSearchChainsLabel;
+
+  /// No description provided for @multichainSearchChainsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Chain name or symbol'**
+  String get multichainSearchChainsHint;
+
+  /// No description provided for @multichainAddedChainsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Added chains'**
+  String get multichainAddedChainsHeader;
+
+  /// No description provided for @multichainRemoveChain.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get multichainRemoveChain;
+
+  /// No description provided for @multichainBuiltInChain.
+  ///
+  /// In en, this message translates to:
+  /// **'Built in'**
+  String get multichainBuiltInChain;
+
+  /// No description provided for @multichainNoSearchResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No chains match your search.'**
+  String get multichainNoSearchResults;
+
+  /// No description provided for @multichainRefineSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} matches — refine your search to see more.'**
+  String multichainRefineSearch(int count);
+
   /// No description provided for @multichainRecipientHint.
   ///
   /// In en, this message translates to:
@@ -7745,7 +7817,7 @@ abstract class AppLocalizations {
   /// No description provided for @multichainOptInSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Adds BTC, ETH, ATOM, and SOL addresses derived from this wallet\'s seed. These are public chains — activity at them is visible to everyone. You can change this later.'**
+  /// **'Adds addresses for BTC, DOGE, ETH and other EVM chains, Cosmos chains, SOL, SUI, and APT derived from this wallet\'s seed. These are public chains — activity at them is visible to everyone. You can change this later.'**
   String get multichainOptInSubtitle;
 }
 

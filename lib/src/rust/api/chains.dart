@@ -8,8 +8,89 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 Future<MultichainAddresses> getMultichainAddresses({
   required String mnemonic,
+  required List<ApiCosmosAddressSpec> cosmosSpecs,
 }) => RustLib.instance.api.crateApiChainsGetMultichainAddresses(
   mnemonic: mnemonic,
+  cosmosSpecs: cosmosSpecs,
+);
+
+/// Sign a legacy (type-0, EIP-155) transfer for chains without EIP-1559.
+/// Returns 0x-prefixed raw tx hex for `eth_sendRawTransaction`.
+Future<String> signEthLegacyTransaction({
+  required String mnemonic,
+  required BigInt chainId,
+  required BigInt nonce,
+  required String gasPriceWei,
+  required BigInt gasLimit,
+  required String to,
+  required String valueWei,
+}) => RustLib.instance.api.crateApiChainsSignEthLegacyTransaction(
+  mnemonic: mnemonic,
+  chainId: chainId,
+  nonce: nonce,
+  gasPriceWei: gasPriceWei,
+  gasLimit: gasLimit,
+  to: to,
+  valueWei: valueWei,
+);
+
+/// Build and sign a SUI transfer PTB (SplitCoins from gas +
+/// TransferObjects). The provided coins are smashed into the gas object and
+/// fund both the transfer amount and gas.
+Future<ApiSuiSignedTransfer> signSuiTransfer({
+  required String mnemonic,
+  required String recipient,
+  required BigInt amountMist,
+  required BigInt gasBudget,
+  required BigInt gasPrice,
+  required List<ApiSuiGasObject> gasObjects,
+}) => RustLib.instance.api.crateApiChainsSignSuiTransfer(
+  mnemonic: mnemonic,
+  recipient: recipient,
+  amountMist: amountMist,
+  gasBudget: gasBudget,
+  gasPrice: gasPrice,
+  gasObjects: gasObjects,
+);
+
+/// Sign an Aptos `0x1::aptos_account::transfer`. Dart submits the matching
+/// JSON envelope to `POST /v1/transactions`; the node re-derives and
+/// verifies this signing message, so any field mismatch is rejected there.
+Future<ApiAptosSignedTransfer> signAptosTransfer({
+  required String mnemonic,
+  required BigInt sequenceNumber,
+  required String toAddress,
+  required BigInt amountOctas,
+  required BigInt maxGasAmount,
+  required BigInt gasUnitPrice,
+  required BigInt expirationTimestampSecs,
+  required int chainId,
+}) => RustLib.instance.api.crateApiChainsSignAptosTransfer(
+  mnemonic: mnemonic,
+  sequenceNumber: sequenceNumber,
+  toAddress: toAddress,
+  amountOctas: amountOctas,
+  maxGasAmount: maxGasAmount,
+  gasUnitPrice: gasUnitPrice,
+  expirationTimestampSecs: expirationTimestampSecs,
+  chainId: chainId,
+);
+
+/// Sign a Dogecoin legacy P2PKH transaction spending the given UTXOs. The
+/// implicit fee is `sum(utxos) - amount - change` and must be positive.
+/// Returns raw tx hex for BlockCypher `POST /txs/push`.
+Future<String> signDogeTransaction({
+  required String mnemonic,
+  required List<ApiBtcUtxo> utxos,
+  required String toAddress,
+  required BigInt amountKoinu,
+  required BigInt changeKoinu,
+}) => RustLib.instance.api.crateApiChainsSignDogeTransaction(
+  mnemonic: mnemonic,
+  utxos: utxos,
+  toAddress: toAddress,
+  amountKoinu: amountKoinu,
+  changeKoinu: changeKoinu,
 );
 
 /// Sign an EIP-1559 native transfer. Returns 0x-prefixed raw tx hex for
@@ -34,21 +115,24 @@ Future<String> signEthTransaction({
   valueWei: valueWei,
 );
 
-/// Sign a P2WPKH transaction spending the given UTXOs. The implicit fee is
-/// `sum(utxos) - amount - change` and must be positive. Returns raw tx hex
-/// for Esplora `POST /tx`.
+/// Sign a transaction spending the given UTXOs from the BIP-84 P2WPKH
+/// derivation (default) or the BIP-44 legacy P2PKH derivation (`legacy`).
+/// The implicit fee is `sum(utxos) - amount - change` and must be positive.
+/// Returns raw tx hex for Esplora `POST /tx`.
 Future<String> signBtcTransaction({
   required String mnemonic,
   required List<ApiBtcUtxo> utxos,
   required String toAddress,
   required BigInt amountSats,
   required BigInt changeSats,
+  required bool legacy,
 }) => RustLib.instance.api.crateApiChainsSignBtcTransaction(
   mnemonic: mnemonic,
   utxos: utxos,
   toAddress: toAddress,
   amountSats: amountSats,
   changeSats: changeSats,
+  legacy: legacy,
 );
 
 /// Sign a Cosmos SDK bank MsgSend (SIGN_MODE_DIRECT). Returns base64(TxRaw)
@@ -58,6 +142,9 @@ Future<String> signCosmosSend({
   required String mnemonic,
   required String chainId,
   required String hrp,
+  required int coinType,
+  required bool ethKey,
+  required String pubkeyTypeUrl,
   required BigInt accountNumber,
   required BigInt sequence,
   required String toAddress,
@@ -71,6 +158,9 @@ Future<String> signCosmosSend({
   mnemonic: mnemonic,
   chainId: chainId,
   hrp: hrp,
+  coinType: coinType,
+  ethKey: ethKey,
+  pubkeyTypeUrl: pubkeyTypeUrl,
   accountNumber: accountNumber,
   sequence: sequence,
   toAddress: toAddress,
@@ -79,6 +169,50 @@ Future<String> signCosmosSend({
   feeAmount: feeAmount,
   feeDenom: feeDenom,
   gasLimit: gasLimit,
+  memo: memo,
+);
+
+/// Sign an ics-20 IBC MsgTransfer (SIGN_MODE_DIRECT). Returns base64(TxRaw)
+/// for `POST /cosmos/tx/v1beta1/txs` on the SOURCE chain. Timeout fields
+/// describe the DESTINATION chain (Keplr convention: latest height + 150,
+/// revision number from the dest chain-id version, 0 when suffix-less).
+Future<String> signCosmosIbcTransfer({
+  required String mnemonic,
+  required String chainId,
+  required String hrp,
+  required int coinType,
+  required bool ethKey,
+  required String pubkeyTypeUrl,
+  required BigInt accountNumber,
+  required BigInt sequence,
+  required String sourceChannel,
+  required String toAddress,
+  required String amount,
+  required String denom,
+  required String feeAmount,
+  required String feeDenom,
+  required BigInt gasLimit,
+  required BigInt timeoutRevisionNumber,
+  required BigInt timeoutRevisionHeight,
+  required String memo,
+}) => RustLib.instance.api.crateApiChainsSignCosmosIbcTransfer(
+  mnemonic: mnemonic,
+  chainId: chainId,
+  hrp: hrp,
+  coinType: coinType,
+  ethKey: ethKey,
+  pubkeyTypeUrl: pubkeyTypeUrl,
+  accountNumber: accountNumber,
+  sequence: sequence,
+  sourceChannel: sourceChannel,
+  toAddress: toAddress,
+  amount: amount,
+  denom: denom,
+  feeAmount: feeAmount,
+  feeDenom: feeDenom,
+  gasLimit: gasLimit,
+  timeoutRevisionNumber: timeoutRevisionNumber,
+  timeoutRevisionHeight: timeoutRevisionHeight,
   memo: memo,
 );
 
@@ -95,6 +229,30 @@ Future<String> signSolTransfer({
   toAddress: toAddress,
   lamports: lamports,
 );
+
+class ApiAptosSignedTransfer {
+  /// 0x-prefixed ed25519 public key for the JSON submission envelope.
+  final String publicKeyHex;
+
+  /// 0x-prefixed signature over the RawTransaction signing message.
+  final String signatureHex;
+
+  const ApiAptosSignedTransfer({
+    required this.publicKeyHex,
+    required this.signatureHex,
+  });
+
+  @override
+  int get hashCode => publicKeyHex.hashCode ^ signatureHex.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiAptosSignedTransfer &&
+          runtimeType == other.runtimeType &&
+          publicKeyHex == other.publicKeyHex &&
+          signatureHex == other.signatureHex;
+}
 
 class ApiBtcUtxo {
   final String txid;
@@ -120,23 +278,119 @@ class ApiBtcUtxo {
           valueSats == other.valueSats;
 }
 
+/// One requested Cosmos address derivation: bech32 prefix, SLIP-44 coin
+/// type for the HD path, and whether the chain uses ethermint-style keccak
+/// addresses.
+class ApiCosmosAddressSpec {
+  final String hrp;
+  final int coinType;
+  final bool ethKey;
+
+  const ApiCosmosAddressSpec({
+    required this.hrp,
+    required this.coinType,
+    required this.ethKey,
+  });
+
+  @override
+  int get hashCode => hrp.hashCode ^ coinType.hashCode ^ ethKey.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiCosmosAddressSpec &&
+          runtimeType == other.runtimeType &&
+          hrp == other.hrp &&
+          coinType == other.coinType &&
+          ethKey == other.ethKey;
+}
+
+class ApiSuiGasObject {
+  final String objectId;
+  final BigInt version;
+
+  /// Base58 object digest from `suix_getCoins`.
+  final String digest;
+
+  const ApiSuiGasObject({
+    required this.objectId,
+    required this.version,
+    required this.digest,
+  });
+
+  @override
+  int get hashCode => objectId.hashCode ^ version.hashCode ^ digest.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiSuiGasObject &&
+          runtimeType == other.runtimeType &&
+          objectId == other.objectId &&
+          version == other.version &&
+          digest == other.digest;
+}
+
+class ApiSuiSignedTransfer {
+  /// base64(bcs(TransactionData)) for `sui_executeTransactionBlock`.
+  final String txBytesBase64;
+
+  /// base64(flag || sig || pubkey).
+  final String signatureBase64;
+
+  const ApiSuiSignedTransfer({
+    required this.txBytesBase64,
+    required this.signatureBase64,
+  });
+
+  @override
+  int get hashCode => txBytesBase64.hashCode ^ signatureBase64.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiSuiSignedTransfer &&
+          runtimeType == other.runtimeType &&
+          txBytesBase64 == other.txBytesBase64 &&
+          signatureBase64 == other.signatureBase64;
+}
+
 /// Per-chain receive addresses derived from one account mnemonic.
+///
+/// `cosmos` holds one bech32 address per requested spec, in the same order
+/// as the `cosmos_specs` argument. `btc_legacy` is the BIP-44 P2PKH
+/// derivation used for fund discovery alongside the BIP-84 default.
 class MultichainAddresses {
   final String btc;
+  final String btcLegacy;
+  final String doge;
   final String eth;
-  final String cosmos;
+  final List<String> cosmos;
   final String sol;
+  final String sui;
+  final String aptos;
 
   const MultichainAddresses({
     required this.btc,
+    required this.btcLegacy,
+    required this.doge,
     required this.eth,
     required this.cosmos,
     required this.sol,
+    required this.sui,
+    required this.aptos,
   });
 
   @override
   int get hashCode =>
-      btc.hashCode ^ eth.hashCode ^ cosmos.hashCode ^ sol.hashCode;
+      btc.hashCode ^
+      btcLegacy.hashCode ^
+      doge.hashCode ^
+      eth.hashCode ^
+      cosmos.hashCode ^
+      sol.hashCode ^
+      sui.hashCode ^
+      aptos.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -144,7 +398,11 @@ class MultichainAddresses {
       other is MultichainAddresses &&
           runtimeType == other.runtimeType &&
           btc == other.btc &&
+          btcLegacy == other.btcLegacy &&
+          doge == other.doge &&
           eth == other.eth &&
           cosmos == other.cosmos &&
-          sol == other.sol;
+          sol == other.sol &&
+          sui == other.sui &&
+          aptos == other.aptos;
 }

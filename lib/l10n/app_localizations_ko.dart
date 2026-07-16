@@ -4208,6 +4208,46 @@ class AppLocalizationsKo extends AppLocalizations {
   String get multichainRecipientLabel => '받는 주소';
 
   @override
+  String get multichainDestinationLabel => '받는 체인';
+
+  @override
+  String get multichainDestinationSameChain => '같은 체인';
+
+  @override
+  String get multichainAddChain => '체인 추가';
+
+  @override
+  String get multichainAddChainTitle => '체인 추가';
+
+  @override
+  String multichainAddChainNote(int count) {
+    return '$count개의 EVM 및 코스모스 SDK 체인을 둘러보고 사용하는 체인을 추가하세요. 추가한 체인은 멀티체인 잔액 화면에 표시됩니다.';
+  }
+
+  @override
+  String get multichainSearchChainsLabel => '검색';
+
+  @override
+  String get multichainSearchChainsHint => '체인 이름 또는 심볼';
+
+  @override
+  String get multichainAddedChainsHeader => '추가된 체인';
+
+  @override
+  String get multichainRemoveChain => '제거';
+
+  @override
+  String get multichainBuiltInChain => '기본 제공';
+
+  @override
+  String get multichainNoSearchResults => '검색과 일치하는 체인이 없습니다.';
+
+  @override
+  String multichainRefineSearch(int count) {
+    return '$count개 일치 — 더 보려면 검색어를 구체화하세요.';
+  }
+
+  @override
   String multichainRecipientHint(String chainName) {
     return '$chainName 주소';
   }
@@ -4250,5 +4290,5 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get multichainOptInSubtitle =>
-      '이 지갑의 시드에서 파생된 BTC, ETH, ATOM, SOL 주소를 추가합니다. 이 체인들은 공개 체인으로, 활동 내역이 모두에게 공개됩니다. 나중에 변경할 수 있습니다.';
+      '이 지갑의 시드에서 파생된 BTC, DOGE, ETH 및 기타 EVM 체인, 코스모스 체인, SOL, SUI, APT 주소를 추가합니다. 이 체인들은 공개 체인으로, 활동 내역이 모두에게 공개됩니다. 나중에 변경할 수 있습니다.';
 }

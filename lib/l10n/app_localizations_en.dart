@@ -4385,6 +4385,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get multichainRecipientLabel => 'Recipient';
 
   @override
+  String get multichainDestinationLabel => 'Destination';
+
+  @override
+  String get multichainDestinationSameChain => 'Same chain';
+
+  @override
+  String get multichainAddChain => 'Add chain';
+
+  @override
+  String get multichainAddChainTitle => 'Add chains';
+
+  @override
+  String multichainAddChainNote(int count) {
+    return 'Browse $count EVM and Cosmos SDK chains and add the ones you use. Added chains appear on the multichain balances screen.';
+  }
+
+  @override
+  String get multichainSearchChainsLabel => 'Search';
+
+  @override
+  String get multichainSearchChainsHint => 'Chain name or symbol';
+
+  @override
+  String get multichainAddedChainsHeader => 'Added chains';
+
+  @override
+  String get multichainRemoveChain => 'Remove';
+
+  @override
+  String get multichainBuiltInChain => 'Built in';
+
+  @override
+  String get multichainNoSearchResults => 'No chains match your search.';
+
+  @override
+  String multichainRefineSearch(int count) {
+    return '$count matches — refine your search to see more.';
+  }
+
+  @override
   String multichainRecipientHint(String chainName) {
     return '$chainName address';
   }
@@ -4427,5 +4467,5 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get multichainOptInSubtitle =>
-      'Adds BTC, ETH, ATOM, and SOL addresses derived from this wallet\'s seed. These are public chains — activity at them is visible to everyone. You can change this later.';
+      'Adds addresses for BTC, DOGE, ETH and other EVM chains, Cosmos chains, SOL, SUI, and APT derived from this wallet\'s seed. These are public chains — activity at them is visible to everyone. You can change this later.';
 }

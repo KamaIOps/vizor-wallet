@@ -93,6 +93,61 @@ pub fn sign_transaction(mnemonic: &str, params: &EthTxParams) -> Result<String, 
     Ok(format!("0x{}", hex::encode(signed)))
 }
 
+/// Parameters for a pre-EIP-1559 (type-0) transfer, for chains that never
+/// adopted the London fee market. Signed with EIP-155 replay protection.
+pub struct EthLegacyTxParams {
+    pub chain_id: u64,
+    pub nonce: u64,
+    pub gas_price_wei: String,
+    pub gas_limit: u64,
+    pub to: String,
+    pub value_wei: String,
+}
+
+/// Sign a legacy (type-0, EIP-155) transaction. Returns `0x…` raw tx hex
+/// ready for `eth_sendRawTransaction`.
+pub fn sign_legacy_transaction(
+    mnemonic: &str,
+    params: &EthLegacyTxParams,
+) -> Result<String, String> {
+    let key = derive(mnemonic)?;
+    let to = parse_address(&params.to)?;
+    let value = parse_u256_dec(&params.value_wei)?;
+    let gas_price = parse_u256_dec(&params.gas_price_wei)?;
+
+    // Unsigned payload (EIP-155): rlp([nonce, gasPrice, gasLimit, to, value,
+    // data, chainId, 0, 0])
+    let mut items: Vec<Vec<u8>> = vec![
+        rlp_uint(params.nonce as u128),
+        rlp_bytes(&gas_price),
+        rlp_uint(params.gas_limit as u128),
+        rlp_bytes(&to),
+        rlp_bytes(&value),
+        rlp_bytes(&[]), // data
+        rlp_uint(params.chain_id as u128),
+        rlp_bytes(&[]),
+        rlp_bytes(&[]),
+    ];
+    let unsigned = rlp_list(&items);
+
+    let digest = Keccak256::digest(&unsigned);
+    let msg = Message::from_digest_slice(&digest).map_err(|e| format!("Bad tx digest: {e}"))?;
+    let secp = Secp256k1::new();
+    let sig = secp.sign_ecdsa_recoverable(&msg, &key.secret);
+    let (recovery_id, sig_bytes) = sig.serialize_compact();
+
+    // Signed payload: rlp([nonce, gasPrice, gasLimit, to, value, data, v, r, s])
+    // with v = chainId * 2 + 35 + recovery.
+    items.truncate(6);
+    let v = params.chain_id as u128 * 2 + 35 + recovery_id.to_i32() as u128;
+    items.push(rlp_uint(v));
+    items.push(rlp_bytes(strip_leading_zeros(&sig_bytes[..32])));
+    items.push(rlp_bytes(strip_leading_zeros(&sig_bytes[32..])));
+    let signed = rlp_list(&items);
+
+    Ok(format!("0x{}", hex::encode(signed)))
+}
+
 fn parse_address(addr: &str) -> Result<Vec<u8>, String> {
     let hex_part = addr.strip_prefix("0x").ok_or("Address must start with 0x")?;
     if hex_part.len() != 40 {
@@ -204,6 +259,24 @@ mod tests {
         // (Full RLP decode is overkill here; determinism + recovery below.)
         let again = sign_transaction(TEST_MNEMONIC, &params).unwrap();
         assert_eq!(raw, again, "RFC-6979 signing must be deterministic");
+    }
+
+    #[test]
+    fn signs_legacy_tx_deterministically() {
+        let params = EthLegacyTxParams {
+            chain_id: 61, // a real legacy-only chain id shape (ETC)
+            nonce: 3,
+            gas_price_wei: "20000000000".into(),
+            gas_limit: 21000,
+            to: "0x000000000000000000000000000000000000dEaD".into(),
+            value_wei: "1000000000000000".into(),
+        };
+        let raw = sign_legacy_transaction(TEST_MNEMONIC, &params).unwrap();
+        assert_eq!(raw, sign_legacy_transaction(TEST_MNEMONIC, &params).unwrap());
+        // Type-0 txs have no type prefix: the payload starts directly with
+        // an RLP list header (>= 0xc0), unlike 0x02-prefixed EIP-1559 txs.
+        let first = u8::from_str_radix(&raw[2..4], 16).unwrap();
+        assert!(first >= 0xc0);
     }
 
     #[test]

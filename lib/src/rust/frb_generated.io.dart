@@ -64,13 +64,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AddressValidationResult dco_decode_address_validation_result(dynamic raw);
 
   @protected
+  ApiAptosSignedTransfer dco_decode_api_aptos_signed_transfer(dynamic raw);
+
+  @protected
   ApiBtcUtxo dco_decode_api_btc_utxo(dynamic raw);
+
+  @protected
+  ApiCosmosAddressSpec dco_decode_api_cosmos_address_spec(dynamic raw);
 
   @protected
   ApiDelegationProofEvent dco_decode_api_delegation_proof_event(dynamic raw);
 
   @protected
   ApiMempoolTxEvent dco_decode_api_mempool_tx_event(dynamic raw);
+
+  @protected
+  ApiSuiGasObject dco_decode_api_sui_gas_object(dynamic raw);
+
+  @protected
+  ApiSuiSignedTransfer dco_decode_api_sui_signed_transfer(dynamic raw);
 
   @protected
   ApiSyncProgressEvent dco_decode_api_sync_progress_event(dynamic raw);
@@ -216,6 +228,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ApiBtcUtxo> dco_decode_list_api_btc_utxo(dynamic raw);
+
+  @protected
+  List<ApiCosmosAddressSpec> dco_decode_list_api_cosmos_address_spec(
+    dynamic raw,
+  );
+
+  @protected
+  List<ApiSuiGasObject> dco_decode_list_api_sui_gas_object(dynamic raw);
 
   @protected
   List<AuthenticatedRound> dco_decode_list_authenticated_round(dynamic raw);
@@ -581,7 +601,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ApiAptosSignedTransfer sse_decode_api_aptos_signed_transfer(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ApiBtcUtxo sse_decode_api_btc_utxo(SseDeserializer deserializer);
+
+  @protected
+  ApiCosmosAddressSpec sse_decode_api_cosmos_address_spec(
+    SseDeserializer deserializer,
+  );
 
   @protected
   ApiDelegationProofEvent sse_decode_api_delegation_proof_event(
@@ -590,6 +620,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ApiMempoolTxEvent sse_decode_api_mempool_tx_event(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ApiSuiGasObject sse_decode_api_sui_gas_object(SseDeserializer deserializer);
+
+  @protected
+  ApiSuiSignedTransfer sse_decode_api_sui_signed_transfer(
     SseDeserializer deserializer,
   );
 
@@ -777,6 +815,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ApiBtcUtxo> sse_decode_list_api_btc_utxo(SseDeserializer deserializer);
+
+  @protected
+  List<ApiCosmosAddressSpec> sse_decode_list_api_cosmos_address_spec(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ApiSuiGasObject> sse_decode_list_api_sui_gas_object(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<AuthenticatedRound> sse_decode_list_authenticated_round(
@@ -1225,7 +1273,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_api_aptos_signed_transfer(
+    ApiAptosSignedTransfer self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_api_btc_utxo(ApiBtcUtxo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_api_cosmos_address_spec(
+    ApiCosmosAddressSpec self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_api_delegation_proof_event(
@@ -1236,6 +1296,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_api_mempool_tx_event(
     ApiMempoolTxEvent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_api_sui_gas_object(
+    ApiSuiGasObject self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_api_sui_signed_transfer(
+    ApiSuiSignedTransfer self,
     SseSerializer serializer,
   );
 
@@ -1461,6 +1533,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_api_btc_utxo(
     List<ApiBtcUtxo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_api_cosmos_address_spec(
+    List<ApiCosmosAddressSpec> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_api_sui_gas_object(
+    List<ApiSuiGasObject> self,
     SseSerializer serializer,
   );
 
