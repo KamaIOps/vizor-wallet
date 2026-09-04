@@ -19,12 +19,13 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_icon.dart';
 import '../../../../core/widgets/app_profile_picture.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/widgets/comma_to_dot_input_formatter.dart';
+import '../../../../core/widgets/decimal_amount_input_formatter.dart';
 import '../../../../core/widgets/mobile/mobile_address_verify_sheet.dart';
 import '../../../../core/widgets/mobile/mobile_review_row.dart';
 import '../../../../core/widgets/mobile/mobile_surface_card.dart';
 import '../../../../core/widgets/mobile/mobile_tx_fee_info_sheet.dart';
 import '../../../../core/widgets/mobile_text_field.dart';
-import '../../../../core/widgets/sanitizing_decimal_amount_input_formatter.dart';
 import '../../../../providers/account_provider.dart';
 import '../../../../providers/rpc_endpoint_provider.dart';
 import '../../../../providers/sync_provider.dart';
@@ -2290,7 +2291,8 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
           _kMobileSendAmountLineHeightPx / _kMobileSendAmountUsdPrefixFontSize,
     );
     final inputFormatters = [
-      SanitizingDecimalAmountInputFormatter(
+      const CommaToDotInputFormatter(),
+      DecimalAmountInputFormatter(
         maxFractionDigits: _amountInputIsUsd ? 2 : 8,
         maxLength: _amountInputIsUsd ? 12 : 17,
       ),

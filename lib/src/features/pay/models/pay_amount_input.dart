@@ -1,31 +1,8 @@
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../swap/domain/swap_direction.dart';
 import '../../swap/models/swap_state.dart';
-
-/// Digits-and-dot amount formatter shared by the pay composer and wizard.
-class PayDecimalAmountInputFormatter extends TextInputFormatter {
-  const PayDecimalAmountInputFormatter({this.maxFractionDigits});
-
-  final int? maxFractionDigits;
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final text = newValue.text;
-    if (text.isEmpty) return newValue;
-    final max = maxFractionDigits;
-    final pattern = max == null
-        ? RegExp(r'^\d*(\.\d*)?$')
-        : RegExp('^\\d*(\\.\\d{0,$max})?\$');
-    if (pattern.hasMatch(text)) return newValue;
-    return oldValue;
-  }
-}
 
 /// Width of the centered amount `TextField` so the unit suffix hugs the
 /// digits (a full-width field would pin the suffix to the far edge).

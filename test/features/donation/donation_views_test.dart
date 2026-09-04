@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme_host.dart';
+import 'package:zcash_wallet/src/core/widgets/comma_to_dot_input_formatter.dart';
+import 'package:zcash_wallet/src/core/widgets/decimal_amount_input_formatter.dart';
 import 'package:zcash_wallet/src/features/donation/widgets/donation_views.dart';
 
 Widget _host(Widget child) => MaterialApp(
@@ -62,145 +64,131 @@ void main() {
     );
   });
 
-  testWidgets('amount formatter preserves and remaps text selection', (
-    tester,
-  ) async {
-    final controller = TextEditingController();
-    addTearDown(controller.dispose);
+  testWidgets(
+    'amount formatters preserve valid edits and reject invalid ones',
+    (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
 
-    Future<TextInputFormatter> pumpFormatter(DonationAmountMode mode) async {
-      await tester.pumpWidget(
-        _host(
-          SizedBox(
-            height: 672,
-            child: DonationComposeView(
-              controller: controller,
-              mode: mode,
-              conversionText: r'$ 0',
-              selectedPreset: null,
-              onAmountChanged: (_) {},
-              onToggleMode: () {},
-              onPresetSelected: (_) {},
-              onContinue: null,
+      Future<List<TextInputFormatter>> pumpFormatters(
+        DonationAmountMode mode,
+      ) async {
+        await tester.pumpWidget(
+          _host(
+            SizedBox(
+              height: 672,
+              child: DonationComposeView(
+                controller: controller,
+                mode: mode,
+                conversionText: r'$ 0',
+                selectedPreset: null,
+                onAmountChanged: (_) {},
+                onToggleMode: () {},
+                onPresetSelected: (_) {},
+                onContinue: null,
+              ),
             ),
           ),
-        ),
-      );
-      return tester
-          .widget<TextField>(
-            find.byKey(const ValueKey('donation_amount_field')),
-          )
-          .inputFormatters!
-          .single;
-    }
+        );
+        return tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('donation_amount_field')),
+            )
+            .inputFormatters!;
+      }
 
-    var formatter = await pumpFormatter(DonationAmountMode.zec);
-    const validMiddleEdit = TextEditingValue(
-      text: '1293.45',
-      selection: TextSelection.collapsed(offset: 3),
-    );
-    expect(
-      formatter.formatEditUpdate(
-        const TextEditingValue(
-          text: '123.45',
-          selection: TextSelection.collapsed(offset: 2),
+      var formatters = await pumpFormatters(DonationAmountMode.zec);
+      expect(formatters.first, isA<CommaToDotInputFormatter>());
+      var formatter = formatters.last as DecimalAmountInputFormatter;
+      expect(formatter.maxFractionDigits, 8);
+      expect(formatter.maxLength, 17);
+      const validMiddleEdit = TextEditingValue(
+        text: '1293.45',
+        selection: TextSelection.collapsed(offset: 3),
+      );
+      expect(
+        formatter.formatEditUpdate(
+          const TextEditingValue(
+            text: '123.45',
+            selection: TextSelection.collapsed(offset: 2),
+          ),
+          validMiddleEdit,
         ),
         validMiddleEdit,
-      ),
-      validMiddleEdit,
-    );
+      );
 
-    expect(
-      formatter.formatEditUpdate(
-        TextEditingValue.empty,
-        const TextEditingValue(
-          text: '12,3',
-          selection: TextSelection.collapsed(offset: 4),
-        ),
-      ),
-      const TextEditingValue(
+      const oldValue = TextEditingValue(
         text: '12.3',
-        selection: TextSelection.collapsed(offset: 4),
-      ),
-    );
-    expect(
-      formatter.formatEditUpdate(
-        TextEditingValue.empty,
-        const TextEditingValue(
-          text: '1a23',
-          selection: TextSelection(baseOffset: 1, extentOffset: 3),
+        selection: TextSelection.collapsed(offset: 2),
+      );
+      expect(
+        formatter.formatEditUpdate(
+          oldValue,
+          const TextEditingValue(
+            text: '12a.3',
+            selection: TextSelection.collapsed(offset: 3),
+          ),
         ),
-      ),
-      const TextEditingValue(
-        text: '123',
-        selection: TextSelection(baseOffset: 1, extentOffset: 2),
-      ),
-    );
-    expect(
-      formatter.formatEditUpdate(
-        TextEditingValue.empty,
-        const TextEditingValue(
-          text: '.5',
-          selection: TextSelection.collapsed(offset: 2),
+        same(oldValue),
+      );
+      const leadingDecimalEdit = TextEditingValue(
+        text: '.5',
+        selection: TextSelection.collapsed(offset: 2),
+      );
+      expect(
+        formatter.formatEditUpdate(TextEditingValue.empty, leadingDecimalEdit),
+        same(leadingDecimalEdit),
+      );
+      const eightFractionDigits = TextEditingValue(text: '1.12345678');
+      expect(
+        formatter.formatEditUpdate(
+          eightFractionDigits,
+          const TextEditingValue(
+            text: '1.123456789',
+            selection: TextSelection.collapsed(offset: 11),
+          ),
         ),
-      ),
-      const TextEditingValue(
-        text: '0.5',
-        selection: TextSelection.collapsed(offset: 3),
-      ),
-    );
-    expect(
-      formatter.formatEditUpdate(
-        TextEditingValue.empty,
-        const TextEditingValue(
-          text: '1.123456789',
-          selection: TextSelection.collapsed(offset: 11),
+        same(eightFractionDigits),
+      );
+      const seventeenCharacters = TextEditingValue(text: '12345678901234567');
+      expect(
+        formatter.formatEditUpdate(
+          seventeenCharacters,
+          const TextEditingValue(
+            text: '123456789012345678',
+            selection: TextSelection.collapsed(offset: 18),
+          ),
         ),
-      ),
-      const TextEditingValue(
-        text: '1.12345678',
-        selection: TextSelection.collapsed(offset: 10),
-      ),
-    );
-    expect(
-      formatter.formatEditUpdate(
-        TextEditingValue.empty,
-        const TextEditingValue(
-          text: '123456789012345678',
-          selection: TextSelection.collapsed(offset: 18),
-        ),
-      ),
-      const TextEditingValue(
-        text: '12345678901234567',
-        selection: TextSelection.collapsed(offset: 17),
-      ),
-    );
-    expect(
-      formatter.formatEditUpdate(
-        const TextEditingValue(
-          text: '1',
-          selection: TextSelection.collapsed(offset: 1),
+        same(seventeenCharacters),
+      );
+      expect(
+        formatter.formatEditUpdate(
+          const TextEditingValue(
+            text: '1',
+            selection: TextSelection.collapsed(offset: 1),
+          ),
+          TextEditingValue.empty,
         ),
         TextEditingValue.empty,
-      ),
-      TextEditingValue.empty,
-    );
+      );
 
-    formatter = await pumpFormatter(DonationAmountMode.usd);
-    expect(
-      formatter.formatEditUpdate(
-        TextEditingValue.empty,
-        const TextEditingValue(
-          text: '1.234',
-          selection: TextSelection.collapsed(offset: 5),
+      formatters = await pumpFormatters(DonationAmountMode.usd);
+      formatter = formatters.last as DecimalAmountInputFormatter;
+      expect(formatter.maxFractionDigits, 2);
+      expect(formatter.maxLength, 12);
+      const twoFractionDigits = TextEditingValue(text: '1.23');
+      expect(
+        formatter.formatEditUpdate(
+          twoFractionDigits,
+          const TextEditingValue(
+            text: '1.234',
+            selection: TextSelection.collapsed(offset: 5),
+          ),
         ),
-      ),
-      const TextEditingValue(
-        text: '1.23',
-        selection: TextSelection.collapsed(offset: 4),
-      ),
-    );
-  });
+        same(twoFractionDigits),
+      );
+    },
+  );
 
   testWidgets('donation review uses dedicated recipient and CTA', (
     tester,

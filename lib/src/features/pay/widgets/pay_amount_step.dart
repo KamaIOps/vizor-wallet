@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/comma_to_dot_input_formatter.dart';
+import '../../../core/widgets/decimal_amount_input_formatter.dart';
 import '../../swap/models/swap_models.dart';
 import '../../swap/widgets/swap_asset_icon.dart';
 import '../models/pay_amount_input.dart';
@@ -157,7 +158,7 @@ class PayAmountStep extends StatelessWidget {
                                                 TextInputAction.next,
                                             inputFormatters: [
                                               const CommaToDotInputFormatter(),
-                                              PayDecimalAmountInputFormatter(
+                                              DecimalAmountInputFormatter(
                                                 maxFractionDigits: inputIsFiat
                                                     ? 2
                                                     : asset.decimals,

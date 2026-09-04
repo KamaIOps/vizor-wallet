@@ -20,7 +20,8 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_pane_modal_overlay.dart';
 import '../../../core/widgets/app_profile_picture.dart';
-import '../../../core/widgets/sanitizing_decimal_amount_input_formatter.dart';
+import '../../../core/widgets/comma_to_dot_input_formatter.dart';
+import '../../../core/widgets/decimal_amount_input_formatter.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_tooltip.dart';
 import '../../../providers/account_provider.dart';
@@ -1280,7 +1281,8 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
                               decimal: true,
                             ),
                             inputFormatters: [
-                              SanitizingDecimalAmountInputFormatter(
+                              const CommaToDotInputFormatter(),
+                              DecimalAmountInputFormatter(
                                 maxFractionDigits: _amountInputIsUsd ? 2 : 8,
                                 maxLength: _amountInputIsUsd ? 12 : 17,
                               ),

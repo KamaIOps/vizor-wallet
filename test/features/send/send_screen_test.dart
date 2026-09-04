@@ -12,7 +12,8 @@ import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/core/widgets/app_button.dart';
 import 'package:zcash_wallet/src/core/widgets/app_icon.dart';
-import 'package:zcash_wallet/src/core/widgets/sanitizing_decimal_amount_input_formatter.dart';
+import 'package:zcash_wallet/src/core/widgets/comma_to_dot_input_formatter.dart';
+import 'package:zcash_wallet/src/core/widgets/decimal_amount_input_formatter.dart';
 import 'package:zcash_wallet/src/features/address_book/models/address_book_contact.dart';
 import 'package:zcash_wallet/src/features/address_book/providers/address_book_provider.dart';
 import 'package:zcash_wallet/src/features/migration/providers/ironwood_migration_announcement_provider.dart';
@@ -81,8 +82,11 @@ void main() {
         matching: find.byType(TextField),
       ),
     );
-    final formatter = textField.inputFormatters!.single;
-    expect(formatter, isA<SanitizingDecimalAmountInputFormatter>());
+    final formatters = textField.inputFormatters!;
+    expect(formatters.first, isA<CommaToDotInputFormatter>());
+    final formatter = formatters.last as DecimalAmountInputFormatter;
+    expect(formatter.maxFractionDigits, 8);
+    expect(formatter.maxLength, 17);
 
     const edit = TextEditingValue(
       text: '1293.45',

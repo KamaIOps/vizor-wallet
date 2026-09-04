@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
+import '../../../core/widgets/comma_to_dot_input_formatter.dart';
+import '../../../core/widgets/decimal_amount_input_formatter.dart';
 import '../../../core/widgets/review_info_row.dart';
 import '../../../core/widgets/review_list_row.dart';
 import '../../../core/widgets/review_wrap_card.dart';
-import '../../../core/widgets/sanitizing_decimal_amount_input_formatter.dart';
 import '../../send/widgets/send_review_layout.dart';
 
 enum DonationAmountMode { zec, usd }
@@ -417,7 +418,8 @@ class _DonationAmountEditorState extends State<_DonationAmountEditor> {
                   decimal: true,
                 ),
                 inputFormatters: [
-                  SanitizingDecimalAmountInputFormatter(
+                  const CommaToDotInputFormatter(),
+                  DecimalAmountInputFormatter(
                     maxFractionDigits: widget.isUsd ? 2 : 8,
                     maxLength: widget.isUsd ? 12 : 17,
                   ),
