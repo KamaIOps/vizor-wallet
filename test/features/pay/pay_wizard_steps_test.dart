@@ -397,6 +397,17 @@ void main() {
             ?.fontSize,
         AppTypography.displayLarge.fontSize,
       );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('pay_amount_input')))
+            .textAlign,
+        TextAlign.start,
+      );
+      final amountInputRow = tester.widget<Row>(
+        find.byKey(const ValueKey('pay_amount_input_row')),
+      );
+      expect(amountInputRow.crossAxisAlignment, CrossAxisAlignment.baseline);
+      expect(amountInputRow.textBaseline, TextBaseline.alphabetic);
       final assetSelector = find.byKey(const ValueKey('pay_asset_selector'));
       expect(
         find.descendant(

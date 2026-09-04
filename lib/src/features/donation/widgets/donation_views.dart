@@ -412,6 +412,7 @@ class _DonationAmountEditorState extends State<_DonationAmountEditor> {
               child: TextField(
                 key: const ValueKey('donation_amount_field'),
                 controller: widget.controller,
+                autofocus: true,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),

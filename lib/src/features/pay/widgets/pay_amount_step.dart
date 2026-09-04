@@ -122,56 +122,61 @@ class PayAmountStep extends StatelessWidget {
                                   style: amountStyle,
                                   maxWidth: maxInputWidth,
                                 );
-                                return Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    SizedBox(
-                                      width: inputWidth,
-                                      child: TextField(
-                                        key: const ValueKey('pay_amount_input'),
-                                        controller: controller,
-                                        focusNode: focusNode,
-                                        autofocus: true,
-                                        keyboardType:
-                                            const TextInputType.numberWithOptions(
-                                              decimal: true,
-                                            ),
-                                        textInputAction: TextInputAction.next,
-                                        inputFormatters: [
-                                          const CommaToDotInputFormatter(),
-                                          PayDecimalAmountInputFormatter(
-                                            maxFractionDigits: inputIsFiat
-                                                ? 2
-                                                : asset.decimals,
+                                return Center(
+                                  child: Row(
+                                    key: const ValueKey('pay_amount_input_row'),
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.baseline,
+                                    textBaseline: TextBaseline.alphabetic,
+                                    children: [
+                                      SizedBox(
+                                        width: inputWidth,
+                                        child: TextField(
+                                          key: const ValueKey(
+                                            'pay_amount_input',
                                           ),
-                                        ],
-                                        onChanged: inputIsFiat
-                                            ? onFiatAmountChanged
-                                            : onAmountChanged,
-                                        textAlign: TextAlign.center,
-                                        style: amountStyle,
-                                        cursorColor: colors.text.accent,
-                                        decoration: InputDecoration.collapsed(
-                                          hintText: '0',
-                                          hintStyle: AppTypography.displayLarge
-                                              .copyWith(
-                                                color: colors.text.muted,
+                                          controller: controller,
+                                          focusNode: focusNode,
+                                          autofocus: true,
+                                          keyboardType:
+                                              const TextInputType.numberWithOptions(
+                                                decimal: true,
                                               ),
+                                          textInputAction: TextInputAction.next,
+                                          inputFormatters: [
+                                            const CommaToDotInputFormatter(),
+                                            PayDecimalAmountInputFormatter(
+                                              maxFractionDigits: inputIsFiat
+                                                  ? 2
+                                                  : asset.decimals,
+                                            ),
+                                          ],
+                                          onChanged: inputIsFiat
+                                              ? onFiatAmountChanged
+                                              : onAmountChanged,
+                                          textAlign: TextAlign.start,
+                                          style: amountStyle,
+                                          cursorColor: colors.text.accent,
+                                          decoration: InputDecoration.collapsed(
+                                            hintText: '0',
+                                            hintStyle: AppTypography
+                                                .displayLarge
+                                                .copyWith(
+                                                  color: colors.text.muted,
+                                                ),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: AppSpacing.xs),
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 2),
-                                      child: Text(
+                                      const SizedBox(width: AppSpacing.xs),
+                                      Text(
                                         inputIsFiat ? 'USD' : asset.symbol,
                                         key: const ValueKey('pay_amount_unit'),
                                         style: AppTypography.displaySmall
                                             .copyWith(color: colors.text.muted),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 );
                               },
                             );

@@ -40,6 +40,14 @@ void main() {
     expect(find.text('Shielded balance'), findsOneWidget);
     expect(
       tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('donation_amount_field')),
+          )
+          .autofocus,
+      isTrue,
+    );
+    expect(
+      tester
           .widget<GestureDetector>(
             find
                 .ancestor(
