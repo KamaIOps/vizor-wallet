@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
@@ -7,6 +6,7 @@ import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/review_info_row.dart';
 import '../../../core/widgets/review_list_row.dart';
 import '../../../core/widgets/review_wrap_card.dart';
+import '../../../core/widgets/sanitizing_decimal_amount_input_formatter.dart';
 import '../../send/widgets/send_review_layout.dart';
 
 enum DonationAmountMode { zec, usd }
@@ -417,7 +417,10 @@ class _DonationAmountEditorState extends State<_DonationAmountEditor> {
                   decimal: true,
                 ),
                 inputFormatters: [
-                  _DonationAmountInputFormatter(isUsd: widget.isUsd),
+                  SanitizingDecimalAmountInputFormatter(
+                    maxFractionDigits: widget.isUsd ? 2 : 8,
+                    maxLength: widget.isUsd ? 12 : 17,
+                  ),
                 ],
                 onChanged: widget.onChanged,
                 style: valueStyle,
@@ -432,70 +435,6 @@ class _DonationAmountEditorState extends State<_DonationAmountEditor> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _DonationAmountInputFormatter extends TextInputFormatter {
-  const _DonationAmountInputFormatter({required this.isUsd});
-
-  final bool isUsd;
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final sourceText = newValue.text;
-    if (sourceText.isEmpty) return newValue;
-
-    final buffer = StringBuffer();
-    final boundaryOffsets = List<int>.filled(sourceText.length + 1, 0);
-    var hasDecimal = false;
-    for (var index = 0; index < sourceText.length; index++) {
-      final codeUnit = sourceText.codeUnitAt(index);
-      final character = codeUnit == 0x2C ? '.' : String.fromCharCode(codeUnit);
-      if (character == '.') {
-        if (!hasDecimal) {
-          hasDecimal = true;
-          buffer.write(character);
-        }
-      } else if (codeUnit >= 0x30 && codeUnit <= 0x39) {
-        buffer.write(character);
-      }
-      boundaryOffsets[index + 1] = buffer.length;
-    }
-
-    var text = buffer.toString();
-    final insertedLeadingZero = text.startsWith('.');
-    if (insertedLeadingZero) text = '0$text';
-    final maxLength = isUsd ? 12 : 17;
-    if (text.length > maxLength) text = text.substring(0, maxLength);
-    final decimalIndex = text.indexOf('.');
-    if (decimalIndex >= 0) {
-      final maxEnd = decimalIndex + 1 + (isUsd ? 2 : 8);
-      if (text.length > maxEnd) text = text.substring(0, maxEnd);
-    }
-
-    if (text == sourceText) return newValue;
-
-    int mapOffset(int offset) {
-      if (offset < 0) return offset;
-      final sourceOffset = offset.clamp(0, sourceText.length);
-      final mappedOffset =
-          boundaryOffsets[sourceOffset] + (insertedLeadingZero ? 1 : 0);
-      return mappedOffset.clamp(0, text.length);
-    }
-
-    return newValue.copyWith(
-      text: text,
-      selection: TextSelection(
-        baseOffset: mapOffset(newValue.selection.baseOffset),
-        extentOffset: mapOffset(newValue.selection.extentOffset),
-        affinity: newValue.selection.affinity,
-        isDirectional: newValue.selection.isDirectional,
-      ),
-      composing: TextRange.empty,
     );
   }
 }
