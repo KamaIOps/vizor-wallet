@@ -115,7 +115,7 @@ class PayAmountStep extends StatelessWidget {
                           child: LayoutBuilder(
                             builder: (context, constraints) {
                               final maxInputWidth = (constraints.maxWidth - 120)
-                                  .clamp(0.0, 240.0)
+                                  .clamp(30.0, 190.0)
                                   .toDouble();
                               return AnimatedBuilder(
                                 animation: controller,
@@ -127,8 +127,8 @@ class PayAmountStep extends StatelessWidget {
                                     text: controller.text,
                                     style: amountStyle,
                                     maxWidth: maxInputWidth,
-                                    minWidth: 0,
-                                    additionalWidth: 0,
+                                    minWidth: 30,
+                                    additionalWidth: 3,
                                   );
                                   return Center(
                                     child: Row(
@@ -137,7 +137,8 @@ class PayAmountStep extends StatelessWidget {
                                       ),
                                       mainAxisSize: MainAxisSize.min,
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.end,
+                                          CrossAxisAlignment.baseline,
+                                      textBaseline: TextBaseline.alphabetic,
                                       children: [
                                         SizedBox(
                                           width: inputWidth,
