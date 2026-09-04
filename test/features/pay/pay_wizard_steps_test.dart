@@ -406,8 +406,19 @@ void main() {
       final amountInputRow = tester.widget<Row>(
         find.byKey(const ValueKey('pay_amount_input_row')),
       );
-      expect(amountInputRow.crossAxisAlignment, CrossAxisAlignment.baseline);
-      expect(amountInputRow.textBaseline, TextBaseline.alphabetic);
+      expect(amountInputRow.crossAxisAlignment, CrossAxisAlignment.end);
+      expect(amountInputRow.textBaseline, isNull);
+      expect(
+        tester
+            .widget<Padding>(
+              find.byKey(const ValueKey('pay_amount_input_padding')),
+            )
+            .padding,
+        const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
+        ),
+      );
       final assetSelector = find.byKey(const ValueKey('pay_asset_selector'));
       expect(
         find.descendant(

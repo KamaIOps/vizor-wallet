@@ -34,6 +34,8 @@ double payAmountInputWidth({
   required String text,
   required TextStyle style,
   required double maxWidth,
+  double minWidth = 56,
+  double additionalWidth = AppSpacing.sm,
 }) {
   final displayText = text.trim().isEmpty ? '0' : text.trim();
   final painter = TextPainter(
@@ -41,7 +43,7 @@ double payAmountInputWidth({
     maxLines: 1,
     textDirection: Directionality.of(context),
   )..layout();
-  return (painter.width + AppSpacing.sm).clamp(56.0, maxWidth).toDouble();
+  return (painter.width + additionalWidth).clamp(minWidth, maxWidth).toDouble();
 }
 
 /// Whether the Pay amount step can advance on either form factor.

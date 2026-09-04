@@ -106,81 +106,98 @@ class PayAmountStep extends StatelessWidget {
                     children: [
                       SizedBox(
                         height: 64,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final maxInputWidth = (constraints.maxWidth - 120)
-                                .clamp(56.0, 240.0)
-                                .toDouble();
-                            return AnimatedBuilder(
-                              animation: controller,
-                              builder: (context, _) {
-                                final amountStyle = AppTypography.displayLarge
-                                    .copyWith(color: colors.text.accent);
-                                final inputWidth = payAmountInputWidth(
-                                  context: context,
-                                  text: controller.text,
-                                  style: amountStyle,
-                                  maxWidth: maxInputWidth,
-                                );
-                                return Center(
-                                  child: Row(
-                                    key: const ValueKey('pay_amount_input_row'),
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.baseline,
-                                    textBaseline: TextBaseline.alphabetic,
-                                    children: [
-                                      SizedBox(
-                                        width: inputWidth,
-                                        child: TextField(
-                                          key: const ValueKey(
-                                            'pay_amount_input',
-                                          ),
-                                          controller: controller,
-                                          focusNode: focusNode,
-                                          autofocus: true,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                decimal: true,
-                                              ),
-                                          textInputAction: TextInputAction.next,
-                                          inputFormatters: [
-                                            const CommaToDotInputFormatter(),
-                                            PayDecimalAmountInputFormatter(
-                                              maxFractionDigits: inputIsFiat
-                                                  ? 2
-                                                  : asset.decimals,
+                        child: Padding(
+                          key: const ValueKey('pay_amount_input_padding'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                            vertical: AppSpacing.xs,
+                          ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final maxInputWidth = (constraints.maxWidth - 120)
+                                  .clamp(0.0, 240.0)
+                                  .toDouble();
+                              return AnimatedBuilder(
+                                animation: controller,
+                                builder: (context, _) {
+                                  final amountStyle = AppTypography.displayLarge
+                                      .copyWith(color: colors.text.accent);
+                                  final inputWidth = payAmountInputWidth(
+                                    context: context,
+                                    text: controller.text,
+                                    style: amountStyle,
+                                    maxWidth: maxInputWidth,
+                                    minWidth: 0,
+                                    additionalWidth: 0,
+                                  );
+                                  return Center(
+                                    child: Row(
+                                      key: const ValueKey(
+                                        'pay_amount_input_row',
+                                      ),
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        SizedBox(
+                                          width: inputWidth,
+                                          child: TextField(
+                                            key: const ValueKey(
+                                              'pay_amount_input',
                                             ),
-                                          ],
-                                          onChanged: inputIsFiat
-                                              ? onFiatAmountChanged
-                                              : onAmountChanged,
-                                          textAlign: TextAlign.start,
-                                          style: amountStyle,
-                                          cursorColor: colors.text.accent,
-                                          decoration: InputDecoration.collapsed(
-                                            hintText: '0',
-                                            hintStyle: AppTypography
-                                                .displayLarge
-                                                .copyWith(
-                                                  color: colors.text.muted,
+                                            controller: controller,
+                                            focusNode: focusNode,
+                                            autofocus: true,
+                                            keyboardType:
+                                                const TextInputType.numberWithOptions(
+                                                  decimal: true,
+                                                ),
+                                            textInputAction:
+                                                TextInputAction.next,
+                                            inputFormatters: [
+                                              const CommaToDotInputFormatter(),
+                                              PayDecimalAmountInputFormatter(
+                                                maxFractionDigits: inputIsFiat
+                                                    ? 2
+                                                    : asset.decimals,
+                                              ),
+                                            ],
+                                            onChanged: inputIsFiat
+                                                ? onFiatAmountChanged
+                                                : onAmountChanged,
+                                            textAlign: TextAlign.start,
+                                            style: amountStyle,
+                                            cursorColor: colors.text.accent,
+                                            decoration:
+                                                InputDecoration.collapsed(
+                                                  hintText: '0',
+                                                  hintStyle: AppTypography
+                                                      .displayLarge
+                                                      .copyWith(
+                                                        color:
+                                                            colors.text.muted,
+                                                      ),
                                                 ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: AppSpacing.xs),
-                                      Text(
-                                        inputIsFiat ? 'USD' : asset.symbol,
-                                        key: const ValueKey('pay_amount_unit'),
-                                        style: AppTypography.displaySmall
-                                            .copyWith(color: colors.text.muted),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            );
-                          },
+                                        const SizedBox(width: AppSpacing.xs),
+                                        Text(
+                                          inputIsFiat ? 'USD' : asset.symbol,
+                                          key: const ValueKey(
+                                            'pay_amount_unit',
+                                          ),
+                                          style: AppTypography.displaySmall
+                                              .copyWith(
+                                                color: colors.text.muted,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
