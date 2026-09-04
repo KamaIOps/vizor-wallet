@@ -446,24 +446,29 @@ class _DonationAmountInputFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    var text = newValue.text.replaceAll(',', '.');
-    if (text.isEmpty) return newValue.copyWith(text: text);
+    final sourceText = newValue.text;
+    if (sourceText.isEmpty) return newValue;
 
     final buffer = StringBuffer();
+    final boundaryOffsets = List<int>.filled(sourceText.length + 1, 0);
     var hasDecimal = false;
-    for (final codeUnit in text.codeUnits) {
-      final character = String.fromCharCode(codeUnit);
+    for (var index = 0; index < sourceText.length; index++) {
+      final codeUnit = sourceText.codeUnitAt(index);
+      final character = codeUnit == 0x2C ? '.' : String.fromCharCode(codeUnit);
       if (character == '.') {
-        if (hasDecimal) continue;
-        hasDecimal = true;
-        buffer.write(character);
+        if (!hasDecimal) {
+          hasDecimal = true;
+          buffer.write(character);
+        }
       } else if (codeUnit >= 0x30 && codeUnit <= 0x39) {
         buffer.write(character);
       }
+      boundaryOffsets[index + 1] = buffer.length;
     }
 
-    text = buffer.toString();
-    if (text.startsWith('.')) text = '0$text';
+    var text = buffer.toString();
+    final insertedLeadingZero = text.startsWith('.');
+    if (insertedLeadingZero) text = '0$text';
     final maxLength = isUsd ? 12 : 17;
     if (text.length > maxLength) text = text.substring(0, maxLength);
     final decimalIndex = text.indexOf('.');
@@ -472,9 +477,25 @@ class _DonationAmountInputFormatter extends TextInputFormatter {
       if (text.length > maxEnd) text = text.substring(0, maxEnd);
     }
 
-    return TextEditingValue(
+    if (text == sourceText) return newValue;
+
+    int mapOffset(int offset) {
+      if (offset < 0) return offset;
+      final sourceOffset = offset.clamp(0, sourceText.length);
+      final mappedOffset =
+          boundaryOffsets[sourceOffset] + (insertedLeadingZero ? 1 : 0);
+      return mappedOffset.clamp(0, text.length);
+    }
+
+    return newValue.copyWith(
       text: text,
-      selection: TextSelection.collapsed(offset: text.length),
+      selection: TextSelection(
+        baseOffset: mapOffset(newValue.selection.baseOffset),
+        extentOffset: mapOffset(newValue.selection.extentOffset),
+        affinity: newValue.selection.affinity,
+        isDirectional: newValue.selection.isDirectional,
+      ),
+      composing: TextRange.empty,
     );
   }
 }

@@ -73,6 +73,12 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
     builder: buildDonationZecSelectedUseCase,
   ),
   FigmaCompareScenario(
+    id: 'donation-zec-middle-cursor',
+    description: 'Desktop donation amount with a middle text cursor',
+    builder: buildDonationZecMiddleCursorUseCase,
+    allowFocus: true,
+  ),
+  FigmaCompareScenario(
     id: 'donation-usd-selected',
     description: 'Desktop donation composer with 15 USD selected',
     builder: buildDonationUsdSelectedUseCase,

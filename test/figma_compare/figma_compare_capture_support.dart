@@ -43,7 +43,7 @@ void runFigmaCompareCaptureTest({
           : 'pay-recipient',
     );
     final scenario = configuration.resolveScenario(expectedFormFactor);
-    if (scenario.id.startsWith('pay-amount-')) {
+    if (scenario.allowFocus) {
       EditableText.debugDeterministicCursor = true;
       addTearDown(() => EditableText.debugDeterministicCursor = false);
     }
