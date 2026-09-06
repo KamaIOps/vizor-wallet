@@ -426,8 +426,7 @@ void main() {
     expect(result, isA<PaymentRequestPrecheckFailed>());
     expect(
       (result as PaymentRequestPrecheckFailed).message,
-      "Couldn't reach the network — check your connection and open the link "
-      'again',
+      "Couldn't reach the network — check your connection and try again",
     );
   });
 
@@ -437,7 +436,7 @@ void main() {
     expect(result, isA<PaymentRequestPrecheckFailed>());
     expect(
       (result as PaymentRequestPrecheckFailed).message,
-      "Couldn't check this request — open Edit to review the details",
+      "Couldn't check this request — try again or edit the details",
       reason: 'nothing was sent from this card, so no send wording applies',
     );
   });

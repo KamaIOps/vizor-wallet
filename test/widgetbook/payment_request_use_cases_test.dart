@@ -571,10 +571,6 @@ void main() {
         buildPaymentRequestSyncingUseCase,
         'Wallet is still syncing — this will update when it finishes',
       ),
-      (
-        buildPaymentRequestFailedUseCase,
-        "Couldn't check this request — open Edit to review the details",
-      ),
     ]) {
       await _pumpUseCase(tester, builder);
 
@@ -591,6 +587,22 @@ void main() {
         isNull,
         reason: message,
       );
+    }
+  });
+
+  testWidgets('failed checks offer Check again and Edit in both layouts', (
+    tester,
+  ) async {
+    for (final (builder, size) in <(WidgetBuilder, Size)>[
+      (buildPaymentRequestFailedUseCase, _desktopSize),
+      (buildMobilePaymentRequestFailedUseCase, _mobileSize),
+    ]) {
+      await _pumpUseCase(tester, builder, size: size);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Check again'), findsOneWidget);
+      expect(_button(tester, 'payment_request_continue').onPressed, isNotNull);
+      expect(_button(tester, 'payment_request_edit').onPressed, isNotNull);
+      expect(find.text('Review'), findsNothing);
     }
   });
 
@@ -654,7 +666,7 @@ void main() {
       ),
       (
         buildPaymentRequestFailedUseCase,
-        "Couldn't check this request — open Edit to review the details",
+        "Couldn't check this request — try again or edit the details",
       ),
     ]) {
       await _pumpUseCase(tester, builder);
@@ -1098,9 +1110,11 @@ void main() {
       expect(find.text('Edit'), findsNothing);
       expect(_key('payment_request_edit'), findsNothing);
       expect(_button(tester, 'payment_request_continue').onPressed, isNotNull);
-      // The amount slot is omitted inside the transaction group.
+      // No empty transaction header/frame above the recipient details.
       expect(_titleText(tester), 'Payment request');
-      expect(_key('payment_request_transaction_content'), findsOneWidget);
+      expect(_key('payment_request_transaction_content'), findsNothing);
+      expect(find.text('Transaction content'), findsNothing);
+      expect(find.text('To'), findsOneWidget);
     }
   });
 

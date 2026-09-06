@@ -330,7 +330,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Review payment request'), findsOneWidget);
+      expect(find.text('Review Payment'), findsOneWidget);
       expect(find.text('Review send'), findsNothing);
       expect(find.text('Requested by'), findsOneWidget);
       expect(

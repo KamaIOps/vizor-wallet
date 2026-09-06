@@ -96,7 +96,7 @@ PaymentRequestView _statusRequest(
 /// A check that could not complete. Every real failure overrides the default
 /// message with its own reason, so the gallery shows one that does.
 const _failedStatusMessage =
-    "Couldn't check this request — open Edit to review the details";
+    "Couldn't check this request — try again or edit the details";
 
 const _replacedRequest = PaymentRequestView(
   source: PaymentRequestSource.link,

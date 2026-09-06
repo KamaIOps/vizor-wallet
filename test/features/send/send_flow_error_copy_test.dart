@@ -18,8 +18,7 @@ void main() {
     test('names the network when the check could not reach it', () {
       expect(
         friendlyPaymentRequestCheckError('grpc connect failed: dns error'),
-        "Couldn't reach the network — check your connection and open the "
-        'link again',
+        "Couldn't reach the network — check your connection and try again",
       );
     });
 
@@ -27,7 +26,7 @@ void main() {
       final copy = friendlyPaymentRequestCheckError('something odd');
       expect(
         copy,
-        "Couldn't check this request — open Edit to review the details",
+        "Couldn't check this request — try again or edit the details",
       );
       expect(copy.toLowerCase(), isNot(contains('send failed')));
     });

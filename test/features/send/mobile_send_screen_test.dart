@@ -3,7 +3,10 @@ library;
 
 import 'dart:async';
 
+import '../../figma_compare/figma_compare_font_loader.dart';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     as frb;
@@ -1340,7 +1343,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mobile_send_review_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review payment request'), findsOneWidget);
+    expect(find.text('Review Payment'), findsOneWidget);
     expect(find.text('Requested by'), findsOneWidget);
     expect(
       find.text('Blue Door Coffee'),
@@ -1362,7 +1365,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mobile_send_review_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review payment request'), findsOneWidget);
+    expect(find.text('Review Payment'), findsOneWidget);
     expect(find.text('Requested by'), findsOneWidget);
     expect(find.textContaining('1.5'), findsWidgets);
   });
@@ -3352,6 +3355,8 @@ void main() {
 
   group('payment request framing', () {
     testWidgets('retitles the review step and names who asked', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      await tester.runAsync(loadFigmaCompareFonts);
       await tester.pumpWidget(
         _reviewApp(
           syncNotifier: _FakeSyncNotifier(),
@@ -3365,7 +3370,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Review payment request'), findsOneWidget);
+      expect(find.text('Review Payment'), findsOneWidget);
+      expect(
+        tester
+            .renderObject<RenderParagraph>(find.text('Review Payment'))
+            .didExceedMaxLines,
+        isFalse,
+        reason: 'the payment request title must fit the mobile top bar',
+      );
       expect(find.text('Review Send'), findsNothing);
       expect(find.text('Requested by'), findsOneWidget);
       expect(find.text('To'), findsNothing);
@@ -3469,7 +3481,7 @@ void main() {
       await tester.pumpAndSettle();
       await _toReviewStep(tester, address: _shieldedAddress, amount: '0.75');
 
-      expect(find.text('Review payment request'), findsOneWidget);
+      expect(find.text('Review Payment'), findsOneWidget);
       expect(find.text('Requested by'), findsOneWidget);
       expect(find.text('Requested 0.50 ZEC'), findsOneWidget);
     });

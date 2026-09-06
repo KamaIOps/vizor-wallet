@@ -472,8 +472,8 @@ const kWrongNetworkAddressMessage =
 /// Propose-time failures as the payment-request card states them.
 ///
 /// The card is a pre-send consent surface: nothing has been broadcast, it
-/// holds an unconsumed proposal, and the only control it still offers is
-/// Edit. [friendlyProposeSendError] is written for a screen that actually
+/// holds an unconsumed proposal, and offers Check again or Edit.
+/// [friendlyProposeSendError] is written for a screen that actually
 /// sent, so its wording ("Send failed", "Some parts of this transaction were
 /// sent") would assert an event that never happened here.
 ///
@@ -484,10 +484,9 @@ String friendlyPaymentRequestCheckError(String raw) {
       lower.contains('connection refused') ||
       lower.contains('dns error') ||
       lower.contains('tls error')) {
-    return "Couldn't reach the network — check your connection and open the "
-        'link again';
+    return "Couldn't reach the network — check your connection and try again";
   }
-  return "Couldn't check this request — open Edit to review the details";
+  return "Couldn't check this request — try again or edit the details";
 }
 
 String friendlyProposeSendError(String raw) {

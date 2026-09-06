@@ -131,7 +131,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Review payment request'), findsOneWidget);
+    expect(find.text('Review Payment'), findsOneWidget);
     expect(find.text('Review send'), findsNothing);
     expect(
       find.byKey(const ValueKey('send_review_requested_by')),
@@ -171,7 +171,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Review payment request'), findsOneWidget);
+    expect(find.text('Review Payment'), findsOneWidget);
     expect(find.text('Acme coffee'), findsNothing);
     expect(
       find.byKey(const ValueKey('send_review_requested_amount')),

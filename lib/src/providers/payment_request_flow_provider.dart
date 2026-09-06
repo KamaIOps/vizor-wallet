@@ -307,6 +307,10 @@ class PaymentRequestFlowNotifier extends Notifier<PaymentRequestFlowState?> {
       _stopWatchingSync();
       return;
     }
+    _restartPrecheck(current);
+  }
+
+  void _restartPrecheck(PaymentRequestFlowState current) {
     // Back to the same first-look state `present` publishes: the primary
     // shows its spinner and the status line clears, so the card says it is
     // working rather than leaving the old blocked message under a new answer.
@@ -315,22 +319,19 @@ class PaymentRequestFlowNotifier extends Notifier<PaymentRequestFlowState?> {
         view: current.view.copyWithStatus(PaymentRequestStatus.checking),
       ),
     );
-    // No proposal to release first: a `syncing` verdict never holds one.
+    // Neither a sync wait nor a failed check holds a proposal.
     unawaited(_runPrecheck(_generation));
   }
 
-  /// The card's "Check again", for [PaymentRequestStatus.syncStalled].
+  /// The card's "Check again", after a failed check or stalled sync.
   ///
   /// The same re-check the sync watch runs, asked for by hand. It does not
   /// touch the immediate budget: that budget bounds what the card does on its
   /// own, and a tap is not the card acting on its own.
   void recheck() {
     final current = state;
-    if (current == null ||
-        current.view.status != PaymentRequestStatus.syncStalled) {
-      return;
-    }
-    _recheckAfterSync();
+    if (current == null || !current.view.status.offersRecheck) return;
+    _restartPrecheck(current);
   }
 
   /// Shows [prefill] as a payment request and starts the pre-check.

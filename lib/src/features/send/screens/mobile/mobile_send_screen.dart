@@ -283,7 +283,7 @@ class MobileSendReviewDraftArgs {
   /// this callback instead. Null when the review is the whole stack.
   final MobileSendMemoEditedCallback? onMemoEdited;
 
-  /// Retitles the step "Review payment request".
+  /// Retitles the step "Review Payment".
   final bool isPaymentRequest;
 
   /// Sanitised requester label from the request, when it carried one.
@@ -1486,7 +1486,7 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
             preserveMemoWhitespace: _preserveMemoWhitespace,
             contactLabel: _contactLabel,
             contactPictureId: _contactPictureId,
-            // The pushed review page decides the "Review payment request"
+            // The pushed review page decides the "Review Payment"
             // framing from these; without them it reads as an ordinary send.
             isPaymentRequest: _isAnsweringPaymentRequest,
             requestedBy: _activePaymentRequestLabel,
@@ -2074,7 +2074,7 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
         _SendStep.recipient => 'Select Recipient',
         _SendStep.amount => 'Enter Amount',
         _SendStep.review =>
-          _isAnsweringPaymentRequest ? 'Review payment request' : 'Review Send',
+          _isAnsweringPaymentRequest ? 'Review Payment' : 'Review Send',
       },
       _SendPhase.failed => 'Send failed',
     };

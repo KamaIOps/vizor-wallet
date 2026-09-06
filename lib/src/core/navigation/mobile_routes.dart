@@ -157,9 +157,8 @@ List<RouteBase> buildMobileRoutes({required List<RouteBase> entryRoutes}) {
         final extra = state.extra;
         // A ZIP-321 payment URI arrives as SendPrefillArgs (address + amount +
         // memo); other callers still pass a bare recipient string. Unpack the
-        // prefill so the multi-step mobile flow lands on the address step (or
-        // the amount step when the URI carried an amount) with the fields
-        // populated, matching the desktop /send prefill behaviour.
+        // request opens on the amount step even when it asks the payer to
+        // supply the amount. Bare recipient strings still open address entry.
         final prefill = extra is SendPrefillArgs ? extra : null;
         return CupertinoPage(
           // `_MobileSendScreenState` seeds every `initial*` field in
@@ -171,6 +170,7 @@ List<RouteBase> buildMobileRoutes({required List<RouteBase> entryRoutes}) {
             useRouteSteps: true,
             initialRecipient:
                 prefill?.address ?? (extra is String ? extra : null),
+            initialAmountStep: prefill?.source == kPaymentUriPrefillSource,
             initialAmount: prefill?.amountText,
             initialMemo: prefill?.memoText,
             preserveInitialMemoWhitespace: prefill?.preserveMemoText ?? false,

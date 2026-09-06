@@ -69,7 +69,7 @@ class SendReviewContentView extends StatelessWidget {
   /// about to be sent.
   final String? requestedAmountText;
 
-  /// Retitles the screen "Review payment request" and the recipient row
+  /// Retitles the screen "Review Payment" and the recipient row
   /// "Requested by". The link's own `label=` is never shown here.
   final bool isPaymentRequest;
 
@@ -91,7 +91,7 @@ class SendReviewContentView extends StatelessWidget {
     final colors = context.colors;
 
     return SendReviewContentColumn(
-      title: isPaymentRequest ? 'Review payment request' : 'Review send',
+      title: isPaymentRequest ? 'Review Payment' : 'Review send',
       children: [
         SendReviewInfoSection(
           amountText: amountText,

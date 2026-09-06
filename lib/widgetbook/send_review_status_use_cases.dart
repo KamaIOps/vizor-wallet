@@ -66,7 +66,7 @@ Widget buildSendReviewContactUseCase(BuildContext context) {
   );
 }
 
-/// Review payment request — the recipient is a saved contact. Only the row
+/// Review Payment — the recipient is a saved contact. Only the row
 /// title changes; the link's own `label=` is never shown on the review.
 Widget buildSendReviewPaymentRequestContactUseCase(BuildContext context) {
   return _SendReviewStatusFrame(
@@ -86,7 +86,7 @@ Widget buildSendReviewPaymentRequestContactUseCase(BuildContext context) {
   );
 }
 
-/// Review payment request — no address-book match, so the truncated address
+/// Review Payment — no address-book match, so the truncated address
 /// and its pool badge head the "Requested by" row.
 Widget buildSendReviewPaymentRequestAddressUseCase(BuildContext context) {
   return _SendReviewStatusFrame(

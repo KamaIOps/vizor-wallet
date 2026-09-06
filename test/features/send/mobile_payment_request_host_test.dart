@@ -7,12 +7,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:zcash_wallet/src/core/config/network_config.dart';
+import 'package:zcash_wallet/src/app_bootstrap.dart';
+import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
+import 'package:zcash_wallet/src/core/navigation/mobile_routes.dart';
+import 'package:zcash_wallet/src/features/send/services/send_proving_key_warmup.dart';
+import 'package:zcash_wallet/src/rust/frb_generated.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/features/address_book/providers/address_book_provider.dart';
 import 'package:zcash_wallet/src/features/send/models/send_prefill_args.dart';
 import 'package:zcash_wallet/src/features/send/screens/mobile/mobile_send_screen.dart'
-    show MobileSendReviewDraftArgs;
+    show MobileSendReviewDraftArgs, MobileSendScreen;
 import 'package:zcash_wallet/src/features/send/services/payment_request_precheck.dart';
 import 'package:zcash_wallet/src/features/send/services/send_flow.dart';
 import 'package:zcash_wallet/src/features/send/widgets/payment_request_host.dart';
@@ -41,6 +45,23 @@ const _request = SendPrefillArgs(
   amountText: '0.5',
   label: 'Coffee shop',
 );
+
+class _RustApiFake implements RustLibApi {
+  bool validAddress = true;
+
+  @override
+  Future<rust_sync.AddressValidationResult> crateApiSyncValidateAddress({
+    required String address,
+    required String network,
+  }) async => rust_sync.AddressValidationResult(
+    isValid: validAddress,
+    addressType: validAddress ? 'unified' : 'invalid',
+    wrongNetwork: false,
+  );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 class _FakeAddressBookNotifier extends AddressBookNotifier {
   @override
@@ -119,7 +140,10 @@ class _Harness {
   String get location => router.routerDelegate.currentConfiguration.uri.path;
 }
 
-Future<_Harness> _pumpHost(WidgetTester tester) async {
+Future<_Harness> _pumpHost(
+  WidgetTester tester, {
+  bool realComposer = false,
+}) async {
   tester.view.physicalSize = const Size(393, 852);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
@@ -129,11 +153,15 @@ Future<_Harness> _pumpHost(WidgetTester tester) async {
   final router = GoRouter(
     initialLocation: '/home',
     routes: [
-      for (final path in ['/home', '/send'])
+      for (final path in ['/home', if (!realComposer) '/send'])
         GoRoute(
           path: path,
           builder: (_, _) => Scaffold(body: Text('screen $path')),
         ),
+      if (realComposer)
+        buildMobileRoutes(
+          entryRoutes: const [],
+        ).whereType<GoRoute>().singleWhere((route) => route.path == '/send'),
       GoRoute(
         path: '/send/review',
         builder: (_, state) {
@@ -148,6 +176,25 @@ Future<_Harness> _pumpHost(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        appBootstrapProvider.overrideWithValue(
+          AppBootstrapState(
+            initialLocation: '/home',
+            initialAccountState: const AccountState(
+              accounts: [
+                AccountInfo(uuid: 'account-1', name: 'Account 1', order: 0),
+              ],
+              activeAccountUuid: 'account-1',
+            ),
+            initialSyncSnapshot: AppSyncSnapshot.empty,
+            network: 'main',
+            rpcEndpointConfig: defaultRpcEndpointConfig('main'),
+            themeMode: ThemeMode.light,
+            privacyModeEnabled: false,
+            isPasswordConfigured: true,
+            isUnlocked: true,
+            passwordRotationRecoveryFailed: false,
+          ),
+        ),
         paymentRequestPrecheckProvider.overrideWithValue(_readyPrecheck()),
         accountProvider.overrideWith(_FakeAccountNotifier.new),
         syncProvider.overrideWith(
@@ -161,6 +208,8 @@ Future<_Harness> _pumpHost(WidgetTester tester) async {
         ),
         migrationSendGateProvider.overrideWithValue(false),
         zecHomeUsdUnitPriceProvider.overrideWithValue(null),
+        zecLiveUsdUnitPriceProvider.overrideWithValue(100),
+        sendProvingKeyWarmupProvider.overrideWithValue(() {}),
         addressBookProvider.overrideWith(_FakeAddressBookNotifier.new),
         ownAccountAddressesProvider.overrideWith((ref) async => const {}),
       ],
@@ -186,9 +235,89 @@ Future<_Harness> _pumpHost(WidgetTester tester) async {
 }
 
 void main() {
+  final rustApi = _RustApiFake();
+  setUpAll(() => RustLib.initMock(api: rustApi));
+  tearDownAll(RustLib.dispose);
   setUp(() {
+    rustApi.validAddress = true;
     _discarded.clear();
     _discardGate = null;
+  });
+
+  testWidgets(
+    'Enter amount opens the real amount step for an address-only request',
+    (tester) async {
+      final harness = await _pumpHost(tester, realComposer: true);
+      harness.container
+          .read(paymentRequestFlowProvider.notifier)
+          .present(
+            const SendPrefillArgs(
+              id: 'address-only',
+              source: kPaymentUriPrefillSource,
+              address: _address,
+            ),
+            source: PaymentRequestSource.link,
+          );
+      await tester.pumpAndSettle();
+      expect(find.text('Transaction content'), findsNothing);
+      expect(find.text('To'), findsOneWidget);
+      await tester.tap(find.text('Enter amount'));
+      await tester.pumpAndSettle();
+      expect(harness.location, '/send');
+      expect(find.text('Enter Amount'), findsOneWidget);
+      expect(find.text('Select Recipient'), findsNothing);
+      expect(
+        tester
+            .widget<MobileSendScreen>(find.byType(MobileSendScreen))
+            .initialRecipient,
+        _address,
+      );
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('mobile_send_amount_input')),
+            )
+            .controller!
+            .text,
+        isEmpty,
+      );
+      expect(harness.container.read(paymentRequestFlowProvider), isNull);
+      expect(_discarded, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'an address-only request returns to recipient entry when validation fails',
+    (tester) async {
+      final harness = await _pumpHost(tester, realComposer: true);
+      harness.container
+          .read(paymentRequestFlowProvider.notifier)
+          .present(
+            const SendPrefillArgs(
+              id: 'address-only-invalid',
+              source: kPaymentUriPrefillSource,
+              address: _address,
+            ),
+            source: PaymentRequestSource.link,
+          );
+      await tester.pumpAndSettle();
+      rustApi.validAddress = false;
+      await tester.tap(find.text('Enter amount'));
+      await tester.pumpAndSettle();
+      expect(find.text('Select Recipient'), findsOneWidget);
+      expect(find.text('Enter Amount'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('a bare recipient still starts at address entry', (tester) async {
+    final harness = await _pumpHost(tester, realComposer: true);
+    harness.router.go('/send', extra: _address);
+    await tester.pumpAndSettle();
+    expect(find.text('Select Recipient'), findsOneWidget);
+    expect(find.text('Enter Amount'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

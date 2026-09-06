@@ -360,10 +360,53 @@ void main() {
     expect(state.view.status, PaymentRequestStatus.failed);
     expect(
       state.view.resolvedStatusMessage,
-      "Couldn't check this request — open Edit to review the details",
+      "Couldn't check this request — try again or edit the details",
     );
     expect(state.canReview, isFalse);
   });
+
+  test(
+    'a failed request can be checked again without reopening or losing its terms',
+    () async {
+      final api = _FakeSendApi()
+        ..proposeThrows = Exception('grpc connect failed');
+      final container = makeContainer(api);
+      final notifier = container.read(paymentRequestFlowProvider.notifier);
+      final prefill = request('u1merchant', memoText: '  invoice 42  ');
+      notifier.present(prefill, source: PaymentRequestSource.qrCode);
+      await pumpEventQueue();
+
+      expect(flowState(container)!.view.status, PaymentRequestStatus.failed);
+      notifier.recheck();
+      await pumpEventQueue();
+      expect(api.proposeAttempts, 2);
+      expect(flowState(container)!.view.status, PaymentRequestStatus.failed);
+
+      api.proposeThrows = null;
+      api.gate = Completer<void>();
+      notifier.recheck();
+      await pumpEventQueue();
+      expect(flowState(container)!.view.status, PaymentRequestStatus.checking);
+      expect(api.proposeAttempts, 3);
+      notifier.recheck();
+      await pumpEventQueue();
+      expect(
+        api.proposeAttempts,
+        3,
+        reason: 'a second tap cannot start another check',
+      );
+
+      api.gate!.complete();
+      await pumpEventQueue();
+      final state = flowState(container)!;
+      expect(state.canReview, isTrue);
+      expect(state.prefill, same(prefill));
+      expect(state.view.memo, '  invoice 42  ');
+      expect(state.reviewArgs!.amountZatoshi, BigInt.from(50000000));
+      expect(state.reviewArgs!.requestedBy, 'Coffee shop');
+      expect(api.proposed, [BigInt.one]);
+    },
+  );
 
   test('a newer link replaces the card, says so, and frees the old '
       'proposal', () async {

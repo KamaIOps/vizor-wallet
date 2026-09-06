@@ -139,10 +139,10 @@ extension PaymentRequestStatusX on PaymentRequestStatus {
 
   /// The request cannot be reviewed, but the card can ask the wallet again.
   ///
-  /// The only status whose primary action is neither Review nor Edit: the
-  /// request is fine, the wallet just could not answer, and re-asking is the
-  /// one thing that can change that.
-  bool get offersRecheck => this == PaymentRequestStatus.syncStalled;
+  /// Re-check stalled sync or a failed lookup without reopening the link.
+  bool get offersRecheck =>
+      this == PaymentRequestStatus.syncStalled ||
+      this == PaymentRequestStatus.failed;
 }
 
 /// Default copy for each [PaymentRequestStatus].
@@ -936,6 +936,14 @@ class _TransactionContentFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    if (amountText == null) {
+      return bounded
+          ? _DetailsFrame(rows: rows)
+          : ReviewWrapCard(
+              padding: const EdgeInsets.all(kPaymentRequestGutter),
+              children: rows,
+            );
+    }
     final details = bounded
         ? Flexible(child: _DetailsFrame(rows: rows))
         : ReviewWrapCard(
