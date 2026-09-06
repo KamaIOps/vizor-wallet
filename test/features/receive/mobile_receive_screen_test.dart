@@ -578,18 +578,17 @@ void main() {
   testWidgets('composes a request and shares it with its QR image', (
     tester,
   ) async {
-    final shares = <({String text, int pngBytes, String fileName})>[];
+    final shares = <({int pngBytes, String fileName})>[];
     await _pumpReceive(
       tester,
       _FakeReceiveAddressService(),
       extraOverrides: [
         zecLiveUsdUnitPriceProvider.overrideWithValue(70),
         requestShareHandlerProvider.overrideWithValue(({
-          required text,
           required png,
           required fileName,
         }) async {
-          shares.add((text: text, pngBytes: png.length, fileName: fileName));
+          shares.add((pngBytes: png.length, fileName: fileName));
         }),
       ],
     );
@@ -634,8 +633,6 @@ void main() {
     await tester.pump();
 
     expect(shares, hasLength(1));
-    expect(shares.single.text, contains(uri));
-    expect(shares.single.text, contains('0.5 ZEC'));
     expect(shares.single.fileName, kRequestQrShareFileName);
     expect(shares.single.pngBytes, greaterThan(0));
   });
@@ -798,7 +795,6 @@ void main() {
       _FakeReceiveAddressService(),
       extraOverrides: [
         requestShareHandlerProvider.overrideWithValue(({
-          required text,
           required png,
           required fileName,
         }) async {

@@ -168,10 +168,9 @@ class _ReceiveRequestSheetState extends ConsumerState<ReceiveRequestSheet> {
     showAppToast(context, kRequestLinkCopiedToast);
   }
 
-  Future<void> _share(String text, Uint8List png) async {
+  Future<void> _share(Uint8List png) async {
     try {
       await ref.read(requestShareHandlerProvider)(
-        text: text,
         png: png,
         fileName: kRequestQrShareFileName,
       );

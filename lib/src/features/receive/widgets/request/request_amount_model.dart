@@ -61,15 +61,6 @@ const kRequestAmountSupplyError = 'Amount exceeds the ZEC supply';
 /// screen explaining it.
 const kRequestAmountFormatError = 'Enter an amount like 0.5';
 
-/// Body of the share sheet a mobile request opens.
-///
-/// Deliberately a full templated sentence rather than fragments concatenated
-/// around the amount — word order changes per language, and this string is
-/// destined for translation.
-String buildRequestShareText({required String amountZec, required String uri}) {
-  return 'Pay me $amountZec $kZcashDefaultCurrencyTicker with Vizor\n$uri';
-}
-
 /// Everything the request widgets draw.
 ///
 /// [amountZec] is the canonical ZEC value as typed, independent of which unit
@@ -162,23 +153,6 @@ class ZecRequestView {
     if (uri == null) return null;
     try {
       return '${normalizeZip321Amount(amountZec)} $kZcashDefaultCurrencyTicker';
-    } on Zip321BuildException {
-      return null;
-    }
-  }
-
-  /// The message a share sheet sends, or null before there is a request.
-  ///
-  /// Composed here rather than at each call site so the desktop and mobile
-  /// flows can never drift into two differently worded shares.
-  String? get shareText {
-    final uri = requestUri;
-    if (uri == null) return null;
-    try {
-      return buildRequestShareText(
-        amountZec: normalizeZip321Amount(amountZec),
-        uri: uri,
-      );
     } on Zip321BuildException {
       return null;
     }

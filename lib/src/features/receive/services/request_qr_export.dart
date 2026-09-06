@@ -10,8 +10,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 
+import '../../../core/sharing/share_png.dart';
 import '../../../core/storage/png_save_location.dart';
 
 /// Base name of an exported request QR, before the amount and the extension.
@@ -27,30 +27,19 @@ const kRequestQrShareFileName = '$_requestQrFileStem.png';
 typedef RequestQrSaveLocationPicker =
     Future<String?> Function({required String suggestedName});
 
-/// Hands [png] to the platform share sheet alongside [text].
+/// Hands one [png] to the platform share sheet.
 typedef RequestShareHandler =
-    Future<void> Function({
-      required String text,
-      required Uint8List png,
-      required String fileName,
-    });
+    Future<void> Function({required Uint8List png, required String fileName});
 
 /// The platform's own save panel, shared with the Gift Card QR export.
 Future<String?> defaultRequestQrSaveLocation({required String suggestedName}) =>
     pickPngSaveLocation(suggestedName: suggestedName);
 
 Future<void> defaultRequestShare({
-  required String text,
   required Uint8List png,
   required String fileName,
 }) async {
-  await SharePlus.instance.share(
-    ShareParams(
-      text: text,
-      files: [XFile.fromData(png, mimeType: 'image/png')],
-      fileNameOverrides: [fileName],
-    ),
-  );
+  await sharePng(png: png, fileName: fileName);
 }
 
 final requestQrSaveLocationPickerProvider =

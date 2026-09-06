@@ -103,19 +103,6 @@ void main() {
       expect(_withError.requestUri, isNull);
       expect(_withError.qrData, _shielded);
     });
-
-    test('the share text is null until there is a request to share', () {
-      expect(_empty.shareText, isNull);
-      expect(_withError.shareText, isNull);
-      expect(_withAmount.shareText, startsWith('Pay me 0.5 ZEC with Vizor\n'));
-    });
-
-    test('the share text names the amount and carries the link', () {
-      expect(
-        buildRequestShareText(amountZec: '0.5', uri: 'zcash:$_shielded'),
-        'Pay me 0.5 ZEC with Vizor\nzcash:$_shielded',
-      );
-    });
   });
 
   group('desktop request modal step one', () {
@@ -725,17 +712,13 @@ void main() {
       expect(find.byKey(const ValueKey('request_sheet_back')), findsOneWidget);
     });
 
-    testWidgets('sharing hands over both the message and the PNG', (
-      tester,
-    ) async {
-      String? sharedText;
+    testWidgets('sharing hands over the QR PNG', (tester) async {
       Uint8List? sharedPng;
       await _pump(
         tester,
         RequestAmountSheetResult(
           request: _withMessage,
-          onShareRequest: (text, png) {
-            sharedText = text;
+          onShareRequest: (png) {
             sharedPng = png;
           },
         ),
@@ -746,7 +729,6 @@ void main() {
       await tester.pump();
       await _settleEncode(tester);
 
-      expect(sharedText, _withMessage.shareText);
       expect(sharedPng, isNotNull);
       expect(sharedPng!.sublist(0, 8), _pngSignature);
     }, timeout: _encodeTimeout);
@@ -778,7 +760,7 @@ void main() {
         tester,
         RequestAmountSheetResult(
           request: _withMessage,
-          onShareRequest: (_, _) {},
+          onShareRequest: (_) {},
           onShareError: () => reported++,
         ),
         size: _mobileSize,

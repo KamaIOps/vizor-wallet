@@ -197,10 +197,8 @@ Widget _mobileResult(ZecRequestView request) {
         request: request,
         onBack: _noop,
         onClose: _noop,
-        onShareRequest: (text, png) => debugPrint(
-          'request: share ${png.length} byte PNG with '
-          '${text.length} chars of text',
-        ),
+        onShareRequest: (png) =>
+            debugPrint('request: share ${png.length} byte PNG'),
         onCopyLink: _noop,
       ),
     ),
