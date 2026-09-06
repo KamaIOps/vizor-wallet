@@ -384,6 +384,7 @@ class PaymentLinkDashedStatusPill extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
             child: Row(
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 AppIcon(
                   AppIcons.time,
@@ -499,15 +500,20 @@ class _PaymentLinkLoadingCardState extends State<PaymentLinkLoadingCard>
                         angle: -0.18,
                         child: const SizedBox(
                           width: 76,
-                          height: 320,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Color(0x00FFFFFF),
-                                  Color(0x20FFFFFF),
-                                  Color(0x00FFFFFF),
-                                ],
+                          // Keep the tilted band's ends outside the card;
+                          // the outer ClipRRect owns the visible boundary.
+                          child: OverflowBox(
+                            minHeight: 320,
+                            maxHeight: 320,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0x00FFFFFF),
+                                    Color(0x20FFFFFF),
+                                    Color(0x00FFFFFF),
+                                  ],
+                                ),
                               ),
                             ),
                           ),

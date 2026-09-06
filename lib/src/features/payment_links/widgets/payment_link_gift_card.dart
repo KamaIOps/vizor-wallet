@@ -772,7 +772,12 @@ class _PaymentLinkAmountTextField extends StatelessWidget {
   final double availableWidth;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        _buildContent(context, availableWidth.clamp(0.0, constraints.maxWidth)),
+  );
+
+  Widget _buildContent(BuildContext context, double availableWidth) {
     final focused = focusNode.hasFocus;
     final value = controller.text;
     final style = AppTypography.headlineLarge.copyWith(color: cardTextColor);

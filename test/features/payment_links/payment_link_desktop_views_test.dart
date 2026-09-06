@@ -1029,8 +1029,26 @@ void main() {
       ),
     );
     expect(find.text('Wait 5:00 to claim'), findsOneWidget);
+    final waitLabel = find.text('Wait 5:00 to claim');
+    final claimPill = find
+        .ancestor(of: waitLabel, matching: find.byType(CustomPaint))
+        .first;
+    final waitIcon = find.descendant(
+      of: claimPill,
+      matching: find.byType(AppIcon),
+    );
+    final contentBounds = tester
+        .getRect(waitIcon)
+        .expandToInclude(tester.getRect(waitLabel));
+    expect(
+      contentBounds.center.dx,
+      closeTo(tester.getCenter(claimPill).dx, 0.01),
+    );
     expect(find.byType(PaymentLinkConfetti), findsNothing);
-    expect(find.text('Waiting for 6 confirmations.'), findsOneWidget);
+    expect(
+      find.text('Your gift will be ready to claim shortly.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('cards list fades only where more content exists', (

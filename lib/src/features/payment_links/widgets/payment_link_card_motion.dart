@@ -324,6 +324,9 @@ class _PaymentLinkPointerTiltState extends State<_PaymentLinkPointerTilt>
       onHover: (event) => _update(event.localPosition),
       onExit: (_) => _reset(),
       child: Listener(
+        // Flippable cards ignore child hit tests so their outer tap action can
+        // own the flip. The lighting still needs touch events across the card.
+        behavior: HitTestBehavior.opaque,
         onPointerDown: (event) => _update(event.localPosition),
         onPointerMove: (event) => _update(event.localPosition),
         onPointerUp: (_) => _reset(),

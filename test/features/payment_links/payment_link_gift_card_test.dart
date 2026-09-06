@@ -715,6 +715,10 @@ void main() {
       const Size(64, 48),
     );
     expect(list.semanticChildCount, PaymentLinkCardArtwork.values.length);
+    expect(
+      list.childrenDelegate.estimatedChildCount,
+      PaymentLinkCardArtwork.values.length,
+    );
     expect(list.itemExtent, 72);
     expect(
       find.descendant(of: rail, matching: find.byType(RawScrollbar)),
@@ -732,9 +736,7 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('selector rail announces one indexed block of designs', (
-    tester,
-  ) async {
+  testWidgets('selector rail announces unique design indexes', (tester) async {
     final semantics = tester.ensureSemantics();
     await _pump(
       tester,
@@ -771,8 +773,8 @@ void main() {
       everyElement(lessThan(PaymentLinkCardArtwork.values.length)),
     );
 
-    // A full cycle further along the loop still announces designs: the block
-    // follows the viewport, so a reader never runs out of card buttons.
+    // Reaching the end keeps the last designs accessible without wrapping
+    // back to another copy of the first design.
     await tester.drag(
       find.byKey(const ValueKey('payment_link_card_selector_scroll')),
       Offset(-72.0 * PaymentLinkCardArtwork.values.length, 0),
@@ -856,7 +858,7 @@ void main() {
     );
     final controller = list.controller!;
     final initialOffset = controller.offset;
-    expect(initialOffset, greaterThan(0));
+    expect(initialOffset, 0);
 
     await tester.dragFrom(
       tester.getCenter(
@@ -869,6 +871,63 @@ void main() {
 
     expect(controller.offset, greaterThan(initialOffset));
   });
+
+  for (final size in [const Size(396, 50), const Size(375, 60)]) {
+    testWidgets('selector rail stops at both ends at $size', (tester) async {
+      final mobileSize = size.height == 60;
+      await _pump(
+        tester,
+        SizedBox(
+          width: size.width,
+          child: PaymentLinkCardSelectorRail(
+            artworks: PaymentLinkCardArtwork.values,
+            selected: PaymentLinkCardArtwork.knight,
+            itemWidth: mobileSize ? 80 : 64,
+            itemHeight: size.height,
+            onSelected: (_) {},
+          ),
+        ),
+      );
+      final rail = find.byKey(
+        const ValueKey('payment_link_card_selector_rail'),
+      );
+      final scroll = find.byKey(
+        const ValueKey('payment_link_card_selector_scroll'),
+      );
+      final controller = tester.widget<ListView>(scroll).controller!;
+      expect(controller.offset, 0);
+      expect(
+        tester
+            .getCenter(
+              find.byKey(const ValueKey('payment_link_card_selector_knight')),
+            )
+            .dx,
+        closeTo(tester.getCenter(rail).dx, 0.01),
+      );
+      await tester.drag(scroll, const Offset(-4000, 0));
+      await tester.pumpAndSettle();
+      final end = controller.offset;
+      expect(end, controller.position.maxScrollExtent);
+      expect(
+        tester
+            .getCenter(
+              find.byKey(const ValueKey('payment_link_card_selector_gift')),
+            )
+            .dx,
+        closeTo(tester.getCenter(rail).dx, 0.01),
+      );
+      await tester.drag(scroll, const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(controller.offset, end);
+      await tester.drag(scroll, const Offset(4000, 0));
+      await tester.pumpAndSettle();
+      expect(controller.offset, 0);
+      await tester.drag(scroll, const Offset(500, 0));
+      await tester.pumpAndSettle();
+      expect(controller.offset, 0);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }
 
 Future<void> _pump(WidgetTester tester, Widget child) {

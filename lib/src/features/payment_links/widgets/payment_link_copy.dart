@@ -32,6 +32,11 @@ const kPaymentLinkRedeemSubtitle =
     'Copy the card link you’ve received, and paste it below.';
 const kPaymentLinkInvalidSubtitle = 'Copy the link & try again';
 const kPaymentLinkWaitingStatusLabel = 'Wait 1:15 to get the link';
+const kPaymentLinkShareWaitingDescription =
+    'We’re getting your Gift Card ready to share.';
+const kPaymentLinkClaimWaitingDescription =
+    'Your gift will be ready to claim shortly.';
+const kPaymentLinkWaitingDescription = 'This may take a little while.';
 const kPaymentLinkPasteLabel = 'Paste card link';
 const kPaymentLinkCheckingLabel = 'Checking ...';
 const kPaymentLinkClearClipboardLabel = 'Clear clipboard';

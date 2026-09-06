@@ -575,11 +575,8 @@ class PaymentLinkReadyDesktopView extends StatelessWidget {
     this.backLabel = 'Home',
     this.waitingStatusLabel = kPaymentLinkWaitingStatusLabel,
     this.waitingHeading = kPaymentLinkAlmostReadyHeading,
-    this.waitingPrimaryText =
-        'The link becomes shareable when funding reaches the network.',
-    this.waitingSecondaryText =
-        'If Vizor cannot confirm that yet, one confirmation is enough.\n'
-        'This usually takes about 1 min 15 sec.',
+    this.waitingPrimaryText = kPaymentLinkShareWaitingDescription,
+    this.waitingSecondaryText = kPaymentLinkWaitingDescription,
     this.copyLabel = 'Copy link',
     this.returnLabel = 'Return home',
     super.key,
@@ -1224,7 +1221,7 @@ class _PaymentLinkCardsDesktopViewState
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     PaymentLinkTabAction(
-                      icon: AppIcons.arrowDownward,
+                      icon: AppIcons.importWallet,
                       label: kPaymentLinkReceivedTabLabel,
                       selected:
                           widget.activeTab == PaymentLinkCardsTab.received,

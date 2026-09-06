@@ -18,6 +18,7 @@ import '../src/features/payment_links/widgets/payment_link_card_flip.dart';
 import '../src/features/payment_links/widgets/payment_link_card_motion.dart';
 import '../src/features/payment_links/widgets/payment_link_card_selector_rail.dart';
 import '../src/features/payment_links/widgets/payment_link_confetti.dart';
+import '../src/features/payment_links/widgets/payment_link_copy.dart';
 import '../src/features/payment_links/widgets/payment_link_desktop_views.dart';
 import '../src/features/payment_links/widgets/payment_link_gift_card.dart';
 import '../src/features/payment_links/widgets/payment_link_long_sync_warning.dart';
@@ -376,10 +377,8 @@ class _PaymentLinkPreviewPane extends StatelessWidget {
         onBack: _noop,
         onCopy: null,
         waitingHeading: 'Your Gift Card\nis almost ready!',
-        waitingPrimaryText: 'Waiting for 6 confirmations.',
-        waitingSecondaryText:
-            'Vizor will keep checking. You can claim the card as soon as\n'
-            'the funds are ready.',
+        waitingPrimaryText: kPaymentLinkClaimWaitingDescription,
+        waitingSecondaryText: kPaymentLinkWaitingDescription,
         waitingStatusLabel: 'Wait 5:00 to claim',
       ),
       PaymentLinkPreviewState.ready => const _PaymentLinkReadyPreview(),
