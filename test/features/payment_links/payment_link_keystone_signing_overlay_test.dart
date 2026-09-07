@@ -64,7 +64,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('Sign Gift Card on Keystone'), findsOneWidget);
+    expect(find.text('Sign gift card on Keystone'), findsOneWidget);
     expect(service.createdAmounts, [BigInt.from(10000000)]);
     expect(service.createdFromAccounts, ['hardware-account']);
 
@@ -152,7 +152,7 @@ void main() {
 
     expect(completed, isTrue);
     expect(find.text('Broadcast timed out before confirmation.'), findsNothing);
-    expect(find.text('Back to Gift Card'), findsNothing);
+    expect(find.text('Back to gift card'), findsNothing);
   });
 
   testWidgets('discards the prepared draft when broadcast fails', (
@@ -216,7 +216,7 @@ void main() {
       find.text('Keystone signature could not be applied.'),
       findsOneWidget,
     );
-    expect(find.text('Back to Gift Card'), findsOneWidget);
+    expect(find.text('Back to gift card'), findsOneWidget);
   });
   testWidgets('keeps the draft when broadcast fails after submission', (
     tester,
@@ -279,7 +279,7 @@ void main() {
     // The network may already hold the funding transaction, so the draft and
     // its prepared txid stay for the recovery reconciler to settle.
     expect(service.discardedDrafts, isEmpty);
-    expect(find.text('Back to Gift Card'), findsOneWidget);
+    expect(find.text('Back to gift card'), findsOneWidget);
   });
 }
 

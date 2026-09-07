@@ -10,7 +10,7 @@ import 'package:zcash_wallet/src/features/payment_links/widgets/mobile/payment_l
 import '../../figma_compare/figma_compare_font_loader.dart';
 
 const _feeHelpText =
-    'Includes the fee to fund the Gift Card and the fee reserved for '
+    'Includes the fee to fund the gift card and the fee reserved for '
     'the recipient to claim it.';
 
 void main() {

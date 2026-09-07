@@ -195,8 +195,8 @@ void main() {
       find.byKey(const ValueKey('payment_link_long_sync_warning_sheet')),
       findsOneWidget,
     );
-    expect(find.text('This Gift Card may take a while'), findsOneWidget);
-    expect(find.text('Check Gift Card'), findsOneWidget);
+    expect(find.text('This gift card may take a while'), findsOneWidget);
+    expect(find.text('Check gift card'), findsOneWidget);
     expect(find.text('Go back'), findsOneWidget);
     expect(find.textContaining('100000'), findsNothing);
   });

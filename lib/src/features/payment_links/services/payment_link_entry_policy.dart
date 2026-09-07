@@ -10,9 +10,9 @@ library;
 import '../../../core/navigation/app_route_predicates.dart';
 
 const kPaymentLinkDeferredByActiveFlowMessage =
-    'Finish or cancel your current task to open this Gift Card.';
+    'Finish or cancel your current task to open this gift card.';
 const kPaymentLinkDeferredByAccountSetupMessage =
-    'Finish account setup to open this Gift Card.';
+    'Finish account setup to open this gift card.';
 
 /// Routes whose in-progress user input or signing state must not be replaced
 /// by an incoming Gift Card.

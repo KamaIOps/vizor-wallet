@@ -134,7 +134,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       find.textContaining(
-        'This deletes all accounts and unshared Gift Card links.',
+        'This deletes all accounts and unshared gift card links.',
         findRichText: true,
       ),
       findsOneWidget,

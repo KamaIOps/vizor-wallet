@@ -87,31 +87,31 @@ class _AccountRemoveModalState extends State<AccountRemoveModal> {
           'Complete or remove them from swap activity before removing this account.';
     }
     if (widget.checkingReceivingGiftCards) {
-      return 'Checking this account for incoming Gift Cards before removal.';
+      return 'Checking this account for incoming gift cards before removal.';
     }
     if (widget.receivingGiftCardCheckFailed) {
-      return "Couldn't check this account for incoming Gift Cards. Try again before removing it.";
+      return "Couldn't check this account for incoming gift cards. Try again before removing it.";
     }
     if (widget.receivingGiftCardCount > 0) {
       if (widget.receivingGiftCardCount == 1) {
-        return 'This account is receiving a Gift Card. '
+        return 'This account is receiving a gift card. '
             'Wait for it to finish before removing this account.';
       }
-      return 'This account is receiving ${widget.receivingGiftCardCount} Gift Cards. '
+      return 'This account is receiving ${widget.receivingGiftCardCount} gift cards. '
           'Wait for them to finish before removing this account.';
     }
     if (widget.checkingUnsharedGiftCards) {
-      return 'Checking this account for unshared Gift Cards before removal.';
+      return 'Checking this account for unshared gift cards before removal.';
     }
     if (widget.unsharedGiftCardCheckFailed) {
-      return "Couldn't check this account for unshared Gift Cards. Try again before removing it.";
+      return "Couldn't check this account for unshared gift cards. Try again before removing it.";
     }
     if (widget.unsharedGiftCardCount <= 0) return null;
     final plural = widget.unsharedGiftCardCount == 1 ? 'link' : 'links';
     final action = widget.unsharedGiftCardCount == 1
         ? 'Copy it before removing this account.'
         : 'Copy them before removing this account.';
-    return 'This account has ${widget.unsharedGiftCardCount} unshared Gift Card $plural. '
+    return 'This account has ${widget.unsharedGiftCardCount} unshared gift card $plural. '
         '$action';
   }
 
@@ -297,7 +297,7 @@ class _AccountRemoveModalState extends State<AccountRemoveModal> {
       return 'Removing this account will completely reset the Vizor app. '
           'This means deleting all accounts and requiring you to import '
           'accounts again.\n'
-          'Unshared Gift Card links will also be permanently lost.\n'
+          'Unshared gift card links will also be permanently lost.\n'
           'This cannot be undone.';
     }
     return "Are you sure you want to remove this account? "

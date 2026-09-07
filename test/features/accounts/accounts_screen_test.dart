@@ -990,7 +990,7 @@ void main() {
 
     expect(
       find.text(
-        'This account has 1 unshared Gift Card link. Copy it before removing this account.',
+        'This account has 1 unshared gift card link. Copy it before removing this account.',
       ),
       findsOneWidget,
     );
@@ -1026,7 +1026,7 @@ void main() {
 
     expect(
       find.text(
-        'This account is receiving a Gift Card. Wait for it to finish before removing this account.',
+        'This account is receiving a gift card. Wait for it to finish before removing this account.',
       ),
       findsOneWidget,
     );
@@ -1071,7 +1071,7 @@ void main() {
 
     expect(
       find.text(
-        'This account is receiving a Gift Card. Wait for it to finish before removing this account.',
+        'This account is receiving a gift card. Wait for it to finish before removing this account.',
       ),
       findsOneWidget,
     );
@@ -1318,7 +1318,7 @@ void main() {
     expect(find.textContaining('This cannot be undone.'), findsOneWidget);
     expect(
       find.textContaining(
-        'Unshared Gift Card links will also be permanently lost.',
+        'Unshared gift card links will also be permanently lost.',
       ),
       findsOneWidget,
     );

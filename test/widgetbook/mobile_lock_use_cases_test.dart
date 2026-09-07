@@ -294,7 +294,7 @@ void main() {
     // desktop lost-password and uninstall screens do.
     expect(
       forgotBody.data,
-      contains('Unshared Gift Card links will be permanently lost.'),
+      contains('Unshared gift card links will be permanently lost.'),
     );
     // Nothing is arriving in this use case, so no claim warning.
     expect(find.text(kWalletResetInFlightGiftCardWarningMessage), findsNothing);

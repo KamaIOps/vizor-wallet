@@ -90,7 +90,7 @@ void main() {
     );
     expect(find.text('No Gift Cards yet'), findsOneWidget);
 
-    await tester.tap(find.text('How Gift Cards work'));
+    await tester.tap(find.text('How gift cards work'));
     await tester.pumpAndSettle();
 
     expect(
@@ -136,14 +136,14 @@ void main() {
     await pumpPaymentLinksScreen(tester);
 
     final hoverFeedback = find.byKey(
-      const ValueKey('payment_link_text_action_hover_How Gift Cards work'),
+      const ValueKey('payment_link_text_action_hover_How gift cards work'),
     );
     expect(tester.widget<AnimatedOpacity>(hoverFeedback).opacity, 1);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     addTearDown(mouse.removePointer);
     await mouse.addPointer();
-    await mouse.moveTo(tester.getCenter(find.text('How Gift Cards work')));
+    await mouse.moveTo(tester.getCenter(find.text('How gift cards work')));
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(tester.widget<AnimatedOpacity>(hoverFeedback).opacity, lessThan(1));
@@ -456,7 +456,7 @@ void main() {
       expect(find.text('Try saving again'), findsOneWidget);
       expect(
         find.textContaining(
-          'Funding was sent, but the Gift Card could not be saved.',
+          'Funding was sent, but the gift card could not be saved.',
         ),
         findsOneWidget,
       );
@@ -593,14 +593,14 @@ void main() {
     await pumpPaymentLinksScreen(tester, operations: operations);
 
     expect(find.text('Preparing...'), findsOneWidget);
-    expect(find.bySemanticsLabel('Copy Gift Card link'), findsNothing);
+    expect(find.bySemanticsLabel('Copy gift card link'), findsNothing);
 
     operations.fundingConfirmationCount = 1;
     await tester.pump(const Duration(seconds: 10));
     await tester.pumpAndSettle();
 
     expect(find.text('Preparing...'), findsNothing);
-    expect(find.bySemanticsLabel('Copy Gift Card link'), findsOneWidget);
+    expect(find.bySemanticsLabel('Copy gift card link'), findsOneWidget);
   });
 
   testWidgets('removes an unshared Card after funding expires', (tester) async {
@@ -734,7 +734,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Wait 5:00 to claim'), findsOneWidget);
-    expect(find.text('Claim the Gift Card'), findsNothing);
+    expect(find.text('Claim the gift card'), findsNothing);
 
     operations
       ..claimable = true
@@ -743,7 +743,7 @@ void main() {
     await tester.pump(const Duration(seconds: 10));
     await tester.pumpAndSettle();
 
-    expect(find.text('Claim the Gift Card'), findsOneWidget);
+    expect(find.text('Claim the gift card'), findsOneWidget);
     expect(
       find.text('Your gift will be ready to claim shortly.'),
       findsNothing,
@@ -874,7 +874,7 @@ void main() {
       expect(hardwareSigning.createdArtworkIds, ['ruby']);
       expect(hardwareSigning.createdMessages, ['For Keystone']);
       expect(find.byType(KeystoneSigningModal), findsOneWidget);
-      expect(find.text('Sign Gift Card on Keystone'), findsOneWidget);
+      expect(find.text('Sign gift card on Keystone'), findsOneWidget);
 
       await tester.tap(find.text('Cancel'));
       await tester.pump();
@@ -986,7 +986,7 @@ void main() {
       expect(find.text('Create card'), findsNothing);
       expect(
         find.text(
-          'Active account changed. Review the Gift Card amount and fees again.',
+          'Active account changed. Review the gift card amount and fees again.',
         ),
         findsOneWidget,
       );
@@ -1636,7 +1636,7 @@ void main() {
     await tester.tap(find.text('Paste card link'));
     await tester.pumpAndSettle();
 
-    expect(find.text('This Gift Card may take a while'), findsOneWidget);
+    expect(find.text('This gift card may take a while'), findsOneWidget);
     expect(
       find.text(
         'Vizor needs to scan more history than usual before it can verify the '
@@ -1649,12 +1649,12 @@ void main() {
     await tester.tap(find.text('Go back'));
     await tester.pumpAndSettle();
 
-    expect(find.text('This Gift Card may take a while'), findsNothing);
+    expect(find.text('This gift card may take a while'), findsNothing);
     expect(find.text('Paste card link'), findsOneWidget);
 
     await tester.tap(find.text('Paste card link'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Check Gift Card'));
+    await tester.tap(find.text('Check gift card'));
     await tester.pumpAndSettle();
 
     expect(operations.allowLongSyncCalls, [isFalse, isFalse, isTrue]);
@@ -1736,7 +1736,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(operations.claimedLinks.map((link) => link.toUri().toString()), [
@@ -1839,7 +1839,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('This Gift Card is for a different Zcash network.'),
+      find.text('This gift card is for a different Zcash network.'),
       findsOneWidget,
     );
     expect(
@@ -1930,7 +1930,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('This Gift Card is already being received.'),
+      find.text('This gift card is already being received.'),
       findsOneWidget,
     );
     expect(find.text('Receiving...'), findsOneWidget);
@@ -1989,7 +1989,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(operations.receivedLoadCalls, 2);
-    expect(find.text('Received Gift Cards could not be loaded.'), findsNothing);
+    expect(find.text('Received gift cards could not be loaded.'), findsNothing);
   });
 
   testWidgets('shows selected artwork and Receiving while claim is pending', (
@@ -2020,7 +2020,7 @@ void main() {
       PaymentLinkCardArtwork.ruby,
     );
 
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump();
 
     expect(find.text('Receiving...'), findsOneWidget);
@@ -2088,7 +2088,7 @@ void main() {
         .read(paymentLinkIntakeProvider.notifier)
         .receive(incomingLink.toUri().toString());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(operations.receivedRecords.single.claimTxids, 'claim-txid');
@@ -2125,7 +2125,7 @@ void main() {
         .read(paymentLinkIntakeProvider.notifier)
         .receive(incomingLink.toUri().toString());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump();
 
     claimCompleter.complete(
@@ -2165,7 +2165,7 @@ void main() {
         .read(paymentLinkIntakeProvider.notifier)
         .receive(incomingLink.toUri().toString());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump();
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -2208,7 +2208,7 @@ void main() {
         .read(paymentLinkIntakeProvider.notifier)
         .receive(incomingLink.toUri().toString());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump();
     expect(operations.claimedLinks.map((link) => link.address), [
       incomingLink.address,
@@ -2219,7 +2219,7 @@ void main() {
         .receive(secondIncomingLink.toUri().toString());
     await tester.pumpAndSettle();
     expect(find.text('You’ve received\na gift card!'), findsOneWidget);
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump();
 
     expect(operations.claimedLinks.map((link) => link.address), [
@@ -2249,7 +2249,7 @@ void main() {
         .read(paymentLinkIntakeProvider.notifier)
         .receive(incomingLink.toUri().toString());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump();
 
     container
@@ -2283,7 +2283,7 @@ void main() {
         .read(paymentLinkIntakeProvider.notifier)
         .receive(incomingLink.toUri().toString());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump();
 
     expect(find.text('Receiving...'), findsOneWidget);
@@ -2292,7 +2292,7 @@ void main() {
 
     expect(find.text('Receiving...'), findsNothing);
     expect(find.text('Claim'), findsOneWidget);
-    expect(find.textContaining('Gift Card claim failed.'), findsOneWidget);
+    expect(find.textContaining('Gift card claim failed.'), findsOneWidget);
   });
 
   testWidgets('reopens intake when the prepared destination changed', (
@@ -2315,7 +2315,7 @@ void main() {
         .read(paymentLinkIntakeProvider.notifier)
         .receive(incomingLink.toUri().toString());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Claim the Gift Card'));
+    await tester.tap(find.text('Claim the gift card'));
     await tester.pump();
 
     claimCompleter.completeError(
@@ -2326,11 +2326,11 @@ void main() {
     expect(find.text('Paste card link'), findsOneWidget);
     expect(
       find.textContaining(
-        'Receiving account changed. Open the Gift Card again to continue.',
+        'Receiving account changed. Open the gift card again to continue.',
       ),
       findsOneWidget,
     );
-    expect(find.textContaining('Gift Card claim failed.'), findsNothing);
+    expect(find.textContaining('Gift card claim failed.'), findsNothing);
   });
 
   testWidgets('copies a persisted created link without reclaim controls', (
@@ -2340,11 +2340,11 @@ void main() {
     await pumpPaymentLinksScreen(tester, operations: operations);
 
     expect(find.text('4.45 ZEC'), findsOneWidget);
-    expect(find.bySemanticsLabel('Copy Gift Card link'), findsOneWidget);
-    expect(find.bySemanticsLabel('Show Gift Card QR code'), findsOneWidget);
+    expect(find.bySemanticsLabel('Copy gift card link'), findsOneWidget);
+    expect(find.bySemanticsLabel('Show gift card QR code'), findsOneWidget);
     expect(find.text('Reclaim'), findsNothing);
 
-    await tester.tap(find.bySemanticsLabel('Copy Gift Card link'));
+    await tester.tap(find.bySemanticsLabel('Copy gift card link'));
     await tester.pumpAndSettle();
     expect(operations.sharedLinks, [incomingLink]);
   });
@@ -2360,7 +2360,7 @@ void main() {
       qrImageSaver: imageSaver,
     );
 
-    await tester.tap(find.bySemanticsLabel('Show Gift Card QR code'));
+    await tester.tap(find.bySemanticsLabel('Show gift card QR code'));
     await tester.pumpAndSettle();
 
     expect(find.text('Share Gift Card'), findsOneWidget);

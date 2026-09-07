@@ -52,7 +52,7 @@ final String _wipeSubtitle =
         ? 'this Mac'
         : Platform.isWindows
         ? 'this PC'
-        : 'this device'}. Unshared Gift Card links will be permanently lost.';
+        : 'this device'}. Unshared gift card links will be permanently lost.';
 
 final String _finishSubtitle = Platform.isMacOS
     ? 'To finish uninstallation, remove the Vizor app from Applications.'
@@ -133,7 +133,7 @@ class _SettingsUninstallScreenState
       setState(() {
         _isCheckingSwaps = false;
         _confirmError =
-            "Couldn't check for incoming Gift Cards. "
+            "Couldn't check for incoming gift cards. "
             'Try again before uninstalling.';
       });
       return;

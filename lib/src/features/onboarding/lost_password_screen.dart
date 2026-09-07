@@ -287,7 +287,7 @@ class _LostPasswordContent extends StatelessWidget {
                   ),
                   const TextSpan(
                     text:
-                        '.\nThis deletes all accounts and unshared Gift Card links.\nYou will need to ',
+                        '.\nThis deletes all accounts and unshared gift card links.\nYou will need to ',
                   ),
                   TextSpan(text: 'import accounts again', style: strongStyle),
                   const TextSpan(text: '.'),

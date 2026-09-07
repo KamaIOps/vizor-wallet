@@ -281,14 +281,14 @@ class PaymentLinkClaimDestinationChangedException implements Exception {
 
   @override
   String toString() =>
-      'The Gift Card receiving account or address changed before claim.';
+      'The gift card receiving account or address changed before claim.';
 }
 
 class PaymentLinkClaimInFlightException implements Exception {
   const PaymentLinkClaimInFlightException();
 
   @override
-  String toString() => 'This Gift Card is already being received.';
+  String toString() => 'This gift card is already being received.';
 }
 
 /// A pasted Gift Card belongs to a different Zcash network than the wallet.
@@ -305,7 +305,7 @@ class PaymentLinkNetworkMismatchException implements Exception {
   final String walletNetwork;
 
   @override
-  String toString() => 'This Gift Card is for a different Zcash network.';
+  String toString() => 'This gift card is for a different Zcash network.';
 }
 
 @visibleForTesting

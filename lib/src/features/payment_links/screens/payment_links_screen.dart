@@ -229,7 +229,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   void _showPage(PaymentLinksLocalPage page) {
     if (_pendingFundingMetadata != null &&
         page != PaymentLinksLocalPage.review) {
-      _showError('Save this Gift Card before leaving this screen.');
+      _showError('Save this gift card before leaving this screen.');
       return;
     }
     _amountFocusNode.unfocus();
@@ -344,7 +344,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       unawaited(_refreshFundingProgress(records: visible));
     } catch (_) {
       if (mounted && showError) {
-        _showError('Gift Cards could not be loaded.');
+        _showError('Gift cards could not be loaded.');
       }
     }
   }
@@ -394,7 +394,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         }
       });
       if (readyFundingExpired) {
-        _showError('Gift Card funding expired. Create it again.');
+        _showError('Gift card funding expired. Create it again.');
       }
     } catch (_) {
       // Keep the last known progress. A later foreground sync or timer tick
@@ -429,7 +429,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         'attempt=$attempt type=${error.runtimeType}',
       );
       if (mounted && showError) {
-        _showError('Received Gift Cards could not be loaded.');
+        _showError('Received gift cards could not be loaded.');
       }
       return false;
     }
@@ -742,7 +742,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     if (wasPastAmountStep) {
       showAppToast(
         context,
-        'Active account changed. Review the Gift Card amount and fees again.',
+        'Active account changed. Review the gift card amount and fees again.',
         iconName: AppIcons.warning,
       );
     }
@@ -778,7 +778,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     _releaseClaimSession(session, keepCard: keepCard);
     showAppToast(
       context,
-      'Active account changed. Redeem this Gift Card again to receive it in '
+      'Active account changed. Redeem this gift card again to receive it in '
       'the new account.',
       iconName: AppIcons.warning,
     );
@@ -927,7 +927,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
 
   void _selectWizardStep(int step) {
     if (_pendingFundingMetadata != null) {
-      _showError('Save this Gift Card before leaving this screen.');
+      _showError('Save this gift card before leaving this screen.');
       return;
     }
     switch (step) {
@@ -951,7 +951,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     final accountState = ref.read(accountProvider).value;
     final activeAccountUuid = accountState?.activeAccountUuid;
     if (amount == null || amount <= BigInt.zero || quote == null) {
-      _showError('Enter a valid Gift Card amount.');
+      _showError('Enter a valid gift card amount.');
       return;
     }
     if (activeAccountUuid == null || activeAccountUuid.isEmpty) {
@@ -1020,7 +1020,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
           _page = PaymentLinksLocalPage.review;
         });
         _showError(
-          'Funding was sent, but the Gift Card could not be saved. '
+          'Funding was sent, but the gift card could not be saved. '
           'Try again before closing Vizor.',
         );
         return;
@@ -1040,7 +1040,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         _page = PaymentLinksLocalPage.ready;
       });
     } catch (_) {
-      if (mounted) _showError('Gift Card creation failed. Try again.');
+      if (mounted) _showError('Gift card creation failed. Try again.');
     } finally {
       if (mounted) {
         setState(() => _operationInProgress = false);
@@ -1078,7 +1078,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     } catch (_) {
       if (mounted) {
         _showError(
-          'The Gift Card still could not be saved. Try again before closing Vizor.',
+          'The gift card still could not be saved. Try again before closing Vizor.',
         );
       }
     } finally {
@@ -1123,7 +1123,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         }
       });
       _showError(
-        'Funding was sent, but the Gift Card could not be saved. '
+        'Funding was sent, but the gift card could not be saved. '
         'Try again before closing Vizor.',
       );
       return;
@@ -1752,7 +1752,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         _showError(
           mobile
               ? 'Receiving account changed. Try again to check this gift.'
-              : 'Receiving account changed. Open the Gift Card again to continue.',
+              : 'Receiving account changed. Open the gift card again to continue.',
         );
       }
     } catch (_) {
@@ -1762,7 +1762,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         _showError(
           mobile
               ? "Couldn't finish receiving this gift. Try again to check its status."
-              : 'Gift Card claim failed. It may still be waiting for confirmation '
+              : 'Gift card claim failed. It may still be waiting for confirmation '
                     'or may already be spent.',
         );
       }
@@ -2164,7 +2164,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
             onShareError: () {
               if (mounted) {
                 _showError(
-                  "Couldn't share this Gift Card. Copy the link instead.",
+                  "Couldn't share this gift card. Copy the link instead.",
                 );
               }
             },
@@ -2220,16 +2220,16 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
             .read(paymentLinkOperationsProvider)
             .markCreatedLinkShared(record.link);
         await _loadRecoveries(showError: false);
-        if (mounted) showAppToast(context, 'Gift Card QR saved');
+        if (mounted) showAppToast(context, 'Gift card QR saved');
       } catch (_) {
         if (mounted) {
           _showError(
-            'Gift Card QR saved, but its status could not be updated.',
+            'Gift card QR saved, but its status could not be updated.',
           );
         }
       }
     } catch (_) {
-      if (mounted) _showError('Gift Card QR could not be saved.');
+      if (mounted) _showError('Gift card QR could not be saved.');
     } finally {
       if (mounted) setState(() => _operationInProgress = false);
     }
@@ -2251,7 +2251,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         if (mounted) await _loadRecoveries(showError: false);
       } catch (_) {
         if (mounted) {
-          _showError('Gift Card shared, but its status could not be updated.');
+          _showError('Gift card shared, but its status could not be updated.');
         }
       }
     } finally {
@@ -2518,7 +2518,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       onRevealMessage: hasMessage
           ? () => setState(() => _receivedShowsBack = !_receivedShowsBack)
           : null,
-      claimLabel: _operationInProgress ? 'Claiming...' : 'Claim the Gift Card',
+      claimLabel: _operationInProgress ? 'Claiming...' : 'Claim the gift card',
     );
   }
 

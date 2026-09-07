@@ -21,7 +21,7 @@ const kPaymentLinkNoCreatedCardsText = 'No created cards yet.';
 const kPaymentLinkNoReceivedCardsText = 'No received cards yet.';
 const kPaymentLinkFundingIncompleteStatus = 'Funding incomplete';
 const kPaymentLinkPreparingStatus = 'Preparing...';
-const kPaymentLinkCopyLinkSemanticLabel = 'Copy Gift Card link';
+const kPaymentLinkCopyLinkSemanticLabel = 'Copy gift card link';
 const kPaymentLinkReadyHeading = 'Ready to share';
 const kPaymentLinkAlmostReadyHeading = 'Gift Card is\nalmost ready!';
 const kPaymentLinkCardFeeLabel = 'Card fee (deposit + redeem)';
@@ -33,7 +33,7 @@ const kPaymentLinkRedeemSubtitle =
 const kPaymentLinkInvalidSubtitle = 'Copy the link & try again';
 const kPaymentLinkWaitingStatusLabel = 'Wait 1:15 to get the link';
 const kPaymentLinkShareWaitingDescription =
-    'We’re getting your Gift Card ready to share.';
+    'We’re getting your gift card ready to share.';
 const kPaymentLinkClaimWaitingDescription =
     'Your gift will be ready to claim shortly.';
 const kPaymentLinkWaitingDescription = 'This may take a little while.';

@@ -909,7 +909,7 @@ class _GiftCardsRowState extends ConsumerState<_GiftCardsRow> {
     return MobileListRow(
       key: const ValueKey('mobile_settings_gift_cards_row'),
       leading: _RowIcon(AppIcons.giftCard),
-      label: 'My Gift Cards',
+      label: 'My gift cards',
       labelBadge: const SettingsNewBadge(),
       minRowHeight: _settingsRowHeight,
       textStyle: widget.textStyle,

@@ -571,7 +571,7 @@ void main() {
         count: 1,
       ),
       message:
-          'Copy your unshared Gift Card links before deleting this account.',
+          'Copy your unshared gift card links before deleting this account.',
     ),
     (
       name: 'incoming Gift Cards',
@@ -580,7 +580,7 @@ void main() {
         count: 1,
       ),
       message:
-          'Wait for incoming Gift Cards to finish before deleting this account.',
+          'Wait for incoming gift cards to finish before deleting this account.',
     ),
   ]) {
     testWidgets('removal explains ${testCase.name} blockers', (tester) async {

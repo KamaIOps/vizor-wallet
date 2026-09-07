@@ -75,7 +75,7 @@ void main() {
     await tester.pump();
 
     expect(copies, 1);
-    await tester.tap(find.bySemanticsLabel('Show Gift Card QR code'));
+    await tester.tap(find.bySemanticsLabel('Show gift card QR code'));
     await tester.pump();
     expect(qrOpens, 1);
   });

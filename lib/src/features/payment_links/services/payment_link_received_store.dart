@@ -58,7 +58,7 @@ class PaymentLinkInFlightClaimsException implements Exception {
 
   @override
   String toString() =>
-      'Wait for incoming Gift Cards to finish before deleting this account.';
+      'Wait for incoming gift cards to finish before deleting this account.';
 }
 
 class PaymentLinkReceivedRecord {

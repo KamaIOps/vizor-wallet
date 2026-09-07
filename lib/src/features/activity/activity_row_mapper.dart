@@ -138,8 +138,8 @@ String giftCardActivityTitle(
 }) {
   if (isFailed) {
     return switch (kind) {
-      GiftCardActivityKind.created => 'Gift Card creation failed',
-      GiftCardActivityKind.redeemed => 'Gift Card redemption failed',
+      GiftCardActivityKind.created => 'Gift card creation failed',
+      GiftCardActivityKind.redeemed => 'Gift card redemption failed',
     };
   }
   if (isInFlight) {

@@ -35,7 +35,7 @@ class PaymentLinkQrShareCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       container: true,
-      label: 'Gift Card QR code',
+      label: 'Gift card QR code',
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadii.large),
         child: SizedBox.fromSize(

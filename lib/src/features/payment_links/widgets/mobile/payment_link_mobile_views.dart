@@ -173,7 +173,7 @@ class PaymentLinksHomeMobileView extends StatelessWidget {
     required this.onRedeem,
     this.screenTitle = 'Gift Cards',
     this.title = kPaymentLinkEmptyTitle,
-    this.helpLabel = 'How the Gift Card works',
+    this.helpLabel = 'How the gift card works',
     this.createLabel = kPaymentLinkCreateCardLabel,
     this.redeemLabel = kPaymentLinkRedeemCardLabel,
     super.key,
@@ -259,7 +259,7 @@ class PaymentLinksHomeMobileView extends StatelessWidget {
                                 'payment_links_mobile_help_action',
                               ),
                               onPressed: onShowHelp,
-                              semanticLabel: 'Show how Gift Cards work',
+                              semanticLabel: 'Show how gift cards work',
                               builder: (context, _, focused) => Center(
                                 child: DecoratedBox(
                                   decoration: BoxDecoration(
@@ -550,7 +550,7 @@ class PaymentLinkCardListMobileRow extends StatelessWidget {
             ),
             _MobileCardLinkAction(
               key: const ValueKey('payment_link_mobile_card_qr_action'),
-              semanticLabel: 'Show Gift Card QR code',
+              semanticLabel: 'Show gift card QR code',
               icon: AppIcons.qr,
               onPressed: onShowQr,
             ),
@@ -1714,12 +1714,12 @@ class _MobileReviewRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final help = AppTooltip(
       message:
-          'Includes the fee to fund the Gift Card and the fee reserved for '
+          'Includes the fee to fund the gift card and the fee reserved for '
           'the recipient to claim it.',
       preferBelow: true,
       tapToShow: true,
       child: Semantics(
-        label: 'About the Gift Card fee',
+        label: 'About the gift card fee',
         button: onHelp != null,
         onTap: onHelp,
         child: AppIcon(

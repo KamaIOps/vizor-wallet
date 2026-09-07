@@ -49,8 +49,8 @@ void main() {
       ),
     );
 
-    expect(find.text('This Gift Card may take a while'), findsOneWidget);
-    expect(find.text('Check Gift Card'), findsOneWidget);
+    expect(find.text('This gift card may take a while'), findsOneWidget);
+    expect(find.text('Check gift card'), findsOneWidget);
     expect(find.text('Go back'), findsOneWidget);
     expect(find.textContaining('100000'), findsNothing);
   });
@@ -71,7 +71,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('How Gift Cards work'));
+    await tester.tap(find.text('How gift cards work'));
     await tester.tap(find.text('Create new card'));
     await tester.tap(find.text('Redeem a card'));
 
@@ -99,10 +99,10 @@ void main() {
     await tester.pump();
 
     final focusRing = find.byKey(
-      const ValueKey('payment_link_text_action_focus_ring_How Gift Cards work'),
+      const ValueKey('payment_link_text_action_focus_ring_How gift cards work'),
     );
     final hoverFeedback = find.byKey(
-      const ValueKey('payment_link_text_action_hover_How Gift Cards work'),
+      const ValueKey('payment_link_text_action_hover_How gift cards work'),
     );
     final focusedBorder = find.descendant(
       of: focusRing,
@@ -122,7 +122,7 @@ void main() {
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     addTearDown(mouse.removePointer);
     await mouse.addPointer();
-    await mouse.moveTo(tester.getCenter(find.text('How Gift Cards work')));
+    await mouse.moveTo(tester.getCenter(find.text('How gift cards work')));
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(tester.widget<AnimatedOpacity>(hoverFeedback).opacity, lessThan(1));
@@ -248,7 +248,7 @@ void main() {
       const PaymentLinkDesktopPreview(state: PaymentLinkPreviewState.empty),
     );
 
-    final help = find.text('How Gift Cards work');
+    final help = find.text('How gift cards work');
     final create = find.widgetWithText(AppButton, 'Create new card');
     final gap = tester.getTopLeft(create).dy - tester.getBottomRight(help).dy;
     expect(gap, greaterThanOrEqualTo(30));
@@ -264,7 +264,7 @@ void main() {
       const PaymentLinkDesktopPreview(state: PaymentLinkPreviewState.review),
     );
 
-    final totalHelp = find.bySemanticsLabel('About the total Gift Card amount');
+    final totalHelp = find.bySemanticsLabel('About the total gift card amount');
     expect(totalHelp, findsOneWidget);
     final helpIcon = find.descendant(
       of: totalHelp,
@@ -300,7 +300,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(
       find.text(
-        'Includes the fee to fund the Gift Card and the fee reserved for the '
+        'Includes the fee to fund the gift card and the fee reserved for the '
         'recipient to claim it.',
       ),
       findsOneWidget,
@@ -1102,8 +1102,8 @@ void main() {
 
     expect(find.text('Pending'), findsOneWidget);
     expect(find.text('Redeemed'), findsNothing);
-    expect(find.bySemanticsLabel('Copy Gift Card link'), findsNWidgets(6));
-    expect(find.bySemanticsLabel('Show Gift Card QR code'), findsNWidgets(6));
+    expect(find.bySemanticsLabel('Copy gift card link'), findsNWidgets(6));
+    expect(find.bySemanticsLabel('Show gift card QR code'), findsNWidgets(6));
   });
 
   testWidgets('QR export keeps the selected artwork and measured geometry', (

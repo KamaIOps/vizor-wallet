@@ -7,7 +7,7 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_pane_modal_overlay.dart';
 
-const _title = 'This Gift Card may take a while';
+const _title = 'This gift card may take a while';
 const _body =
     'Vizor needs to scan more history than usual before it can verify the '
     'balance. This is safe, but it may take a long time.';
@@ -87,7 +87,7 @@ class PaymentLinkLongSyncWarningModal extends StatelessWidget {
               key: const ValueKey('payment_link_long_sync_confirm_button'),
               onPressed: onConfirm,
               minWidth: 280,
-              child: const Text('Check Gift Card'),
+              child: const Text('Check gift card'),
             ),
             const SizedBox(height: AppSpacing.s),
             AppButton(
@@ -155,7 +155,7 @@ class PaymentLinkLongSyncWarningSheet extends StatelessWidget {
             key: const ValueKey('payment_link_long_sync_sheet_confirm_button'),
             expand: true,
             onPressed: onConfirm,
-            child: const Text('Check Gift Card'),
+            child: const Text('Check gift card'),
           ),
           const SizedBox(height: AppSpacing.xs),
           AppButton(

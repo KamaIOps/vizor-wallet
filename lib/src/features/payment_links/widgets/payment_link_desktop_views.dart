@@ -51,7 +51,7 @@ class PaymentLinksHomeDesktopView extends StatelessWidget {
     required this.onRedeem,
     this.backLabel = 'Home',
     this.title = kPaymentLinkEmptyTitle,
-    this.helpLabel = kPaymentLinkHowItWorksTitle,
+    this.helpLabel = 'How gift cards work',
     this.createLabel = 'Create new card',
     this.redeemLabel = kPaymentLinkRedeemCardLabel,
     super.key,
@@ -544,11 +544,11 @@ class _ReviewAmountRow extends StatelessWidget {
             const SizedBox(width: AppSpacing.xxs),
             AppTooltip(
               message:
-                  'Includes the fee to fund the Gift Card and the fee reserved '
+                  'Includes the fee to fund the gift card and the fee reserved '
                   'for the recipient to claim it.',
               preferBelow: true,
               child: Semantics(
-                label: 'About the total Gift Card amount',
+                label: 'About the total gift card amount',
                 child: AppIcon(
                   AppIcons.help,
                   size: 16,
@@ -716,7 +716,7 @@ class PaymentLinkReceivedDesktopView extends StatelessWidget {
     this.title = 'You’ve received\na gift card!',
     this.messageTitle = kPaymentLinkMessageAttachedTitle,
     this.messageHint = 'Click on the card to reveal',
-    this.claimLabel = 'Claim the Gift Card',
+    this.claimLabel = 'Claim the gift card',
     this.cardActionLabel = kPaymentLinkRevealMessageSemanticLabel,
     super.key,
   });
@@ -1014,7 +1014,7 @@ class PaymentLinkCardListRow extends StatelessWidget {
                 _CardListIconAction(
                   key: const ValueKey('payment_link_card_qr_action'),
                   icon: AppIcons.qr,
-                  semanticLabel: 'Show Gift Card QR code',
+                  semanticLabel: 'Show gift card QR code',
                   onPressed: onShowQr,
                 ),
               ],

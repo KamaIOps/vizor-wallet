@@ -98,10 +98,10 @@ void main() {
           .name,
       AppIcons.giftCardOutline,
     );
-    expect(find.text('My Gift Cards'), findsOneWidget);
+    expect(find.text('My gift cards'), findsOneWidget);
     expect(find.text('New'), findsOneWidget);
     expect(
-      tester.getTopLeft(find.text('My Gift Cards')).dy,
+      tester.getTopLeft(find.text('My gift cards')).dy,
       lessThan(tester.getTopLeft(find.text('Link Vizor mobile')).dy),
     );
 
@@ -217,7 +217,7 @@ void main() {
     // Personal owns the gift cards and address book entries.
     expect(find.text('Address book'), findsOneWidget);
     expect(find.text('Contacts'), findsNothing);
-    expect(sectionTop('My Gift Cards'), lessThan(sectionTop('Address book')));
+    expect(sectionTop('My gift cards'), lessThan(sectionTop('Address book')));
     expect(sectionTop('Address book'), lessThan(sectionTop('Account')));
 
     // Account keeps the renamed mobile-link row.

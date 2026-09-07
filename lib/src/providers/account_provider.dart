@@ -68,14 +68,14 @@ class WalletCreationCurrentBlockHeightException implements Exception {
 /// overflows the card by 20px. `Wait for it to finish.` carries the remedy
 /// without naming the reset, which every surface that shows this already does.
 const kWalletResetInFlightGiftCardClaimsMessage =
-    'A Gift Card is still being received. Wait for it to finish.';
+    'A gift card is still being received. Wait for it to finish.';
 
 /// Shown where the reset is not refused — the locked recovery surfaces,
 /// whose CTA stays enabled because reset is the user's only way back in.
 /// It states the cost instead of asking the user to wait, because waiting is
 /// exactly what cannot help there. Fits the same 348px line.
 const kWalletResetInFlightGiftCardWarningMessage =
-    'A Gift Card is still being received. Resetting loses it.';
+    'A gift card is still being received. Resetting loses it.';
 
 /// A full wallet reset was refused because a Gift Card claim is still in
 /// flight.

@@ -818,7 +818,7 @@ void main() {
       find.byKey(const ValueKey('mobile_settings_gift_cards_row')),
       findsOneWidget,
     );
-    expect(find.text('My Gift Cards'), findsOneWidget);
+    expect(find.text('My gift cards'), findsOneWidget);
     expect(find.text('New'), findsOneWidget);
     expect(find.text('John'), findsOneWidget);
     expect(find.text('Knight'), findsOneWidget);
@@ -894,7 +894,7 @@ void main() {
     // Personal owns the gift cards and address book entries.
     expect(find.text('Address book'), findsOneWidget);
     expect(find.text('Contacts'), findsNothing);
-    expect(top('My Gift Cards'), lessThan(top('Address book')));
+    expect(top('My gift cards'), lessThan(top('Address book')));
     expect(top('Address book'), lessThan(top('Account')));
 
     // Mobile keeps its own pieces and never offers to link to itself.

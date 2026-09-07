@@ -400,8 +400,8 @@ class _PaymentLinkKeystoneSigningOverlayState
               urParts: _urParts,
               error: _error,
               title: isBroadcasting
-                  ? 'Broadcasting Gift Card funding'
-                  : 'Sign Gift Card on Keystone',
+                  ? 'Broadcasting gift card funding'
+                  : 'Sign gift card on Keystone',
               subtitle: isBroadcasting
                   ? 'Submitting transaction'
                   : 'Scan to sign',
@@ -422,7 +422,7 @@ class _PaymentLinkKeystoneSigningOverlayState
               secondaryLabel: isBroadcasting
                   ? null
                   : _phase == _PaymentLinkKeystonePhase.failed
-                  ? 'Back to Gift Card'
+                  ? 'Back to gift card'
                   : 'Cancel',
               onSecondary: _cancel,
             ),
@@ -455,7 +455,7 @@ class _PaymentLinkKeystoneSigningOverlayState
                 'Follow the steps on your device.',
             scanCaption: 'Scan the QR code on your Keystone to finish creating',
             readingSignatureLabel: 'Reading signature...',
-            finalizingSignatureLabel: 'Creating your Gift Card...',
+            finalizingSignatureLabel: 'Creating your gift card...',
             keyPrefix: 'payment_link_keystone_sign',
             logTag: 'PaymentLinkKeystoneSigning',
             expectedSignedUrType: 'zcash-batch-sig-result',
@@ -487,12 +487,12 @@ class _PaymentLinkKeystoneSigningOverlayState
       return 'Transaction expired before it could be signed.';
     }
     if (lower.contains('broadcast') || lower.contains('sendtransaction')) {
-      return 'Gift Card funding could not be broadcast.';
+      return 'Gift card funding could not be broadcast.';
     }
     if (lower.contains('pczt') || lower.contains('signature')) {
       return 'Keystone signature could not be applied.';
     }
-    return 'Gift Card signing could not be completed.';
+    return 'Gift card signing could not be completed.';
   }
 }
 

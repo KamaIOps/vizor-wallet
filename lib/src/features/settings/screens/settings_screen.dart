@@ -505,7 +505,7 @@ class _SettingsList extends StatelessWidget {
             _SettingsRow(
               key: const ValueKey('settings_gift_cards_row'),
               iconName: AppIcons.giftCardOutline,
-              label: 'My Gift Cards',
+              label: 'My gift cards',
               labelBadge: const SettingsNewBadge(),
               onTap: onGiftCards,
             ),

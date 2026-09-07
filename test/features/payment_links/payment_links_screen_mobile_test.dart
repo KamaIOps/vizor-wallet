@@ -634,7 +634,7 @@ void main() {
 
     await tester.tap(find.text('Paste card link'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Check Gift Card'));
+    await tester.tap(find.text('Check gift card'));
     await tester.pumpAndSettle();
 
     expect(operations.allowLongSyncCalls, [isFalse, isFalse, isTrue]);
@@ -892,7 +892,7 @@ void main() {
       );
       await tester.binding.setSurfaceSize(const Size(390, 844));
       await tester.pumpAndSettle();
-      await tester.tap(find.bySemanticsLabel('Show Gift Card QR code'));
+      await tester.tap(find.bySemanticsLabel('Show gift card QR code'));
       await tester.pumpAndSettle();
       final card = tester.widget<PaymentLinkQrShareCard>(
         find.byType(PaymentLinkQrShareCard),
@@ -937,7 +937,7 @@ void main() {
       expect(find.text('Share card'), findsOneWidget);
       if (outcome == 'failed') {
         expect(
-          find.text("Couldn't share this Gift Card. Copy the link instead."),
+          find.text("Couldn't share this gift card. Copy the link instead."),
           findsOneWidget,
         );
         await tester.tap(
