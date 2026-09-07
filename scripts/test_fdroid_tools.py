@@ -98,6 +98,7 @@ class FdroidMetadataTest(unittest.TestCase):
         self.assertEqual(rendered.count(f"flutter@{GENERATOR.FLUTTER_VERSION}"), 3)
         self.assertNotIn("flutter@stable", rendered)
         self.assertNotIn("rustup@", rendered)
+        self.assertNotIn("source $CARGO_HOME/env", rendered)
         self.assertEqual(
             rendered.count(
                 'echo "deb https://deb.debian.org/debian trixie main" > '
