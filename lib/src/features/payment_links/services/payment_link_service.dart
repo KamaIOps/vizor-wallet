@@ -684,6 +684,27 @@ class PaymentLinkService implements PaymentLinkOperations {
     // the destination account UUID and claim txids needed for history lookup.
     var persistedRecords = await _receivedStore.load();
     final endpoint = _ref.read(rpcEndpointFailoverProvider).current;
+    final dbPath = await getWalletDbPath();
+    if (persistedRecords.any(
+      (record) =>
+          record.network == endpoint.networkName &&
+          record.destinationAccountUuid != null,
+    )) {
+      // Account removal drains this coordinator before deleting wallet rows.
+      // Once resumed, use the DB rather than a possibly stale UI account list
+      // before syncing or rebroadcasting any retained claim wallet.
+      final accounts = await rust_wallet.listAccounts(
+        dbPath: dbPath,
+        network: endpoint.networkName,
+      );
+      persistedRecords = await discardPaymentLinkClaimsForDeletedAccounts(
+        records: persistedRecords,
+        network: endpoint.networkName,
+        accountUuids: {for (final account in accounts) account.uuid},
+        store: _receivedStore,
+        deleteRetainedWallet: _claimWallet.deleteRetained,
+      );
+    }
     final submitting = persistedRecords
         .where(
           (record) =>
@@ -707,7 +728,12 @@ class PaymentLinkService implements PaymentLinkOperations {
       }),
     );
     if (submitting.isNotEmpty) {
-      persistedRecords = await _receivedStore.load();
+      final eligibleAddresses = persistedRecords
+          .map((record) => record.address)
+          .toSet();
+      persistedRecords = (await _receivedStore.load())
+          .where((record) => eligibleAddresses.contains(record.address))
+          .toList();
     }
     final receiving = persistedRecords
         .where(
@@ -720,12 +746,12 @@ class PaymentLinkService implements PaymentLinkOperations {
               record.claimTxids!.trim().isNotEmpty,
         )
         .toList();
-    if (receiving.isEmpty) return persistedRecords;
+    if (receiving.isEmpty) return _receivedStore.load();
 
     final currentNetworkRecords = receiving
         .where((record) => record.network == endpoint.networkName)
         .toList();
-    if (currentNetworkRecords.isEmpty) return persistedRecords;
+    if (currentNetworkRecords.isEmpty) return _receivedStore.load();
 
     final retryableAddresses = <String>{};
     await Future.wait(
@@ -785,7 +811,6 @@ class PaymentLinkService implements PaymentLinkOperations {
           }),
     );
 
-    final dbPath = await getWalletDbPath();
     final transactionsByAccount = <String, List<rust_sync.TransactionInfo>>{};
     for (final accountUuid
         in awaitingReceipt

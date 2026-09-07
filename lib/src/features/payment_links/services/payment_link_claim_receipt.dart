@@ -53,3 +53,32 @@ Future<void> reconcilePaymentLinkClaimReceipt({
       }
   }
 }
+
+/// A redeemed Card does not block account removal during its recovery window.
+/// Exclude removed destinations before any retained-wallet sync or history
+/// query. Failed file cleanup stays durable for the coordinator's next retry.
+@visibleForTesting
+Future<List<PaymentLinkReceivedRecord>>
+discardPaymentLinkClaimsForDeletedAccounts({
+  required List<PaymentLinkReceivedRecord> records,
+  required String network,
+  required Set<String> accountUuids,
+  required PaymentLinkReceivedStore store,
+  required Future<bool> Function(PaymentLinkReceivedRecord)
+  deleteRetainedWallet,
+}) async {
+  final eligible = <PaymentLinkReceivedRecord>[];
+  for (final record in records) {
+    final destination = record.destinationAccountUuid;
+    if (record.network != network ||
+        destination == null ||
+        accountUuids.contains(destination)) {
+      eligible.add(record);
+      continue;
+    }
+    if (await deleteRetainedWallet(record)) {
+      await store.remove(record.address);
+    }
+  }
+  return eligible;
+}

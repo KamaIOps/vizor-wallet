@@ -615,6 +615,11 @@ void main() {
   });
 
   test(
+    'a redeemed Gift Card allows account deletion with recovery still retained',
+    () => _expectAccountDeletionDrainsLiveShareTracking(redeemedCard: true),
+  );
+
+  test(
     'account deletion drains live share tracking before the wallet mutation',
     () => _expectAccountDeletionDrainsLiveShareTracking(),
   );
@@ -1139,7 +1144,9 @@ class _AccountMutationRustApiFake implements RustLibApi {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<void> _expectAccountDeletionDrainsLiveShareTracking() async {
+Future<void> _expectAccountDeletionDrainsLiveShareTracking({
+  bool redeemedCard = false,
+}) async {
   FlutterSecureStorage.setMockInitialValues({});
   final supportDirectory = Directory.systemTemp.createTempSync(
     'vizor-account-share-drain',
@@ -1180,10 +1187,37 @@ Future<void> _expectAccountDeletionDrainsLiveShareTracking() async {
     isTrue,
   );
 
+  final receivedStore = PaymentLinkReceivedStore(
+    _AccountTestPaymentLinkReceivedStorage(),
+  );
+  if (redeemedCard) {
+    final link = VizorPaymentLink(
+      network: 'main',
+      address: 'u1redeemed-account',
+      amountZatoshi: BigInt.from(100000),
+      mnemonic: List.filled(24, 'abandon').join(' '),
+      birthdayHeight: 3456789,
+      label: 'Payment link',
+      createdAt: DateTime.utc(2026, 9, 7),
+    );
+    await receivedStore.saveReady(link);
+    await receivedStore.markClaimStarted(
+      address: link.address,
+      destinationAccountUuid: 'account-2',
+    );
+    await receivedStore.markReceiving(
+      address: link.address,
+      destinationAccountUuid: 'account-2',
+      claimTxids: 'claim-tx',
+    );
+    await receivedStore.markReceived(address: link.address);
+    expect((await receivedStore.load()).single.needsClaimRecovery, isTrue);
+  }
   final container = ProviderContainer(
     overrides: [
       appBootstrapProvider.overrideWithValue(_bootstrapWithAccounts()),
       votingShareTrackingRegistryProvider.overrideWithValue(shareTracking),
+      paymentLinkReceivedStoreProvider.overrideWithValue(receivedStore),
     ],
   );
   addTearDown(container.dispose);

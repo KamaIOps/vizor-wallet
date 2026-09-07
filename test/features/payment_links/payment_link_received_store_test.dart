@@ -173,6 +173,9 @@ void main() {
       expect(await store.countReceivingForAccount('other-account'), 0);
 
       await store.markReceived(address: link.address);
+      expect((await store.load()).single.needsClaimRecovery, isTrue);
+      expect(await store.countReceivingForAccount('receiver-account'), 0);
+      expect(await store.countClaimsInFlight(), 0);
       await store.clearConfirmedClaimSecret(address: link.address);
       expect(await store.countReceivingForAccount('receiver-account'), 0);
     });
@@ -196,6 +199,11 @@ void main() {
 
       storage.locked = false;
       await store.markReceived(address: link.address);
+      expect((await store.load()).single.needsClaimRecovery, isTrue);
+      expect(mirror.count, 0);
+      storage.locked = true;
+      expect(await store.countClaimsInFlight(), 0);
+      storage.locked = false;
       await store.clearConfirmedClaimSecret(address: link.address);
       expect(mirror.count, 0);
       storage.locked = true;

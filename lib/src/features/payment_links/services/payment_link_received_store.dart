@@ -265,7 +265,9 @@ class PaymentLinkReceivedStore {
   }
 
   /// Claims that have been submitted but not yet observed as received, across
-  /// every destination account — including records whose destination account
+  /// every destination account. Receipt completes at one confirmation; retained
+  /// reorg recovery must not extend the account-removal or reset guard.
+  /// Includes records whose destination account
   /// is not yet written, which [countReceivingForAccount] cannot see.
   Future<int> countClaimsInFlight() {
     return _runExclusive(() async {

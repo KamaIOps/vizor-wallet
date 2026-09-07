@@ -20,9 +20,80 @@ import 'package:zcash_wallet/src/features/payment_links/services/payment_link_tr
 import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/app_security_provider.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
+import 'package:zcash_wallet/src/rust/api/wallet.dart' as rust_wallet;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'orphan cleanup preserves other accounts and networks and retries file failures',
+    () async {
+      final store = PaymentLinkReceivedStore(
+        _PaymentLinkServiceReceivedStorage(),
+      );
+      final link = _link();
+      for (final entry in [('deleted', 'main'), ('existing', 'main')]) {
+        final scoped = VizorPaymentLink(
+          network: entry.$2,
+          address: entry.$1,
+          amountZatoshi: link.amountZatoshi,
+          mnemonic: link.mnemonic,
+          birthdayHeight: link.birthdayHeight,
+          label: link.label,
+          createdAt: link.createdAt,
+        );
+        await store.saveReady(scoped);
+        await store.markClaimStarted(
+          address: scoped.address,
+          destinationAccountUuid: scoped.address,
+        );
+        await store.markReceiving(
+          address: scoped.address,
+          destinationAccountUuid: scoped.address,
+          claimTxids: 'claim-${scoped.address}',
+        );
+        await store.markReceived(address: scoped.address);
+      }
+      final attempted = <String>[];
+      final onOtherNetwork = await discardPaymentLinkClaimsForDeletedAccounts(
+        records: await store.load(),
+        network: 'test',
+        accountUuids: {},
+        store: store,
+        deleteRetainedWallet: (record) async {
+          attempted.add(record.address);
+          return true;
+        },
+      );
+      expect(onOtherNetwork, hasLength(2));
+      expect(attempted, isEmpty);
+      final eligible = await discardPaymentLinkClaimsForDeletedAccounts(
+        records: await store.load(),
+        network: 'main',
+        accountUuids: {'existing'},
+        store: store,
+        deleteRetainedWallet: (record) async {
+          attempted.add(record.address);
+          return false;
+        },
+      );
+      expect(eligible.map((r) => r.address), ['existing']);
+      expect(attempted, ['deleted']);
+      expect((await store.find('deleted'))!.needsClaimRecovery, isTrue);
+      await discardPaymentLinkClaimsForDeletedAccounts(
+        records: await store.load(),
+        network: 'main',
+        accountUuids: {'existing'},
+        store: store,
+        deleteRetainedWallet: (record) async {
+          attempted.add(record.address);
+          return true;
+        },
+      );
+      expect(attempted, ['deleted', 'deleted']);
+      expect((await store.load()).map((r) => r.address), ['existing']);
+    },
+  );
 
   test('claim detail lookup resolves display ids to local history ids', () {
     const displayTxid =
@@ -125,6 +196,43 @@ void main() {
           .setMockMethodCallHandler(pathChannel, null);
       await supportDirectory.delete(recursive: true);
     });
+
+    test(
+      'deleted claim destinations are cleaned before sync or history lookup',
+      () async {
+        final store = container.read(paymentLinkReceivedStoreProvider);
+        final link = _link();
+        await store.saveReady(link);
+        await store.markClaimStarted(
+          address: link.address,
+          destinationAccountUuid: 'deleted-account',
+        );
+        await store.markReceiving(
+          address: link.address,
+          destinationAccountUuid: 'deleted-account',
+          claimTxids: 'claim-tx',
+        );
+        await store.markReceived(address: link.address);
+        final claimDirectory = Directory(
+          '${supportDirectory.path}/${paymentLinkClaimWalletDirectoryName(link)}',
+        );
+        await claimDirectory.create();
+        await File(
+          '${claimDirectory.path}/zcash_wallet.db',
+        ).writeAsString('claim-wallet');
+        final unrelated = File('${supportDirectory.path}/unrelated-wallet.db');
+        await unrelated.writeAsString('keep');
+        // The fake only supports listing the remaining accounts. Any attempted
+        // retained-wallet sync or receiver history query fails this test.
+        expect(
+          await service.inspectReceivedLinkClaims(await store.load()),
+          isEmpty,
+        );
+        expect(await store.load(), isEmpty);
+        expect(await claimDirectory.exists(), isFalse);
+        expect(await unrelated.readAsString(), 'keep');
+      },
+    );
 
     test(
       'a locked wallet stops before looking up a claim destination',
@@ -1288,6 +1396,12 @@ class _ClaimDestinationRustApi implements RustLibApi {
   var lookupStarted = Completer<void>();
   Completer<String>? lookupGate;
   int failures = 0;
+
+  @override
+  Future<List<rust_wallet.AccountInfo>> crateApiWalletListAccounts({
+    required String dbPath,
+    required String network,
+  }) async => [];
 
   @override
   Future<void> crateApiVotingResetVotingSessionState({
