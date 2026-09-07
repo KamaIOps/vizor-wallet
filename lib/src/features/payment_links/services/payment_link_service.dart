@@ -472,6 +472,10 @@ class PaymentLinkService implements PaymentLinkOperations {
       sourceAccountUuid: sourceAccountUuid,
       presentation: presentation,
     );
+    // Gift Card v1 funds one generated shielded UA with a single transaction.
+    // The current selector's multi-step TEX path cannot apply to this address.
+    // The common send result still uses `txids`; that does not imply multi-tx
+    // card creation support. Revisit activity and fee aggregation if this changes.
     final funding = await PaymentLinkFundingRecovery(_recoveryStore)
         .fund<rust_sync.ExecuteProposalResult>(
           claimFeeReserveZatoshi: BigInt.from(

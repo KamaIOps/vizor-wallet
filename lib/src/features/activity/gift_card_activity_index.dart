@@ -40,8 +40,10 @@ class GiftCardActivityMetadata {
 
   BigInt detailFeeZatoshi(BigInt transactionFee) {
     if (kind == GiftCardActivityKind.redeemed) return transactionFee;
-    // Created Cards always carry their reserved claim fee. This unreleased
-    // contract has no legacy-record fallback; redeemed Cards use the tx fee.
+    // Gift Card v1 creation uses one funding transaction, so its fee plus the
+    // reserved claim fee is the full Card fee; no funding-leg sum is needed.
+    // Created Cards always carry that reserve. This unreleased contract has
+    // no legacy-record fallback; redeemed Cards use the tx fee.
     return transactionFee + claimFeeReserveZatoshi!;
   }
 }
