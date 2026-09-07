@@ -91,44 +91,56 @@ class FdroidMetadataTest(unittest.TestCase):
         )
         self.assertEqual(
             rendered.count(
-                f"--default-toolchain {GENERATOR.RELEASE_RUST_TOOLCHAIN}"
+                f"rustup toolchain install {GENERATOR.RELEASE_RUST_TOOLCHAIN}"
             ),
             3,
         )
         self.assertEqual(rendered.count(f"flutter@{GENERATOR.FLUTTER_VERSION}"), 3)
         self.assertNotIn("flutter@stable", rendered)
+        self.assertNotIn("rustup@", rendered)
         self.assertEqual(
             rendered.count(
-                'echo "deb https://deb.debian.org/debian bookworm main" > '
-                "/etc/apt/sources.list.d/bookworm.list"
+                'echo "deb https://deb.debian.org/debian trixie main" > '
+                "/etc/apt/sources.list.d/trixie.list"
             ),
             3,
         )
         self.assertEqual(
-            rendered.count("apt-get install -y build-essential"),
+            rendered.count("apt-get install -y build-essential rustup"),
             3,
         )
         self.assertEqual(
             rendered.count(
-                "apt-get install -y -t bookworm openjdk-17-jdk-headless"
+                "apt-get install -y -t trixie openjdk-21-jdk-headless"
             ),
             3,
         )
         self.assertEqual(
             rendered.count(
-                "update-java-alternatives -s java-1.17.0-openjdk-amd64"
+                "update-java-alternatives -s java-1.21.0-openjdk-amd64"
             ),
             3,
         )
         self.assertEqual(
-            rendered.count("export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64"),
+            rendered.count("export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64"),
             6,
         )
         self.assertEqual(
-            rendered.count(
-                "export PUB_CACHE=/tmp/vizor-android-reproducible/pub-cache"
-            ),
+            rendered.count("export PUB_CACHE=$(pwd)/.pub-cache"),
             6,
+        )
+        self.assertEqual(rendered.count("    scandelete:\n      - .pub-cache"), 3)
+        self.assertEqual(
+            rendered.count(
+                "cp -a $PUB_CACHE/. /tmp/vizor-android-reproducible/pub-cache/"
+            ),
+            3,
+        )
+        self.assertLess(
+            rendered.index("    scandelete:\n      - .pub-cache"),
+            rendered.index(
+                "cp -a $PUB_CACHE/. /tmp/vizor-android-reproducible/pub-cache/"
+            ),
         )
         self.assertEqual(
             rendered.count(
@@ -136,6 +148,9 @@ class FdroidMetadataTest(unittest.TestCase):
             ),
             6,
         )
+        self.assertIn("  TetheredNet:", rendered)
+        self.assertEqual(rendered.count("functions.vizor.cash"), 2)
+        self.assertNotIn("third-party or Vizor-operated", rendered)
 
     def test_rejects_unexpected_signing_key(self) -> None:
         metadata = release_metadata()
