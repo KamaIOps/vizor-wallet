@@ -995,6 +995,54 @@ class WidgetbookApp extends StatelessWidget {
                   name: 'Mobile',
                   useCases: [
                     WidgetbookUseCase(
+                      name: 'Activity - Creating',
+                      builder: buildGiftCardCreatingActivityPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Activity - Created',
+                      builder: buildGiftCardCreatedActivityPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Activity - Claim transitions',
+                      builder: buildGiftCardClaimTransitionPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Activity - Claim broadcast',
+                      builder: buildGiftCardClaimBroadcastPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Activity - Claim 1 confirmation',
+                      builder: buildGiftCardClaimOneConfirmationPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Activity - Claim 5 confirmations',
+                      builder: buildGiftCardClaimFiveConfirmationsPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Activity - Claim complete',
+                      builder: buildGiftCardClaimCompletePreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Detail - Claim transitions',
+                      builder: buildGiftCardClaimDetailTransitionPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Detail - Creating',
+                      builder: buildGiftCardCreatingDetailPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Detail - Created',
+                      builder: buildGiftCardCreatedDetailPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Detail - Redeeming',
+                      builder: buildGiftCardRedeemingDetailPreview,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Detail - Redeemed',
+                      builder: buildGiftCardRedeemedDetailPreview,
+                    ),
+                    WidgetbookUseCase(
                       name: 'Home - Empty',
                       builder: buildMobilePaymentLinkHomeEmptyUseCase,
                     ),
@@ -1039,8 +1087,24 @@ class WidgetbookApp extends StatelessWidget {
                       builder: buildMobilePaymentLinkReadyUseCase,
                     ),
                     WidgetbookUseCase(
+                      name: 'Share Gift Card',
+                      builder: buildMobilePaymentLinkShareQrUseCase,
+                    ),
+                    WidgetbookUseCase(
                       name: 'Redeem - Paste link',
                       builder: buildMobilePaymentLinkRedeemPasteUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Redeem - Scan QR',
+                      builder: buildMobilePaymentLinkScanUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Redeem - Wrong QR',
+                      builder: buildMobilePaymentLinkScanInvalidUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Redeem - Camera denied',
+                      builder: buildMobilePaymentLinkScanDeniedUseCase,
                     ),
                     WidgetbookUseCase(
                       name: 'Redeem - Long sync warning',
@@ -1058,6 +1122,14 @@ class WidgetbookApp extends StatelessWidget {
                     WidgetbookUseCase(
                       name: 'Received gift',
                       builder: buildMobilePaymentLinkReceivedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Claim - Choose account',
+                      builder: buildMobilePaymentLinkClaimAccountUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Claim - Many accounts',
+                      builder: buildMobilePaymentLinkClaimManyAccountsUseCase,
                     ),
                     WidgetbookUseCase(
                       name: 'Received - Waiting for confirmations',
