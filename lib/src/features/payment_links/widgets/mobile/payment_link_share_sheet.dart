@@ -71,7 +71,7 @@ class _PaymentLinkShareSheetState extends State<PaymentLinkShareSheet> {
   Widget build(BuildContext context) {
     return MobileModalScaffold(
       key: const ValueKey('payment_link_share_sheet'),
-      title: 'Share Gift Card',
+      title: 'Share gift card',
       onClose: widget.onClose,
       bottomPadding: AppSpacing.base,
       constrainBody: true,
