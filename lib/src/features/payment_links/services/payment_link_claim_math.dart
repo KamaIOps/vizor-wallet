@@ -10,6 +10,10 @@
 part of 'payment_link_service.dart';
 
 const kPaymentLinkClaimConfirmationTarget = 6;
+// Match ordinary Receive for display; retain recovery material through the
+// spendability window so a shallow reorg can still recover the claim.
+const kPaymentLinkReceiptConfirmationTarget = 1;
+const kPaymentLinkClaimRecoveryConfirmationTarget = 6;
 
 /// The ZIP-317 fee for the payment link's expected one-input, one-output
 /// shielded claim transaction.
@@ -111,6 +115,7 @@ PaymentLinkReceivedStatus paymentLinkReceivedStatusForTransactions({
   required String claimTxids,
   required List<rust_sync.TransactionInfo> transactions,
   required BigInt chainTipHeight,
+  int confirmationTarget = kPaymentLinkReceiptConfirmationTarget,
 }) {
   final expectedTxids = claimTxids
       .split(',')
@@ -138,7 +143,7 @@ PaymentLinkReceivedStatus paymentLinkReceivedStatusForTransactions({
               minedHeight: transaction.minedHeight,
               chainTipHeight: chainTipHeight,
             ) >=
-            kPaymentLinkClaimConfirmationTarget,
+            confirmationTarget,
   );
   if (allConfirmed) return PaymentLinkReceivedStatus.received;
 
@@ -222,10 +227,10 @@ Future<bool> finalizeConfirmedPaymentLinkClaim({
   required PaymentLinkReceivedRecord record,
   required Future<bool> Function(PaymentLinkReceivedRecord record)
   deleteRetainedWallet,
-  required Future<void> Function(String address) markReceived,
+  required Future<void> Function(String address) clearClaimSecret,
 }) async {
   if (!await deleteRetainedWallet(record)) return false;
-  await markReceived(record.address);
+  await clearClaimSecret(record.address);
   return true;
 }
 

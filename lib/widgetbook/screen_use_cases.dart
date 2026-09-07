@@ -1289,6 +1289,7 @@ GiftCardActivityIndex _previewGiftCardActivityIndex() {
     createdMetadataByTxid: {
       'preview-gift-card-created': GiftCardActivityMetadata(
         kind: GiftCardActivityKind.created,
+        claimFeeReserveZatoshi: BigInt.from(10000),
         amountZatoshi: BigInt.from(100000000),
         artworkId: 'ruby',
         message: 'Happy birthday!',

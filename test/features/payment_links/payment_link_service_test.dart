@@ -1,8 +1,15 @@
+import 'dart:async';
 import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/storage/wallet_paths.dart';
+import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
+import 'package:zcash_wallet/src/providers/rpc_endpoint_provider.dart';
+import 'package:zcash_wallet/src/rust/frb_generated.dart';
 import 'package:zcash_wallet/src/features/payment_links/models/vizor_payment_link.dart';
 import 'package:zcash_wallet/src/features/payment_links/providers/payment_link_claim_coordinator_provider.dart';
 import 'package:zcash_wallet/src/features/payment_links/providers/payment_link_claim_lifecycle_registry_provider.dart';
@@ -16,6 +23,237 @@ import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('claim detail lookup resolves display ids to local history ids', () {
+    const displayTxid =
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    final storageTxid = _reverseHexBytes(displayTxid);
+    expect(
+      paymentLinkClaimDetailTxids(
+        claimTxids: displayTxid,
+        historyTxids: [storageTxid],
+      ),
+      [storageTxid],
+    );
+    expect(
+      paymentLinkClaimDestinationPoolFromDetails(
+        details: [
+          rust_sync.TransactionDetail(
+            txidHex: storageTxid,
+            txKind: 'sent',
+            sourcePool: 'shielded',
+            outputs: [
+              rust_sync.TransactionDetailOutput(
+                address: 'unrelated-output',
+                amountZatoshi: BigInt.from(1),
+                pool: 'shielded',
+              ),
+              rust_sync.TransactionDetailOutput(
+                address: 'destination-ua',
+                amountZatoshi: BigInt.from(445000000),
+                pool: 'ironwood',
+              ),
+            ],
+          ),
+        ],
+        destinationAddress: 'destination-ua',
+        expectedAmountZatoshi: BigInt.from(445000000),
+      ),
+      'ironwood',
+    );
+    // A just-broadcast claim may not be visible in the retained wallet yet;
+    // metadata hydration then stays optional instead of blocking the claim.
+    expect(
+      paymentLinkClaimDetailTxids(
+        claimTxids: displayTxid,
+        historyTxids: const [],
+      ),
+      isEmpty,
+    );
+    expect(
+      paymentLinkClaimDestinationPoolFromDetails(
+        details: const [],
+        destinationAddress: 'destination-ua',
+        expectedAmountZatoshi: BigInt.from(445000000),
+      ),
+      isNull,
+    );
+  });
+
+  group('claim destination hydration', () {
+    final api = _ClaimDestinationRustApi();
+    late _ClaimDestinationAccountNotifier accounts;
+    late ProviderContainer container;
+    late PaymentLinkService service;
+    late Directory supportDirectory;
+    const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+    setUpAll(() => RustLib.initMock(api: api));
+    tearDownAll(RustLib.dispose);
+
+    setUp(() async {
+      FlutterSecureStorage.setMockInitialValues({});
+      supportDirectory = await Directory.systemTemp.createTemp(
+        'vizor-claim-destination-',
+      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            pathChannel,
+            (_) async => supportDirectory.path,
+          );
+      api.reset();
+      accounts = _ClaimDestinationAccountNotifier();
+      container = ProviderContainer(
+        overrides: [
+          accountProvider.overrideWith(() => accounts),
+          appSecurityProvider.overrideWith(_UnlockedSecurityNotifier.new),
+          rpcEndpointProvider.overrideWith(_ClaimDestinationRpcNotifier.new),
+          paymentLinkRecoveryStoreProvider.overrideWithValue(
+            PaymentLinkRecoveryStore(_FakePaymentLinkRecoveryStorage()),
+          ),
+          paymentLinkReceivedStoreProvider.overrideWithValue(
+            PaymentLinkReceivedStore(_PaymentLinkServiceReceivedStorage()),
+          ),
+        ],
+      );
+      await container.read(accountProvider.future);
+      service = container.read(paymentLinkServiceProvider);
+    });
+
+    tearDown(() async {
+      container.dispose();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(pathChannel, null);
+      await supportDirectory.delete(recursive: true);
+    });
+
+    test(
+      'a locked wallet stops before looking up a claim destination',
+      () async {
+        accounts.select('account-2', null);
+        container.read(appSecurityProvider.notifier).lock();
+
+        await expectLater(
+          service.prepareClaim(_link()),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'Wallet is locked.',
+            ),
+          ),
+        );
+
+        expect(api.requestedAccounts, isEmpty);
+        expect(api.validatedAddresses, isEmpty);
+        expect(container.read(accountProvider).value?.activeAddress, isNull);
+      },
+    );
+
+    test(
+      'locking during lookup keeps the address cleared and stops preparation',
+      () async {
+        accounts.select('account-2', 'u1previous-account');
+        api.lookupGate = Completer<String>();
+        final preparing = service.prepareClaim(_link());
+        final expectation = expectLater(
+          preparing,
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'Wallet is locked.',
+            ),
+          ),
+        );
+        await api.lookupStarted.future;
+
+        container.read(appSecurityProvider.notifier).lock();
+        accounts.clearSensitiveStateForLock();
+        expect(container.read(accountProvider).value?.activeAddress, isNull);
+        api.lookupGate!.complete('u1account-2address');
+        await expectation;
+
+        expect(container.read(appSecurityProvider).requiresUnlock, isTrue);
+        expect(
+          container.read(accountProvider).value?.activeAccountUuid,
+          'account-2',
+        );
+        expect(container.read(accountProvider).value?.activeAddress, isNull);
+        expect(api.validatedAddresses, isEmpty);
+      },
+    );
+
+    for (final cachedAddress in ['u1previous-account', null]) {
+      test(
+        'preparation resolves the selected account instead of cache $cachedAddress',
+        () async {
+          accounts.select('account-2', cachedAddress);
+          await expectLater(
+            service.prepareClaim(_link()),
+            throwsA(isA<_DestinationValidated>()),
+          );
+          expect(api.requestedAccounts, ['account-2']);
+          expect(api.validatedAddresses, ['u1account-2address']);
+          expect(
+            container.read(accountProvider).value?.activeAddress,
+            'u1account-2address',
+          );
+        },
+      );
+    }
+
+    test(
+      'failed address lookups stop preparation and retry without another switch',
+      () async {
+        accounts.select('account-2', 'u1previous-account');
+        api.failures = 2;
+        for (var attempt = 0; attempt < 2; attempt++) {
+          await expectLater(service.prepareClaim(_link()), throwsStateError);
+          expect(api.validatedAddresses, isEmpty);
+          expect(
+            container.read(accountProvider).value?.activeAccountUuid,
+            'account-2',
+          );
+        }
+        await expectLater(
+          service.prepareClaim(_link()),
+          throwsA(isA<_DestinationValidated>()),
+        );
+        expect(api.requestedAccounts, ['account-2', 'account-2', 'account-2']);
+        expect(api.validatedAddresses, ['u1account-2address']);
+        expect(
+          container.read(accountProvider).value?.activeAddress,
+          'u1account-2address',
+        );
+      },
+    );
+
+    test(
+      'an account switch during lookup rejects the obsolete destination',
+      () async {
+        accounts.select('account-2', 'u1previous-account');
+        api.lookupGate = Completer<String>();
+        final preparing = service.prepareClaim(_link());
+        final expectation = expectLater(
+          preparing,
+          throwsA(isA<PaymentLinkClaimDestinationChangedException>()),
+        );
+        await api.lookupStarted.future;
+        accounts.select('account-1', 'u1account-1address');
+        api.lookupGate!.complete('u1account-2address');
+        await expectation;
+        expect(api.validatedAddresses, isEmpty);
+        expect(
+          container.read(accountProvider).value?.activeAccountUuid,
+          'account-1',
+        );
+        expect(
+          container.read(accountProvider).value?.activeAddress,
+          'u1account-1address',
+        );
+      },
+    );
+  });
 
   test('classifies failures before funding submission starts', () async {
     final failure = StateError('insufficient balance');
@@ -57,6 +295,7 @@ void main() {
     // inside the submission classifier, immediately before the broadcast.
     await expectLater(
       PaymentLinkFundingRecovery(store).fund<String>(
+        claimFeeReserveZatoshi: BigInt.from(10000),
         link: link,
         sourceAccountUuid: 'source-account',
         currentChainHeight: () async => 3456800,
@@ -88,6 +327,7 @@ void main() {
 
       await expectLater(
         PaymentLinkFundingRecovery(store).fund<String>(
+          claimFeeReserveZatoshi: BigInt.from(10000),
           link: _link(),
           sourceAccountUuid: 'source-account',
           currentChainHeight: () async => 3456800,
@@ -356,44 +596,41 @@ void main() {
     );
   });
 
-  test(
-    'claim remains Receiving until every transaction has six confirmations',
-    () {
-      expect(
-        paymentLinkReceivedStatusForTransactions(
-          claimTxids: 'claim-a,claim-b',
-          transactions: [
-            _transaction(txid: 'claim-a', txKind: 'received', minedHeight: 12),
-            _transaction(txid: 'claim-b', txKind: 'receiving'),
-          ],
-          chainTipHeight: BigInt.from(18),
-        ),
-        PaymentLinkReceivedStatus.receiving,
-      );
-      expect(
-        paymentLinkReceivedStatusForTransactions(
-          claimTxids: 'claim-a,claim-b',
-          transactions: [
-            _transaction(txid: 'claim-a', txKind: 'received', minedHeight: 12),
-            _transaction(txid: 'claim-b', txKind: 'received', minedHeight: 14),
-          ],
-          chainTipHeight: BigInt.from(18),
-        ),
-        PaymentLinkReceivedStatus.receiving,
-      );
-      expect(
-        paymentLinkReceivedStatusForTransactions(
-          claimTxids: 'claim-a,claim-b',
-          transactions: [
-            _transaction(txid: 'claim-a', txKind: 'received', minedHeight: 12),
-            _transaction(txid: 'claim-b', txKind: 'received', minedHeight: 13),
-          ],
-          chainTipHeight: BigInt.from(18),
-        ),
-        PaymentLinkReceivedStatus.received,
-      );
-    },
-  );
+  test('receipt completes once every claim transaction is mined', () {
+    expect(
+      paymentLinkReceivedStatusForTransactions(
+        claimTxids: 'claim-a,claim-b',
+        transactions: [
+          _transaction(txid: 'claim-a', txKind: 'received', minedHeight: 12),
+          _transaction(txid: 'claim-b', txKind: 'receiving'),
+        ],
+        chainTipHeight: BigInt.from(18),
+      ),
+      PaymentLinkReceivedStatus.receiving,
+    );
+    expect(
+      paymentLinkReceivedStatusForTransactions(
+        claimTxids: 'claim-a,claim-b',
+        transactions: [
+          _transaction(txid: 'claim-a', txKind: 'received', minedHeight: 12),
+          _transaction(txid: 'claim-b', txKind: 'received', minedHeight: 14),
+        ],
+        chainTipHeight: BigInt.from(18),
+      ),
+      PaymentLinkReceivedStatus.received,
+    );
+    expect(
+      paymentLinkReceivedStatusForTransactions(
+        claimTxids: 'claim-a,claim-b',
+        transactions: [
+          _transaction(txid: 'claim-a', txKind: 'received', minedHeight: 12),
+          _transaction(txid: 'claim-b', txKind: 'received', minedHeight: 13),
+        ],
+        chainTipHeight: BigInt.from(18),
+      ),
+      PaymentLinkReceivedStatus.received,
+    );
+  });
 
   test('claim confirmations never outrun the scanned wallet height', () {
     expect(
@@ -520,10 +757,12 @@ void main() {
       final link = _link();
       await store.saveReady(link);
       await store.markReceiving(
+        claimSubmittedAt: DateTime.utc(2026, 8, 28),
         address: link.address,
         destinationAccountUuid: 'receiver-account',
         claimTxids: 'claim-txid',
       );
+      await store.markReceived(address: link.address);
       final record = (await store.load()).single;
       final events = <String>[];
 
@@ -534,9 +773,9 @@ void main() {
           events.add('delete');
           return true;
         },
-        markReceived: (address) async {
+        clearClaimSecret: (address) async {
           events.add('mark');
-          await store.markReceived(address: address);
+          await store.clearConfirmedClaimSecret(address: address);
         },
       );
 
@@ -554,20 +793,125 @@ void main() {
       final link = _link();
       await store.saveReady(link);
       await store.markReceiving(
+        claimSubmittedAt: DateTime.utc(2026, 8, 28),
         address: link.address,
         destinationAccountUuid: 'receiver-account',
         claimTxids: 'claim-txid',
       );
+      await store.markReceived(address: link.address);
       final record = (await store.load()).single;
 
       final completed = await finalizeConfirmedPaymentLinkClaim(
         record: record,
         deleteRetainedWallet: (_) async => false,
-        markReceived: (_) async => fail('must not clear the retained link'),
+        clearClaimSecret: (_) async => fail('must not clear the retained link'),
       );
 
       expect(completed, isFalse);
       expect((await store.load()).single.claimLink, isNotNull);
+    },
+  );
+
+  test(
+    'one confirmation completes the receipt; six finalizes recovery',
+    () async {
+      final storage = _PaymentLinkServiceReceivedStorage();
+      var store = PaymentLinkReceivedStore(storage);
+      final link = _link();
+      await store.saveReady(link);
+      await store.markClaimStarted(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+      );
+      await store.markReceiving(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+        claimTxids: 'claim',
+      );
+      var deleteCalls = 0;
+      Future<void> reconcile(int height) async {
+        await reconcilePaymentLinkClaimReceipt(
+          record: (await store.load()).single,
+          transactions: [
+            _transaction(txid: 'claim', txKind: 'received', minedHeight: 100),
+          ],
+          verifiedHeight: BigInt.from(height),
+          store: store,
+          deleteRetainedWallet: (_) async {
+            deleteCalls++;
+            return true;
+          },
+        );
+      }
+
+      await reconcile(99);
+      expect(
+        (await store.load()).single.status,
+        PaymentLinkReceivedStatus.receiving,
+      );
+      await reconcile(100);
+      store = PaymentLinkReceivedStore(
+        storage,
+      ); // Restart between receipt and cleanup.
+      final receipt = (await store.load()).single;
+      expect(receipt.status, PaymentLinkReceivedStatus.received);
+      expect(receipt.isClaimInFlight, isFalse);
+      expect(receipt.needsClaimRecovery, isTrue);
+      expect(receipt.claimLink, isNotNull);
+      expect(deleteCalls, 0);
+      await reconcile(104);
+      expect((await store.load()).single.claimLink, isNotNull);
+      expect(deleteCalls, 0);
+      await reconcile(105);
+      final finalized = (await store.load()).single;
+      expect(finalized.status, PaymentLinkReceivedStatus.received);
+      expect(finalized.needsClaimRecovery, isFalse);
+      expect(finalized.claimLink, isNull);
+      expect(deleteCalls, 1);
+    },
+  );
+
+  test(
+    'a shallow reorg restores pending and retryable receipt states',
+    () async {
+      final store = PaymentLinkReceivedStore(
+        _PaymentLinkServiceReceivedStorage(),
+      );
+      final link = _link();
+      await store.saveReady(link);
+      await store.markClaimStarted(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+      );
+      await store.markReceiving(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+        claimTxids: 'claim',
+      );
+      await store.markReceived(address: link.address);
+      final submittedAt = (await store.load()).single.claimSubmittedAt;
+      Future<void> reconcile(rust_sync.TransactionInfo tx) async {
+        await reconcilePaymentLinkClaimReceipt(
+          record: (await store.load()).single,
+          transactions: [tx],
+          verifiedHeight: BigInt.from(100),
+          store: store,
+          deleteRetainedWallet: (_) async =>
+              fail('A reorg must not delete recovery material'),
+        );
+      }
+
+      await reconcile(_transaction(txid: 'claim', txKind: 'receiving'));
+      final pending = (await store.load()).single;
+      expect(pending.status, PaymentLinkReceivedStatus.receiving);
+      expect(pending.claimSubmittedAt, submittedAt);
+      expect(pending.claimLink, isNotNull);
+      await reconcile(
+        _transaction(txid: 'claim', txKind: 'received', expiredUnmined: true),
+      );
+      final retryable = (await store.load()).single;
+      expect(retryable.status, PaymentLinkReceivedStatus.readyToClaim);
+      expect(retryable.claimLink, isNotNull);
     },
   );
 
@@ -812,6 +1156,14 @@ void main() {
   });
 }
 
+String _reverseHexBytes(String hex) {
+  final bytes = [
+    for (var index = 0; index < hex.length; index += 2)
+      hex.substring(index, index + 2),
+  ];
+  return bytes.reversed.join();
+}
+
 class _UnlockedSecurityNotifier extends AppSecurityNotifier {
   @override
   AppSecurityState build() =>
@@ -923,5 +1275,78 @@ rust_sync.TransactionInfo _transaction({
     displayAmount: BigInt.one,
     displayPool: 'shielded',
     createdTime: BigInt.zero,
+  );
+}
+
+// Stop at the first spend-preparation boundary: these tests exercise the real
+// prepareClaim destination lookup without creating a claim wallet or syncing.
+class _DestinationValidated implements Exception {}
+
+class _ClaimDestinationRustApi implements RustLibApi {
+  final requestedAccounts = <String>[];
+  final validatedAddresses = <String>[];
+  var lookupStarted = Completer<void>();
+  Completer<String>? lookupGate;
+  int failures = 0;
+
+  @override
+  Future<void> crateApiVotingResetVotingSessionState({
+    required String dbPath,
+    required String accountUuid,
+    String? roundId,
+  }) async {}
+
+  void reset() {
+    requestedAccounts.clear();
+    validatedAddresses.clear();
+    lookupStarted = Completer<void>();
+    lookupGate = null;
+    failures = 0;
+  }
+
+  @override
+  Future<String> crateApiWalletGetUnifiedAddress({
+    required String dbPath,
+    required String network,
+    String? accountUuid,
+  }) async {
+    requestedAccounts.add(accountUuid!);
+    if (!lookupStarted.isCompleted) lookupStarted.complete();
+    if (failures > 0) {
+      failures--;
+      throw StateError('transient address lookup failure');
+    }
+    return lookupGate?.future ?? Future.value('u1${accountUuid}address');
+  }
+
+  @override
+  Future<rust_sync.AddressValidationResult> crateApiSyncValidateAddress({
+    required String address,
+    required String network,
+  }) async {
+    validatedAddresses.add(address);
+    throw _DestinationValidated();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ClaimDestinationAccountNotifier extends AccountNotifier {
+  @override
+  AccountState build() => const AccountState();
+
+  void select(String uuid, String? address) {
+    state = AsyncData(
+      AccountState(activeAccountUuid: uuid, activeAddress: address),
+    );
+  }
+}
+
+class _ClaimDestinationRpcNotifier extends RpcEndpointNotifier {
+  @override
+  RpcEndpointConfig build() => const RpcEndpointConfig(
+    networkName: 'main',
+    lightwalletdUrl: 'https://example.invalid:9067',
   );
 }

@@ -28,7 +28,7 @@ final paymentLinkClaimRecoveryRunnerProvider =
       final operations = ref.watch(paymentLinkOperationsProvider);
       return () async {
         final records = await operations.loadReceivedLinkRecoveries();
-        if (!records.any((record) => record.isClaimInFlight)) {
+        if (!records.any((record) => record.needsClaimRecovery)) {
           return records;
         }
         return operations.inspectReceivedLinkClaims(records);
@@ -179,7 +179,7 @@ class PaymentLinkClaimCoordinator {
     var retry = true;
     try {
       final records = await _ref.read(paymentLinkClaimRecoveryRunnerProvider)();
-      retry = records.any((record) => record.isClaimInFlight);
+      retry = records.any((record) => record.needsClaimRecovery);
       return records;
     } finally {
       if (retry && _enabled && !_disposed) _scheduleRetry();

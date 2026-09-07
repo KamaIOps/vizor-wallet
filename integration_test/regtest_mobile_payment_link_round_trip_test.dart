@@ -10,6 +10,7 @@ import 'package:zcash_wallet/src/core/storage/wallet_paths.dart';
 import 'package:zcash_wallet/src/features/payment_links/models/vizor_payment_link.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_received_store.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_service.dart';
+import 'package:zcash_wallet/src/features/payment_links/widgets/payment_link_copy.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
 import 'support/mobile_regtest_flow.dart';
@@ -35,7 +36,7 @@ const _receiverMnemonic =
 const _giftAmountText = '0.1';
 const _giftArtworkId = 'coin';
 const _giftMessage = 'Congrats from the mobile payment link E2E!';
-const _walletSpendableConfirmationTarget = 10;
+const _walletSpendableConfirmationTarget = 6;
 final _giftAmountZatoshi = BigInt.from(10_000_000);
 final _fundingAmountZatoshi = BigInt.from(10_010_000);
 
@@ -134,7 +135,9 @@ void main() {
       // gate, so the claim action must not be offered yet.
       await pumpUntil(
         tester,
-        () => tester.any(find.textContaining('Waiting for 6 confirmations.')),
+        () => tester.any(
+          find.textContaining(kPaymentLinkClaimWaitingDescription),
+        ),
         description: 'the received card to wait for six confirmations',
         timeout: const Duration(minutes: 2),
       );
@@ -161,6 +164,10 @@ void main() {
       await tapAppButton(
         tester,
         const ValueKey('payment_link_mobile_claim_button'),
+      );
+      await tapAppButton(
+        tester,
+        const ValueKey('payment_link_claim_account_confirm'),
       );
       // Claiming leaves the Gift Cards route on mobile.
       await waitForHome(tester);
@@ -207,7 +214,7 @@ void main() {
         status: PaymentLinkReceivedStatus.received,
         description: 'the mined claim to settle as Received',
       );
-      expect(receivedRecord.claimLink, isNull);
+      expect(receivedRecord.claimLink, isNotNull);
 
       await _openGiftCardsFromSettings(tester);
       await tapWidget(
@@ -227,13 +234,21 @@ void main() {
       );
       await _leaveGiftCards(tester);
 
-      // The Gift Card is received after six confirmations; the receiver's
-      // ordinary wallet still needs ten before that value is spendable.
+      // Receipt display is already complete; spendability and recovery cleanup
+      // still wait for six confirmations.
       await mineRegtestBlocks(
         _walletSpendableConfirmationTarget -
-            kPaymentLinkClaimConfirmationTarget -
-            1,
+            kPaymentLinkReceiptConfirmationTarget,
       );
+      await _waitForReceivedRecord(
+        tester,
+        operations,
+        address: link.address,
+        status: PaymentLinkReceivedStatus.received,
+        requireFinalized: true,
+        description: 'claim recovery cleanup after six confirmations',
+      );
+
       final expectedTotal = receiverStartingBalance.total + _giftAmountZatoshi;
       await _waitForAccountBalance(
         tester,
@@ -377,6 +392,7 @@ Future<PaymentLinkReceivedRecord> _waitForReceivedRecord(
   required PaymentLinkReceivedStatus status,
   required String description,
   Duration timeout = const Duration(minutes: 3),
+  bool requireFinalized = false,
 }) async {
   final deadline = DateTime.now().add(timeout);
   var lastStatuses = '<not read>';
@@ -388,7 +404,11 @@ Future<PaymentLinkReceivedRecord> _waitForReceivedRecord(
           .map((record) => '${record.address}:${record.status.name}')
           .join(', ');
       for (final record in records) {
-        if (record.address == address && record.status == status) return record;
+        if (record.address == address &&
+            record.status == status &&
+            (!requireFinalized || !record.needsClaimRecovery)) {
+          return record;
+        }
       }
       lastError = null;
     } catch (error) {

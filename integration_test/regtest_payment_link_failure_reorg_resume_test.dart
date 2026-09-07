@@ -70,7 +70,11 @@ void main() {
           5,
         );
       }
-      await _expectReceivingClaimsAndDatabases(tester, manifest);
+      await _expectReceivingClaimsAndDatabases(
+        tester,
+        manifest,
+        status: PaymentLinkReceivedStatus.received,
+      );
 
       final recordsBeforeReorg = await waitForReceivedRecords(
         tester,
@@ -78,10 +82,11 @@ void main() {
           (claim) => records.any(
             (record) =>
                 record.address == claim.address &&
-                record.status == PaymentLinkReceivedStatus.receiving,
+                record.status == PaymentLinkReceivedStatus.received,
           ),
         ),
-        description: 'both claims to remain Receiving at five confirmations',
+        description:
+            'both receipts to be complete with recovery retained at five confirmations',
       );
       final claimTxids = recordsBeforeReorg
           .where(
@@ -136,7 +141,8 @@ void main() {
           (claim) => records.any(
             (record) =>
                 record.address == claim.address &&
-                record.status == PaymentLinkReceivedStatus.received,
+                record.status == PaymentLinkReceivedStatus.received &&
+                !record.needsClaimRecovery,
           ),
         ),
         description: 'both reorged claims to finalize independently',
@@ -174,18 +180,20 @@ void main() {
 
 Future<void> _expectReceivingClaimsAndDatabases(
   WidgetTester tester,
-  PaymentLinkRestartManifest manifest,
-) async {
+  PaymentLinkRestartManifest manifest, {
+  PaymentLinkReceivedStatus status = PaymentLinkReceivedStatus.receiving,
+}) async {
   final records = await waitForReceivedRecords(
     tester,
     (records) => manifest.claims.every(
       (claim) => records.any(
         (record) =>
             record.address == claim.address &&
-            record.status == PaymentLinkReceivedStatus.receiving,
+            record.status == status &&
+            record.needsClaimRecovery,
       ),
     ),
-    description: 'both claims to remain Receiving with retained databases',
+    description: 'both claims to be ${status.name} with retained databases',
   );
   expect(records, hasLength(2));
   for (final claim in manifest.claims) {

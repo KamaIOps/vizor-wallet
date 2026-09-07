@@ -33,6 +33,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
     required this.redeemState,
     required this.operationInProgress,
     required this.redeemActionLabel,
+    required this.redeemFromQrCode,
     required this.keystoneOverlay,
     required this.hasCards,
     required this.cardsSections,
@@ -41,6 +42,8 @@ class PaymentLinksMobileBody extends StatelessWidget {
     required this.amountController,
     required this.amountFocusNode,
     required this.amountInputFormatters,
+    required this.amountFiatText,
+    required this.amountFiatLoading,
     required this.maxAmountText,
     required this.canContinueAmount,
     required this.amountSupportingText,
@@ -56,6 +59,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
     required this.fundingProgressByAddress,
     required this.readyShowsBack,
     required this.receivedLink,
+    required this.receivedFiatText,
     required this.receivedShowsBack,
     required this.receivedClaimSession,
     required this.linkWaitLabel,
@@ -64,6 +68,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
     required this.onShowPage,
     required this.onStartCreate,
     required this.onRunRedeemAction,
+    required this.onScanCard,
     required this.onClearClipboard,
     required this.onTabSelected,
     required this.onArtworkSelected,
@@ -78,7 +83,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
     required this.onCopyLink,
     required this.onToggleReadyBack,
     required this.onToggleReceivedBack,
-    required this.onLeavePendingClaim,
+    required this.onAbandonReceivedPreview,
     required this.onClaimReceivedLink,
     super.key,
   });
@@ -87,6 +92,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
   final PaymentLinkRedeemVisualState redeemState;
   final bool operationInProgress;
   final String redeemActionLabel;
+  final bool redeemFromQrCode;
 
   /// The hardware funding round trip, already built by the screen. A hardware
   /// account funds its Card through the same Keystone handoff the desktop pane
@@ -107,6 +113,8 @@ class PaymentLinksMobileBody extends StatelessWidget {
   final TextEditingController amountController;
   final FocusNode amountFocusNode;
   final List<TextInputFormatter> amountInputFormatters;
+  final String? amountFiatText;
+  final bool amountFiatLoading;
   final String? maxAmountText;
   final bool canContinueAmount;
   final String? amountSupportingText;
@@ -126,6 +134,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
   final bool readyShowsBack;
 
   final VizorPaymentLink? receivedLink;
+  final String? receivedFiatText;
   final bool receivedShowsBack;
   final PaymentLinkClaimSession? receivedClaimSession;
 
@@ -136,6 +145,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
   final ValueChanged<PaymentLinksLocalPage> onShowPage;
   final VoidCallback onStartCreate;
   final VoidCallback onRunRedeemAction;
+  final VoidCallback onScanCard;
   final VoidCallback onClearClipboard;
   final ValueChanged<PaymentLinkCardsTab> onTabSelected;
   final ValueChanged<PaymentLinkCardArtwork> onArtworkSelected;
@@ -150,7 +160,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
   final ValueChanged<VizorPaymentLink> onCopyLink;
   final VoidCallback onToggleReadyBack;
   final VoidCallback onToggleReceivedBack;
-  final VoidCallback onLeavePendingClaim;
+  final VoidCallback onAbandonReceivedPreview;
   final VoidCallback onClaimReceivedLink;
 
   @override
@@ -166,6 +176,8 @@ class PaymentLinksMobileBody extends StatelessWidget {
         state: PaymentLinkRedeemMobileState.values.byName(redeemState.name),
         onBack: () => onShowPage(PaymentLinksLocalPage.home),
         onPaste: operationInProgress ? null : onRunRedeemAction,
+        onScan: operationInProgress ? null : onScanCard,
+        fromQrCode: redeemFromQrCode,
         onClearClipboard: operationInProgress ? null : onClearClipboard,
         pasteLabel: redeemActionLabel,
       ),
@@ -225,8 +237,6 @@ class PaymentLinksMobileBody extends StatelessWidget {
     }
   }
 
-  void _returnHomeFromReceivedGift(BuildContext context) => context.go('/home');
-
   Widget _buildHome(BuildContext context) {
     if (hasCards) {
       return _buildCardsList(context);
@@ -279,6 +289,8 @@ class PaymentLinksMobileBody extends StatelessWidget {
         amountEditorKey: const ValueKey('payment_link_amount_editor'),
         amountInputFormatters: amountInputFormatters,
         onAmountChanged: onAmountChanged,
+        supportingText: amountFiatText,
+        supportingLoading: amountFiatLoading,
         maxAmountText: maxAmount,
         onUseMax: maxAmount == null ? null : onUseMax,
         showMaxButton: true,
@@ -447,6 +459,8 @@ class PaymentLinksMobileBody extends StatelessWidget {
         onPaste: operationInProgress ? null : onRunRedeemAction,
         onClearClipboard: operationInProgress ? null : onClearClipboard,
         pasteLabel: redeemActionLabel,
+        onScan: operationInProgress ? null : onScanCard,
+        fromQrCode: redeemFromQrCode,
       );
     }
     final artwork = PaymentLinkCardArtwork.fromProtocolId(
@@ -459,6 +473,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
       cardWidth: kPaymentLinkMobileCardWidth,
       cardHeight: kPaymentLinkMobileCardHeight,
       amountText: formatZecAmount(link.amountZatoshi),
+      supportingText: receivedFiatText,
       showCaret: false,
     );
     final card = hasCardMessage
@@ -487,11 +502,10 @@ class PaymentLinksMobileBody extends StatelessWidget {
             : PaymentLinkReadyMobileState.waiting,
         card: card,
         cardTop: kPaymentLinkMobileReceivedCardTop,
-        onHome: onLeavePendingClaim,
+        onHome: onAbandonReceivedPreview,
         waitingHeading: 'Your Gift Card\nis almost ready!',
         waitingDescription:
-            'Waiting for 6 confirmations. Vizor will keep checking, and you '
-            'can claim the card as soon as the funds are ready.',
+            '$kPaymentLinkClaimWaitingDescription\n$kPaymentLinkWaitingDescription',
         waitingIcon: AppIcons.time,
         waitingStatusLabel: claimWaitLabel(session),
         homeLabel: 'Go home',
@@ -500,11 +514,15 @@ class PaymentLinksMobileBody extends StatelessWidget {
     return PaymentLinkReceivedMobileView(
       card: card,
       hasMessage: hasCardMessage,
-      onClose: () => _returnHomeFromReceivedGift(context),
+      onClose: onAbandonReceivedPreview,
       decoration: const PaymentLinkConfetti(),
       onRevealMessage: hasCardMessage ? onToggleReceivedBack : null,
       onClaim: operationInProgress ? null : onClaimReceivedLink,
-      claimLabel: operationInProgress ? 'Claiming...' : 'Claim the gift',
+      claimLabel: operationInProgress
+          ? 'Claiming...'
+          : receivedClaimSession == null
+          ? 'Try again'
+          : 'Claim the gift',
     );
   }
 }

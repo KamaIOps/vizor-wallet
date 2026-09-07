@@ -7,6 +7,73 @@ import 'package:zcash_wallet/src/features/payment_links/services/payment_link_li
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_received_store.dart';
 
 void main() {
+  test(
+    'retains fiat after submission, completion, and restart without bearer data',
+    () async {
+      final storage = _FakePaymentLinkReceivedStorage();
+      final store = PaymentLinkReceivedStore(storage);
+      final link = _link();
+      await store.saveReady(link);
+      await store.markClaimStarted(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+      );
+      await store.markReceiving(
+        claimSubmittedAt: DateTime.utc(2026, 8, 28),
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+        claimTxids: 'claim-tx',
+      );
+      await store.markReceived(address: link.address);
+      await store.clearConfirmedClaimSecret(address: link.address);
+      final record = (await PaymentLinkReceivedStore(storage).load()).single;
+      expect(record.claimLink, isNull);
+      expect(record.fiatSnapshot!.amount, 142.23);
+      expect(record.fiatSnapshot!.currency, 'USD');
+    },
+  );
+
+  test('rejects a submitted record without its original claim time', () async {
+    final storage = _FakePaymentLinkReceivedStorage();
+    final store = PaymentLinkReceivedStore(storage);
+    final link = _link();
+    await store.saveReady(link);
+    await store.markClaimStarted(
+      address: link.address,
+      destinationAccountUuid: 'receiver-account',
+      updatedAt: DateTime.utc(2026, 8, 28),
+    );
+    final payload = jsonDecode(storage.value!) as Map<String, dynamic>;
+    (payload['records'] as List).single.remove('claimSubmittedAt');
+    storage.value = jsonEncode(payload);
+    await expectLater(
+      store.load(),
+      throwsA(isA<PaymentLinkReceivedStoreFormatException>()),
+    );
+  });
+
+  test('receiving preserves submission time across reconciliation', () async {
+    final storage = _FakePaymentLinkReceivedStorage();
+    final store = PaymentLinkReceivedStore(storage);
+    final link = _link();
+    final submittedAt = DateTime.utc(2026, 8, 28, 10);
+    await store.saveReady(link);
+    await store.markClaimStarted(
+      address: link.address,
+      destinationAccountUuid: 'receiver-account',
+      updatedAt: submittedAt,
+    );
+    await store.markReceiving(
+      address: link.address,
+      destinationAccountUuid: 'receiver-account',
+      claimTxids: 'claim-tx',
+      updatedAt: submittedAt.add(const Duration(minutes: 5)),
+    );
+    final record = (await store.load()).single;
+    expect(record.claimSubmittedAt, submittedAt);
+    expect(record.updatedAt, submittedAt.add(const Duration(minutes: 5)));
+  });
+
   group('PaymentLinkReceivedStore', () {
     test('notifies listeners after a lifecycle write', () async {
       final storage = _FakePaymentLinkReceivedStorage();
@@ -33,6 +100,8 @@ void main() {
           address: link.address,
           destinationAccountUuid: 'receiver-account',
           claimTxids: 'claim-txid',
+          claimSubmittedAt: DateTime.utc(2026, 8, 5, 12, 1),
+          claimDestinationPool: 'orchard',
         );
 
         final restored = await PaymentLinkReceivedStore(storage).load();
@@ -40,6 +109,11 @@ void main() {
         expect(restored.single.status, PaymentLinkReceivedStatus.receiving);
         expect(restored.single.destinationAccountUuid, 'receiver-account');
         expect(restored.single.claimTxids, 'claim-txid');
+        expect(
+          restored.single.claimSubmittedAt,
+          DateTime.utc(2026, 8, 5, 12, 1),
+        );
+        expect(restored.single.claimDestinationPool, 'orchard');
         expect(
           restored.single.claimLink?.toUri().toString(),
           link.toUri().toString(),
@@ -54,11 +128,13 @@ void main() {
 
       await store.saveReady(link);
       await store.markReceiving(
+        claimSubmittedAt: DateTime.utc(2026, 8, 28),
         address: link.address,
         destinationAccountUuid: 'receiver-account',
         claimTxids: 'claim-txid',
       );
       await store.markReceived(address: link.address);
+      await store.clearConfirmedClaimSecret(address: link.address);
 
       final restored = await PaymentLinkReceivedStore(storage).load();
       expect(restored.single.status, PaymentLinkReceivedStatus.received);
@@ -88,6 +164,7 @@ void main() {
       expect(await store.countReceivingForAccount('receiver-account'), 0);
 
       await store.markReceiving(
+        claimSubmittedAt: DateTime.utc(2026, 8, 28),
         address: link.address,
         destinationAccountUuid: 'receiver-account',
         claimTxids: 'claim-txid',
@@ -96,6 +173,7 @@ void main() {
       expect(await store.countReceivingForAccount('other-account'), 0);
 
       await store.markReceived(address: link.address);
+      await store.clearConfirmedClaimSecret(address: link.address);
       expect(await store.countReceivingForAccount('receiver-account'), 0);
     });
 
@@ -118,6 +196,7 @@ void main() {
 
       storage.locked = false;
       await store.markReceived(address: link.address);
+      await store.clearConfirmedClaimSecret(address: link.address);
       expect(mirror.count, 0);
       storage.locked = true;
       expect(await store.countClaimsInFlight(), 0);
@@ -142,6 +221,7 @@ void main() {
         expect(restored.single.claimTxids, isNull);
         expect(restored.single.isClaimInFlight, isTrue);
         expect(restored.single.needsClaimMetadataRecovery, isTrue);
+        expect(restored.single.claimSubmittedAt, isNotNull);
         expect((await store.find(link.address))?.isClaimInFlight, isTrue);
         expect(await store.find('u1missinggiftcard'), isNull);
       },
@@ -162,6 +242,7 @@ void main() {
       expect(await store.countClaimsInFlight(), 1);
 
       await store.markReceiving(
+        claimSubmittedAt: DateTime.utc(2026, 8, 28),
         address: link.address,
         destinationAccountUuid: 'receiver-account',
         claimTxids: 'claim-txid',
@@ -169,6 +250,7 @@ void main() {
       expect(await store.countClaimsInFlight(), 1);
 
       await store.markReceived(address: link.address);
+      await store.clearConfirmedClaimSecret(address: link.address);
       expect(await store.countClaimsInFlight(), 0);
     });
 
@@ -235,6 +317,7 @@ void main() {
 
       await store.saveReady(link);
       await store.markReceiving(
+        claimSubmittedAt: DateTime.utc(2026, 8, 28),
         address: link.address,
         destinationAccountUuid: 'receiver-account',
         claimTxids: 'claim-txid',
@@ -249,6 +332,8 @@ void main() {
         restored.single.claimLink?.toUri().toString(),
         link.toUri().toString(),
       );
+      expect(restored.single.claimSubmittedAt, isNull);
+      expect(restored.single.claimDestinationPool, isNull);
     });
 
     test('never persists Receiving without a claim transaction id', () async {
@@ -260,6 +345,7 @@ void main() {
 
       await expectLater(
         store.markReceiving(
+          claimSubmittedAt: DateTime.utc(2026, 8, 28),
           address: link.address,
           destinationAccountUuid: 'receiver-account',
           claimTxids: '   ',
@@ -279,11 +365,13 @@ void main() {
 
         await store.saveReady(link);
         await store.markReceiving(
+          claimSubmittedAt: DateTime.utc(2026, 8, 28),
           address: link.address,
           destinationAccountUuid: 'receiver-account',
           claimTxids: 'claim-txid',
         );
         await store.markReceived(address: link.address);
+        await store.clearConfirmedClaimSecret(address: link.address);
         await store.saveReady(link);
 
         final restored = await PaymentLinkReceivedStore(storage).load();
@@ -332,6 +420,7 @@ VizorPaymentLink _link() {
     createdAt: DateTime.utc(2026, 8, 5, 12),
     presentation: const PaymentLinkPresentation(
       artworkId: 'ruby',
+      fiatSnapshot: PaymentLinkFiatSnapshot(amount: 142.23),
       message: 'Enjoy your gift!',
     ),
   );

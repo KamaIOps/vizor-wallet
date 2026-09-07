@@ -68,7 +68,8 @@ void main() {
           (claim) => records.any(
             (record) =>
                 record.address == claim.address &&
-                record.status == PaymentLinkReceivedStatus.received,
+                record.status == PaymentLinkReceivedStatus.received &&
+                !record.needsClaimRecovery,
           ),
         ),
         description: 'both retained claims to reach Received after restart',

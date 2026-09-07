@@ -13,6 +13,7 @@ import 'package:zcash_wallet/src/core/storage/wallet_paths.dart';
 import 'package:zcash_wallet/src/features/payment_links/models/vizor_payment_link.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_received_store.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_service.dart';
+import 'package:zcash_wallet/src/features/payment_links/widgets/payment_link_copy.dart';
 import 'package:zcash_wallet/src/features/payment_links/widgets/payment_link_gift_card.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
@@ -32,7 +33,7 @@ const _zcashdRpcUrl = String.fromEnvironment(
 const _zcashdRpcUser = 'zcash';
 const _zcashdRpcPassword = 'zcash';
 const _giftAmountText = '0.1';
-const _walletSpendableConfirmationTarget = 10;
+const _walletSpendableConfirmationTarget = 6;
 final _giftAmountZatoshi = BigInt.from(10_000_000);
 final _fundingAmountZatoshi = BigInt.from(10_010_000);
 const _giftMessage = 'Congrats from the payment link E2E!';
@@ -185,7 +186,7 @@ void main() {
       await _tapText(tester, 'Paste card link');
       await pumpUntil(
         tester,
-        () => tester.any(find.text('Waiting for 6 confirmations.')),
+        () => tester.any(find.text(kPaymentLinkClaimWaitingDescription)),
         description: 'received payment-link confirmation wait to render',
         timeout: const Duration(minutes: 1),
       );
@@ -242,9 +243,8 @@ void main() {
         link.toUri().toString(),
       );
 
-      // One block past the target so the reconciler's 10s timer cannot land on
-      // the exact confirmation boundary and decide the outcome.
-      await _mineRegtestBlocks(kPaymentLinkClaimConfirmationTarget + 1);
+      // Receipt display follows ordinary Receive at the first mined block.
+      await _mineRegtestBlocks(kPaymentLinkReceiptConfirmationTarget);
       final minedClaim = await _waitForHistoryTransaction(
         tester,
         accountUuid: receiverAccountUuid,
@@ -268,20 +268,21 @@ void main() {
       final receivedRecord = (await operations.loadReceivedLinkRecoveries())
           .singleWhere((record) => record.address == link.address);
       expect(receivedRecord.status, PaymentLinkReceivedStatus.received);
-      expect(receivedRecord.claimLink, isNull);
+      expect(receivedRecord.claimLink, isNotNull);
       await _waitForAccountBalance(
         tester,
         accountUuid: receiverAccountUuid,
         total: receiverStartingBalance.total + _giftAmountZatoshi,
       );
 
-      // The Gift Card is received after six confirmations. The receiver's
-      // ordinary wallet still requires ten before that value is spendable.
+      // Receipt display is already complete; spendability and recovery cleanup
+      // still wait for six confirmations.
       await _mineRegtestBlocks(
         _walletSpendableConfirmationTarget -
-            kPaymentLinkClaimConfirmationTarget -
-            1,
+            kPaymentLinkReceiptConfirmationTarget,
       );
+      await _waitForFinalizedClaim(tester, operations, link.address);
+
       await _waitForAccountBalance(
         tester,
         accountUuid: receiverAccountUuid,
@@ -548,4 +549,25 @@ Future<void> _waitForHomeBalance(
     description: 'home balance to show $expected',
     timeout: timeout,
   );
+}
+
+Future<void> _waitForFinalizedClaim(
+  WidgetTester tester,
+  PaymentLinkOperations operations,
+  String address,
+) async {
+  final deadline = DateTime.now().add(const Duration(minutes: 3));
+  while (DateTime.now().isBefore(deadline)) {
+    final record = (await operations.loadReceivedLinkRecoveries()).singleWhere(
+      (record) => record.address == address,
+    );
+    if (record.status == PaymentLinkReceivedStatus.received &&
+        !record.needsClaimRecovery) {
+      expect(record.claimLink, isNull);
+      return;
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+  }
+  fail('Timed out waiting for claim recovery cleanup after six confirmations.');
 }

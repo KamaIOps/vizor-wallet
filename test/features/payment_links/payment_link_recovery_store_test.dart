@@ -5,6 +5,26 @@ import 'package:zcash_wallet/src/features/payment_links/models/vizor_payment_lin
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_recovery_store.dart';
 
 void main() {
+  test(
+    'rejects an unreleased record without its saved claim fee reserve',
+    () async {
+      final storage = _FakePaymentLinkRecoveryStorage();
+      final store = PaymentLinkRecoveryStore(storage);
+      await store.saveDraft(
+        link: _link(),
+        sourceAccountUuid: 'source-account',
+        claimFeeReserveZatoshi: BigInt.from(20000),
+      );
+      final payload = jsonDecode(storage.value!) as Map<String, dynamic>;
+      (payload['records'] as List).single.remove('claimFeeReserveZatoshi');
+      storage.value = jsonEncode(payload);
+      await expectLater(
+        store.load(),
+        throwsA(isA<PaymentLinkRecoveryStoreFormatException>()),
+      );
+    },
+  );
+
   group('PaymentLinkRecoveryStore', () {
     test(
       'persists the secret before broadcast and records funding success',
@@ -16,6 +36,7 @@ void main() {
         final funding = await PaymentLinkFundingRecovery(store).fund(
           link: link,
           sourceAccountUuid: 'source-account',
+          claimFeeReserveZatoshi: BigInt.from(20000),
           currentChainHeight: () async => _submissionHeight,
           createTransaction: (_) async {
             final restartedRecords = await PaymentLinkRecoveryStore(
@@ -37,6 +58,10 @@ void main() {
         final restartedRecords = await PaymentLinkRecoveryStore(storage).load();
         expect(restartedRecords.single.state, PaymentLinkRecoveryState.funded);
         expect(restartedRecords.single.fundingTxids, 'funding-txid');
+        expect(
+          restartedRecords.single.claimFeeReserveZatoshi,
+          BigInt.from(20000),
+        );
       },
     );
 
@@ -50,6 +75,7 @@ void main() {
           PaymentLinkFundingRecovery(
             PaymentLinkRecoveryStore(storage),
           ).fund<String>(
+            claimFeeReserveZatoshi: BigInt.from(10000),
             link: link,
             sourceAccountUuid: 'source-account',
             currentChainHeight: () async => _submissionHeight,
@@ -75,6 +101,7 @@ void main() {
         PaymentLinkFundingRecovery(
           PaymentLinkRecoveryStore(storage),
         ).fund<String>(
+          claimFeeReserveZatoshi: BigInt.from(10000),
           link: link,
           sourceAccountUuid: 'source-account',
           currentChainHeight: () async => _submissionHeight,
@@ -99,7 +126,11 @@ void main() {
         onRecordsChanged: () => revisions += 1,
       );
 
-      await store.saveDraft(link: _link(), sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: _link(),
+        sourceAccountUuid: 'source-account',
+      );
 
       expect(revisions, 1);
     });
@@ -112,6 +143,7 @@ void main() {
           await PaymentLinkFundingRecovery(
             PaymentLinkRecoveryStore(storage),
           ).fund(
+            claimFeeReserveZatoshi: BigInt.from(10000),
             link: link,
             sourceAccountUuid: 'source-account',
             currentChainHeight: () async => _submissionHeight,
@@ -142,6 +174,7 @@ void main() {
             await PaymentLinkFundingRecovery(
               PaymentLinkRecoveryStore(storage),
             ).fund(
+              claimFeeReserveZatoshi: BigInt.from(10000),
               link: link,
               sourceAccountUuid: 'source-account',
               currentChainHeight: () async => _submissionHeight,
@@ -168,7 +201,11 @@ void main() {
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
 
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markPrepared(
         address: link.address,
         fundingTxid: 'prepared-hardware-txid',
@@ -186,7 +223,11 @@ void main() {
       final storage = _FakePaymentLinkRecoveryStorage();
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markPrepared(
         address: link.address,
         fundingTxid: 'prepared-hardware-txid',
@@ -205,7 +246,11 @@ void main() {
         final storage = _FakePaymentLinkRecoveryStorage(failOnWrites: {3, 4});
         final store = PaymentLinkRecoveryStore(storage);
         final link = _link();
-        await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+        await store.saveDraft(
+          claimFeeReserveZatoshi: BigInt.from(10000),
+          link: link,
+          sourceAccountUuid: 'source-account',
+        );
         await store.markPrepared(
           address: link.address,
           fundingTxid: 'prepared-hardware-txid',
@@ -232,7 +277,11 @@ void main() {
       final storage = _FakePaymentLinkRecoveryStorage();
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markPrepared(
         address: link.address,
         fundingTxid: 'prepared-hardware-txid',
@@ -254,6 +303,7 @@ void main() {
       final link = _link();
 
       final funding = await PaymentLinkFundingRecovery(store).fund(
+        claimFeeReserveZatoshi: BigInt.from(10000),
         link: link,
         sourceAccountUuid: 'source-account',
         currentChainHeight: () async => _submissionHeight,
@@ -283,12 +333,20 @@ void main() {
         createdAt: first.createdAt,
       );
 
-      await store.saveDraft(link: first, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: first,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markFunded(
         address: first.address,
         fundingTxids: 'funding-txid',
       );
-      await store.saveDraft(link: second, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: second,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markFunded(
         address: second.address,
         fundingTxids: 'second-funding-txid',
@@ -303,7 +361,11 @@ void main() {
       final storage = _FakePaymentLinkRecoveryStorage();
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markFunded(
         address: link.address,
         fundingTxids: 'funding-txid',
@@ -329,7 +391,11 @@ void main() {
       final storage = _FakePaymentLinkRecoveryStorage();
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markFunded(
         address: link.address,
         fundingTxids: 'funding-txid',
@@ -359,6 +425,7 @@ void main() {
             {
               'link': link.toUri().toString(),
               'sourceAccountUuid': 'source-account',
+              'claimFeeReserveZatoshi': '10000',
               'state': 'shared',
               'fundingTxids': 'funding-txid',
               'archivedAt': '2026-08-05T00:00:00.000Z',
@@ -383,6 +450,7 @@ void main() {
             {
               'link': link.toUri().toString(),
               'sourceAccountUuid': 'source-account',
+              'claimFeeReserveZatoshi': '10000',
               'state': 'unsupported',
               'fundingTxids': 'funding-txid',
               'updatedAt': DateTime.utc(2026, 8, 5).toIso8601String(),
@@ -405,6 +473,7 @@ void main() {
             {
               'link': link.toUri().toString(),
               'sourceAccountUuid': 'source-account',
+              'claimFeeReserveZatoshi': '10000',
               'state': 'draft',
               'fundingTxids': null,
               'preparedExpiryHeight': 120,
@@ -428,6 +497,7 @@ void main() {
             {
               'link': link.toUri().toString(),
               'sourceAccountUuid': 'source-account',
+              'claimFeeReserveZatoshi': '10000',
               'state': 'draft',
               'fundingTxids': 'submitted-software-txid',
               'preparedExpiryHeight': null,
@@ -458,6 +528,7 @@ void main() {
             await PaymentLinkFundingRecovery(
               PaymentLinkRecoveryStore(storage),
             ).fund(
+              claimFeeReserveZatoshi: BigInt.from(10000),
               link: link,
               sourceAccountUuid: 'source-account',
               currentChainHeight: () async => _submissionHeight,
@@ -484,7 +555,11 @@ void main() {
       final storage = _FakePaymentLinkRecoveryStorage();
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
 
       await store.removeUnsubmittedDraft(address: link.address);
 
@@ -495,7 +570,11 @@ void main() {
       final storage = _FakePaymentLinkRecoveryStorage();
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markSubmitted(
         address: link.address,
         fundingTxids: 'funding-txid',
@@ -511,7 +590,11 @@ void main() {
       final storage = _FakePaymentLinkRecoveryStorage();
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
 
       await store.markSubmissionStarted(
         address: link.address,
@@ -537,7 +620,11 @@ void main() {
         final storage = _FakePaymentLinkRecoveryStorage();
         final store = PaymentLinkRecoveryStore(storage);
         final link = _link();
-        await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+        await store.saveDraft(
+          claimFeeReserveZatoshi: BigInt.from(10000),
+          link: link,
+          sourceAccountUuid: 'source-account',
+        );
         await store.markSubmitted(
           address: link.address,
           fundingTxids: 'funding-txid',
@@ -559,7 +646,11 @@ void main() {
       final storage = _FakePaymentLinkRecoveryStorage();
       final store = PaymentLinkRecoveryStore(storage);
       final link = _link();
-      await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+      await store.saveDraft(
+        claimFeeReserveZatoshi: BigInt.from(10000),
+        link: link,
+        sourceAccountUuid: 'source-account',
+      );
       await store.markSubmissionStarted(
         address: link.address,
         chainHeight: _submissionHeight,
@@ -581,6 +672,7 @@ void main() {
 
       await expectLater(
         PaymentLinkFundingRecovery(store).fund<String>(
+          claimFeeReserveZatoshi: BigInt.from(10000),
           link: link,
           sourceAccountUuid: 'source-account',
           currentChainHeight: () async => _submissionHeight,
@@ -612,6 +704,7 @@ void main() {
             {
               'link': link.toUri().toString(),
               'sourceAccountUuid': 'source-account',
+              'claimFeeReserveZatoshi': '10000',
               'state': 'draft',
               'fundingTxids': null,
               'preparedExpiryHeight': null,
@@ -642,6 +735,7 @@ void main() {
             {
               'link': link.toUri().toString(),
               'sourceAccountUuid': 'source-account',
+              'claimFeeReserveZatoshi': '10000',
               'state': 'draft',
               'submittedAtHeight': -1,
               'updatedAt': DateTime.utc(2026, 8, 5).toIso8601String(),

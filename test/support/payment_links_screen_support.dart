@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/app.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
+import 'package:zcash_wallet/src/core/config/swap_feature_config.dart';
 import 'package:zcash_wallet/src/core/profile_pictures.dart';
 import 'package:zcash_wallet/src/features/migration/providers/ironwood_migration_announcement_provider.dart';
 import 'package:zcash_wallet/src/features/migration/providers/ironwood_migration_coordinator_provider.dart';
@@ -16,13 +17,17 @@ import 'package:zcash_wallet/src/features/payment_links/models/vizor_payment_lin
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_clipboard.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_hardware_signing_service.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_qr_image_saver.dart';
+import 'package:zcash_wallet/src/features/payment_links/services/payment_link_qr_export.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_received_store.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_recovery_store.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_service.dart';
+import 'package:zcash_wallet/src/features/payment_links/widgets/mobile/payment_link_scan_sheet.dart';
 import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
+import 'package:zcash_wallet/src/providers/zec_price_change_provider.dart';
 
 import '../fakes/fake_sync_notifier.dart';
+import '../fakes/fake_zec_market_data_cache.dart';
 
 /// Harness shared by the desktop and mobile Gift Card screen suites, which are
 /// separate files because only the mobile one runs in the mobile token lane.
@@ -40,10 +45,14 @@ Future<void> pumpPaymentLinksScreen(
   FakePaymentLinkClipboard? clipboard,
   PaymentLinkHardwareSigningService? hardwareSigning,
   PaymentLinkQrImageSaver? qrImageSaver,
+  PaymentLinkQrShareHandler? qrShareHandler,
+  PaymentLinkScanner? scanner,
   AccountNotifier? accountNotifier,
   AppBootstrapState? bootstrap,
   BigInt? spendableBalance,
   FakeSyncNotifier? syncNotifier,
+  ZecMarketDataSource? marketDataSource,
+  bool? pricingEnabled,
 }) async {
   await tester.binding.setSurfaceSize(const Size(1080, 720));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -57,12 +66,22 @@ Future<void> pumpPaymentLinksScreen(
     ProviderScope(
       overrides: [
         appBootstrapProvider.overrideWithValue(appBootstrap),
+        if (pricingEnabled != null)
+          swapFeatureEnabledProvider.overrideWithValue(pricingEnabled),
         if (accountNotifier != null)
           accountProvider.overrideWith(() => accountNotifier),
         paymentLinkOperationsProvider.overrideWithValue(paymentLinkOperations),
         paymentLinkClipboardProvider.overrideWithValue(paymentLinkClipboard),
+        zecMarketDataSourceProvider.overrideWithValue(
+          marketDataSource ?? const _PaymentLinksTestMarketDataSource(),
+        ),
+        zecMarketDataCacheProvider.overrideWithValue(FakeZecMarketDataCache()),
         if (qrImageSaver != null)
           paymentLinkQrImageSaverProvider.overrideWithValue(qrImageSaver),
+        if (qrShareHandler != null)
+          paymentLinkQrShareHandlerProvider.overrideWithValue(qrShareHandler),
+        if (scanner != null)
+          paymentLinkScannerProvider.overrideWithValue(scanner),
         if (hardwareSigning != null)
           paymentLinkHardwareSigningServiceProvider.overrideWithValue(
             hardwareSigning,
@@ -119,6 +138,14 @@ Future<void> pumpPaymentLinksScreen(
     await tester.pump(const Duration(milliseconds: 50));
   }
   await tester.pump(const Duration(milliseconds: 100));
+}
+
+class _PaymentLinksTestMarketDataSource implements ZecMarketDataSource {
+  const _PaymentLinksTestMarketDataSource();
+
+  @override
+  Future<ZecMarketData?> fetchMarketData() async =>
+      const ZecMarketData(usdPrice: 100);
 }
 
 const paymentLinksAccountState = AccountState(
@@ -281,6 +308,7 @@ final secondIncomingLink = VizorPaymentLink(
 );
 
 final sharedRecovery = PaymentLinkRecoveryRecord(
+  claimFeeReserveZatoshi: BigInt.from(10000),
   link: incomingLink,
   sourceAccountUuid: 'account-1',
   state: PaymentLinkRecoveryState.shared,
@@ -289,6 +317,7 @@ final sharedRecovery = PaymentLinkRecoveryRecord(
 );
 
 final fundedRecovery = PaymentLinkRecoveryRecord(
+  claimFeeReserveZatoshi: BigInt.from(10000),
   link: incomingLink,
   sourceAccountUuid: 'account-1',
   state: PaymentLinkRecoveryState.funded,
@@ -307,6 +336,7 @@ final otherAccountLink = VizorPaymentLink(
 );
 
 final otherAccountRecovery = PaymentLinkRecoveryRecord(
+  claimFeeReserveZatoshi: BigInt.from(10000),
   link: otherAccountLink,
   sourceAccountUuid: 'account-2',
   state: PaymentLinkRecoveryState.funded,
@@ -315,6 +345,7 @@ final otherAccountRecovery = PaymentLinkRecoveryRecord(
 );
 
 final unknownOriginRecovery = PaymentLinkRecoveryRecord(
+  claimFeeReserveZatoshi: BigInt.from(10000),
   link: unknownOriginLink,
   sourceAccountUuid: '',
   state: PaymentLinkRecoveryState.funded,
@@ -333,6 +364,7 @@ final unknownOriginLink = VizorPaymentLink(
 );
 
 final draftRecovery = PaymentLinkRecoveryRecord(
+  claimFeeReserveZatoshi: BigInt.from(10000),
   link: incomingLink,
   sourceAccountUuid: 'account-1',
   state: PaymentLinkRecoveryState.draft,
@@ -352,6 +384,7 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
     this.receivedLoadFailures = 0,
     this.prepareClaimFailures = 0,
     this.prepareClaimError,
+    this.readClaimDestination,
     this.fundingMetadataSavedOnCreate = true,
     this.fundingBroadcastAcceptedOnCreate = true,
     this.fundingConfirmationCount = kPaymentLinkShareConfirmationTarget,
@@ -374,6 +407,7 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
   int receivedLoadFailures;
   int prepareClaimFailures;
   final Object? prepareClaimError;
+  final AccountState Function()? readClaimDestination;
   final bool fundingMetadataSavedOnCreate;
   final bool fundingBroadcastAcceptedOnCreate;
   int fundingConfirmationCount;
@@ -388,10 +422,12 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
   final List<String> createdFromAccounts = [];
   final List<String?> createdArtworkIds = [];
   final List<String?> createdMessages = [];
+  final List<PaymentLinkFiatSnapshot?> createdFiatSnapshots = [];
   final List<String> quotedAccounts = [];
   final List<String> maxQuotedAccounts = [];
   final List<VizorPaymentLink> sharedLinks = [];
   final List<VizorPaymentLink> claimedLinks = [];
+  final List<PaymentLinkClaimSession> claimedSessions = [];
   final List<String> discardedClaimAddresses = [];
   final List<String> retainedClaimAddresses = [];
   final List<String> keptLinkAddresses = [];
@@ -439,6 +475,7 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
     createdFromAccounts.add(sourceAccountUuid);
     createdArtworkIds.add(presentation?.artworkId);
     createdMessages.add(presentation?.message);
+    createdFiatSnapshots.add(presentation?.fiatSnapshot);
     await createFundedLinkGate?.future;
     final link = VizorPaymentLink(
       network: 'main',
@@ -452,6 +489,7 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
     );
     records.add(
       PaymentLinkRecoveryRecord(
+        claimFeeReserveZatoshi: BigInt.from(10000),
         link: link,
         sourceAccountUuid: sourceAccountUuid,
         state: fundingMetadataSavedOnCreate
@@ -578,6 +616,7 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
     VizorPaymentLink link, {
     bool allowLongSync = false,
   }) async {
+    final destination = readClaimDestination?.call();
     preparedLinks.add(link);
     allowLongSyncCalls.add(allowLongSync);
     await prepareClaimGates[preparedLinks.length]?.future;
@@ -592,8 +631,8 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
     }
     return PaymentLinkClaimSession(
       link: link,
-      destinationAddress: 'u1receiver',
-      destinationAccountUuid: 'account-1',
+      destinationAddress: destination?.activeAddress ?? 'u1receiver',
+      destinationAccountUuid: destination?.activeAccountUuid ?? 'account-1',
       directory: Directory('/tmp/vizor-payment-link-test'),
       dbPath: '/tmp/vizor-payment-link-test/wallet.db',
       accountUuid: 'payment-link-account',
@@ -609,6 +648,7 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
   Future<PaymentLinkClaimResult> claimPreparedLink(
     PaymentLinkClaimSession session,
   ) async {
+    claimedSessions.add(session);
     if (!receivedRecords.any(
       (record) => record.address == session.link.address,
     )) {
@@ -628,6 +668,7 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
           status: PaymentLinkReceivedStatus.receiving,
           destinationAccountUuid: session.destinationAccountUuid,
           claimTxids: result.txids,
+          claimSubmittedAt: DateTime.utc(2026, 8, 6, 2),
           updatedAt: DateTime.utc(2026, 8, 6, 2),
         ),
       );
@@ -709,9 +750,20 @@ class SwitchablePaymentLinkAccountNotifier extends AccountNotifier {
   SwitchablePaymentLinkAccountNotifier([this.initialState = twoAccountState]);
 
   final AccountState initialState;
+  final List<String> switchedAccounts = [];
+  Completer<void>? switchGate;
+
+  AccountState get current => state.value ?? initialState;
 
   @override
   AccountState build() => initialState;
+
+  @override
+  Future<void> switchAccount(String uuid) async {
+    switchedAccounts.add(uuid);
+    await switchGate?.future;
+    setActiveAccount(uuid);
+  }
 
   void setActiveAccount(String uuid) {
     final current = state.value ?? initialState;

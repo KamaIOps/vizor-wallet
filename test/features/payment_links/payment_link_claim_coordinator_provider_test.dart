@@ -80,6 +80,38 @@ void main() {
     expect(recoveryCalls, 2);
   });
 
+  test(
+    'a completed receipt keeps recovering until its retained secret is cleared',
+    () async {
+      var recoveryCalls = 0;
+      final finalized = Completer<void>();
+      final container = ProviderContainer(
+        overrides: [
+          appSecurityProvider.overrideWith(_UnlockedSecurityNotifier.new),
+          paymentLinkClaimRecoveryRetryDelayProvider.overrideWithValue(
+            const Duration(milliseconds: 1),
+          ),
+          paymentLinkClaimRecoveryRunnerProvider.overrideWithValue(() async {
+            recoveryCalls++;
+            if (recoveryCalls == 1) {
+              return [
+                _receivingRecord.copyWith(
+                  status: PaymentLinkReceivedStatus.received,
+                ),
+              ];
+            }
+            if (!finalized.isCompleted) finalized.complete();
+            return [_receivedRecord];
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(paymentLinkClaimCoordinatorProvider);
+      await finalized.future.timeout(const Duration(seconds: 1));
+      expect(recoveryCalls, 2);
+    },
+  );
+
   test('locked startup waits until unlock before restoring claims', () async {
     final security = _MutableSecurityNotifier(locked: true);
     final restored = Completer<void>();
@@ -283,6 +315,7 @@ PaymentLinkClaimResult _result(String txid) => PaymentLinkClaimResult(
 );
 
 final _receivingRecord = PaymentLinkReceivedRecord(
+  claimSubmittedAt: DateTime.utc(2026, 8, 28),
   network: 'main',
   address: 'claim-1',
   amountZatoshi: BigInt.from(100000),

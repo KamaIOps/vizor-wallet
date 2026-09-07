@@ -432,7 +432,11 @@ _preparedFixture() async {
     label: 'Payment link',
     createdAt: DateTime.utc(2026, 9, 1),
   );
-  await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+  await store.saveDraft(
+    claimFeeReserveZatoshi: BigInt.from(10000),
+    link: link,
+    sourceAccountUuid: 'source-account',
+  );
   await store.markPrepared(
     address: link.address,
     fundingTxid: _preparedTxid,
@@ -457,7 +461,11 @@ _submittedFixture({String fundingTxids = _preparedTxid}) async {
     label: 'Payment link',
     createdAt: DateTime.utc(2026, 9, 1),
   );
-  await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+  await store.saveDraft(
+    claimFeeReserveZatoshi: BigInt.from(10000),
+    link: link,
+    sourceAccountUuid: 'source-account',
+  );
   await store.markSubmitted(address: link.address, fundingTxids: fundingTxids);
   return (store: store, storage: storage);
 }
@@ -478,7 +486,11 @@ _ambiguousFixture() async {
     label: 'Payment link',
     createdAt: DateTime.utc(2026, 9, 1),
   );
-  await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+  await store.saveDraft(
+    claimFeeReserveZatoshi: BigInt.from(10000),
+    link: link,
+    sourceAccountUuid: 'source-account',
+  );
   await store.markSubmissionStarted(address: link.address, chainHeight: 100);
   return (store: store, storage: storage);
 }
@@ -500,6 +512,7 @@ _inertFixture({required DateTime updatedAt}) async {
     createdAt: DateTime.utc(2026, 9, 1),
   );
   await store.saveDraft(
+    claimFeeReserveZatoshi: BigInt.from(10000),
     link: link,
     sourceAccountUuid: 'source-account',
     updatedAt: updatedAt,
@@ -530,7 +543,11 @@ _fundedFixture({String fundingTxids = _preparedTxid}) async {
     label: 'Payment link',
     createdAt: DateTime.utc(2026, 9, 1),
   );
-  await store.saveDraft(link: link, sourceAccountUuid: 'source-account');
+  await store.saveDraft(
+    claimFeeReserveZatoshi: BigInt.from(10000),
+    link: link,
+    sourceAccountUuid: 'source-account',
+  );
   await store.markFunded(address: _preparedAddress, fundingTxids: fundingTxids);
   return (store: store, storage: storage);
 }
