@@ -24,9 +24,18 @@ Future<void> reconcilePaymentLinkClaimReceipt({
         'Receipt reconciliation cannot produce submitting state.',
       );
     case PaymentLinkReceivedStatus.receiving:
-      // A shallow reorg can unmine an already displayed receipt. Its secret
-      // and retained wallet are still available for recovery at this point.
-      if (record.status == PaymentLinkReceivedStatus.received) {
+      // Missing history or an unknown/lagging sync height is not evidence of
+      // a reorg. Preserve a completed receipt until the wallet explicitly
+      // reports one of its inbound transactions as unmined or expired.
+      final claimTxids = record.claimTxids!.split(',');
+      final hasInvalidatedReceipt = transactions.any(
+        (tx) =>
+            (tx.txKind == 'received' || tx.txKind == 'receiving') &&
+            (tx.expiredUnmined || tx.minedHeight <= BigInt.zero) &&
+            claimTxids.any((txid) => paymentLinkTxidsMatch(txid, tx.txidHex)),
+      );
+      if (record.status == PaymentLinkReceivedStatus.received &&
+          hasInvalidatedReceipt) {
         await store.markReceiving(
           address: record.address,
           destinationAccountUuid: record.destinationAccountUuid!,

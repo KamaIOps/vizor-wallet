@@ -1109,7 +1109,15 @@ void main() {
       expect(receipt.needsClaimRecovery, isTrue);
       expect(receipt.claimLink, isNotNull);
       expect(deleteCalls, 0);
-      await reconcile(104);
+      // Startup sync state can be unknown, or still behind the mined height.
+      for (final height in [0, 99, 100, 104]) {
+        await reconcile(height);
+        final restored = (await store.load()).single;
+        expect(restored.status, PaymentLinkReceivedStatus.received);
+        expect(restored.isClaimInFlight, isFalse);
+        expect(restored.claimSubmittedAt, receipt.claimSubmittedAt);
+        expect(restored.updatedAt, receipt.updatedAt);
+      }
       expect((await store.load()).single.claimLink, isNotNull);
       expect(deleteCalls, 0);
       await reconcile(105);
@@ -1118,6 +1126,62 @@ void main() {
       expect(finalized.needsClaimRecovery, isFalse);
       expect(finalized.claimLink, isNull);
       expect(deleteCalls, 1);
+    },
+  );
+
+  test(
+    'missing receipt history does not invalidate a completed claim',
+    () async {
+      final store = PaymentLinkReceivedStore(
+        _PaymentLinkServiceReceivedStorage(),
+      );
+      final link = _link();
+      await store.saveReady(link);
+      await store.markClaimStarted(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+      );
+      await store.markReceiving(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+        claimTxids: 'a,b',
+      );
+      await store.markReceived(address: link.address);
+      for (final history in <List<rust_sync.TransactionInfo>>[
+        [],
+        [_transaction(txid: 'a', txKind: 'received', minedHeight: 100)],
+        [_transaction(txid: 'unrelated', txKind: 'receiving')],
+        [_transaction(txid: 'a', txKind: 'sent')],
+      ]) {
+        await reconcilePaymentLinkClaimReceipt(
+          record: (await store.load()).single,
+          transactions: history,
+          verifiedHeight: BigInt.from(105),
+          store: store,
+          deleteRetainedWallet: (_) async =>
+              fail('Incomplete history cannot finalize recovery'),
+        );
+        final record = (await store.load()).single;
+        expect(record.status, PaymentLinkReceivedStatus.received);
+        expect(record.claimLink, isNotNull);
+      }
+      // A matching expired leg is explicit invalidation even if another leg
+      // is still confirmed; an entirely expired claim becomes retryable below.
+      await reconcilePaymentLinkClaimReceipt(
+        record: (await store.load()).single,
+        transactions: [
+          _transaction(txid: 'a', txKind: 'received', minedHeight: 100),
+          _transaction(txid: 'b', txKind: 'receiving', expiredUnmined: true),
+        ],
+        verifiedHeight: BigInt.from(105),
+        store: store,
+        deleteRetainedWallet: (_) async =>
+            fail('Invalidated claims must retain recovery'),
+      );
+      expect(
+        (await store.load()).single.status,
+        PaymentLinkReceivedStatus.receiving,
+      );
     },
   );
 
