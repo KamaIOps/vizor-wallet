@@ -14,6 +14,22 @@ bool paymentLinkTxidsMatch(String first, String second) {
   return _reverseHexBytes(normalizedFirst) == normalizedSecond;
 }
 
+/// Converts broadcast display-order IDs to the protocol order used by claim
+/// records and TransactionInfo. Call only at the broadcast-result boundary;
+/// recovered IDs from wallet history already have protocol byte order.
+String paymentLinkBroadcastTxidsToProtocolOrder(String txids) {
+  return txids
+      .split(',')
+      .map((txid) {
+        final normalized = normalizePaymentLinkTxid(txid);
+        if (!_isTransactionIdHex(normalized)) {
+          throw const FormatException('Invalid broadcast transaction ID.');
+        }
+        return _reverseHexBytes(normalized);
+      })
+      .join(',');
+}
+
 bool paymentLinkFundingTransactionExists({
   required String fundingTxid,
   required List<rust_sync.TransactionInfo> transactions,

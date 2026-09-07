@@ -1147,18 +1147,19 @@ class PaymentLinkService implements PaymentLinkOperations {
       // pool. Enrichment is deliberately best-effort: a successful broadcast
       // must remain recoverable even when detail lookup is temporarily
       // unavailable.
+      final claimTxids = paymentLinkBroadcastTxidsToProtocolOrder(result.txids);
       final claimSubmittedAt = startedRecord.claimSubmittedAt!;
       final claimDestinationPool = await _loadClaimDestinationPool(
         dbPath: session.dbPath,
         network: session.link.network,
         accountUuid: session.accountUuid,
         destinationAddress: session.destinationAddress,
-        claimTxids: result.txids,
+        claimTxids: claimTxids,
         expectedAmountZatoshi: session.link.amountZatoshi,
       );
       final metadataSaved = await _saveClaimMetadata(
         session: session,
-        claimTxids: result.txids,
+        claimTxids: claimTxids,
         claimSubmittedAt: claimSubmittedAt,
         claimDestinationPool: claimDestinationPool,
       );

@@ -113,6 +113,10 @@ class PaymentLinkReceivedRecord {
   /// until six verified confirmations so a shallow reorg can still recover.
   final VizorPaymentLink? claimLink;
   final String? destinationAccountUuid;
+
+  /// Comma-separated protocol/storage-order IDs, matching TransactionInfo.
+  /// Broadcast IDs are converted before saving; recovery history is already
+  /// in this order. This unreleased contract has no byte-order fallback.
   final String? claimTxids;
   final DateTime updatedAt;
 

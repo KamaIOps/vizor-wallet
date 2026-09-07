@@ -5143,10 +5143,6 @@ class _GiftCardProgressPreviewState extends State<_GiftCardProgressPreview> {
   ];
 
   void _updateFixture() {
-    final broadcastTxid = List.generate(
-      32,
-      (index) => index.toRadixString(16).padLeft(2, '0'),
-    ).join();
     final txid = widget.creating
         ? List.filled(32, '12').join()
         : List.generate(
@@ -5222,7 +5218,7 @@ class _GiftCardProgressPreviewState extends State<_GiftCardProgressPreview> {
                 : PaymentLinkReceivedStatus.receiving,
             claimLink: null,
             destinationAccountUuid: _accountsDesignState.activeAccountUuid,
-            claimTxids: broadcastTxid,
+            claimTxids: txid,
             claimSubmittedAt: _timestamp,
             claimDestinationPool: 'ironwood',
             updatedAt: _timestamp.add(Duration(seconds: _stage * 75)),

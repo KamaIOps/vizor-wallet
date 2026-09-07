@@ -1,3 +1,5 @@
+import 'package:zcash_wallet/src/core/config/zcash_explorer.dart';
+import 'package:zcash_wallet/src/features/payment_links/services/payment_link_transaction_matching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/activity/gift_card_activity_index.dart';
@@ -8,6 +10,47 @@ import 'package:zcash_wallet/src/features/payment_links/services/payment_link_re
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
 void main() {
+  test(
+    'pending and detected claim rows open the same broadcast transaction',
+    () {
+      const displayTxid =
+          '012c6894d79c62d7f49659bf2405b6b67fda282aa89127539d77de76523be0d6';
+      const protocolTxid =
+          'd6e03b5276de779d532791a82a28da7fb6b60524bf5996f4d7629cd794682c01';
+      final record = PaymentLinkReceivedRecord.fromLink(_link('pending'))
+          .copyWith(
+            status: PaymentLinkReceivedStatus.receiving,
+            destinationAccountUuid: 'receiver',
+            claimTxids: paymentLinkBroadcastTxidsToProtocolOrder(displayTxid),
+            claimSubmittedAt: DateTime.utc(2026, 9, 7),
+          );
+      final index = GiftCardActivityIndex.forAccount(
+        accountUuid: 'receiver',
+        createdRecords: [],
+        receivedRecords: [record],
+      );
+      final pending = index.withPendingClaims([]).single;
+      final detected = index.withPendingClaims([
+        _transaction(txidHex: protocolTxid, txKind: 'received'),
+      ]).single;
+      for (final row in [pending, detected]) {
+        expect(row.txidHex, protocolTxid);
+        expect(
+          zcashExplorerTransactionUri(
+            networkName: 'main',
+            txidHex: row.txidHex,
+            txidOrder: ZcashExplorerTxidOrder.protocol,
+          ).path,
+          '/tx/$displayTxid',
+        );
+      }
+      expect(
+        index.metadataFor(pending)!.stableId,
+        index.metadataFor(detected)!.stableId,
+      );
+    },
+  );
+
   test(
     'only submitted claims get a row before wallet detection, scoped by account',
     () {

@@ -1,9 +1,13 @@
 @Tags(['mobile'])
 library;
 
+import 'package:zcash_wallet/src/features/payment_links/services/payment_link_transaction_matching.dart';
+import 'package:zcash_wallet/src/core/formatting/address_display.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart' show FontLoader, rootBundle;
+import 'package:flutter/services.dart'
+    show FontLoader, rootBundle, MethodChannel;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/config/swap_feature_config.dart';
 import 'package:zcash_wallet/src/providers/privacy_mode_provider.dart';
@@ -192,6 +196,42 @@ Widget _app(
 }
 
 void main() {
+  testWidgets('pending claim transaction ID opens the broadcast hash', (
+    tester,
+  ) async {
+    const displayTxid =
+        '012c6894d79c62d7f49659bf2405b6b67fda282aa89127539d77de76523be0d6';
+    final protocolTxid = paymentLinkBroadcastTxidsToProtocolOrder(displayTxid);
+    final launched = <String>[];
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'launch') {
+        launched.add((call.arguments as Map)['url'] as String);
+      }
+      return true;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.binding.setSurfaceSize(const Size(393, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _app(
+        _tx(txid: protocolTxid, kind: 'receiving', minedHeight: BigInt.zero),
+        giftCard: _giftCard(
+          kind: GiftCardActivityKind.redeemed,
+          isClaimInFlight: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text(truncatedTxid(protocolTxid)));
+    await tester.pump();
+    expect(launched, hasLength(1));
+    expect(Uri.parse(launched.single).path, '/tx/$displayTxid');
+  });
+
   testWidgets(
     'an expired claim leg stays pending while the card is receiving',
     (tester) async {

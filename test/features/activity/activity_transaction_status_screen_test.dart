@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart';
+import 'package:zcash_wallet/src/features/payment_links/services/payment_link_transaction_matching.dart';
 import 'package:flutter/material.dart' show MaterialApp, ThemeMode;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,6 +43,48 @@ const _transparentSenderAddress = 't1PV7nyJ3J6pZBh6sCrd5dSDd6uhXGVSpEX';
 final _blockTime = BigInt.from(1764150000);
 
 void main() {
+  testWidgets('pending claim transaction ID opens the broadcast hash', (
+    tester,
+  ) async {
+    const displayTxid =
+        '012c6894d79c62d7f49659bf2405b6b67fda282aa89127539d77de76523be0d6';
+    final protocolTxid = paymentLinkBroadcastTxidsToProtocolOrder(displayTxid);
+    final launched = <String>[];
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'launch') {
+        launched.add((call.arguments as Map)['url'] as String);
+      }
+      return true;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await _pumpScreen(
+      tester,
+      args: ActivityTransactionStatusArgs(
+        txidHex: protocolTxid,
+        txKind: 'receiving',
+        initialTransaction: _transaction(
+          txidHex: protocolTxid,
+          txKind: 'receiving',
+          minedHeight: BigInt.zero,
+        ),
+        giftCard: GiftCardActivityMetadata(
+          kind: GiftCardActivityKind.redeemed,
+          amountZatoshi: BigInt.from(100000),
+          artworkId: 'ruby',
+          message: null,
+          isClaimInFlight: true,
+        ),
+      ),
+    );
+    await tester.tap(find.text(truncatedTxid(protocolTxid)));
+    await tester.pump();
+    expect(launched, hasLength(1));
+    expect(Uri.parse(launched.single).path, '/tx/$displayTxid');
+  });
+
   for (final settings in [(false, false), (true, true)]) {
     testWidgets('hides saved fiat for disabled pricing or privacy $settings', (
       tester,
@@ -811,13 +855,14 @@ void main() {
 }
 
 rust_sync.TransactionInfo _transaction({
+  String txidHex = _txidHex,
   required String txKind,
   BigInt? minedHeight,
   bool expiredUnmined = false,
   BigInt? fee,
 }) {
   return rust_sync.TransactionInfo(
-    txidHex: _txidHex,
+    txidHex: txidHex,
     minedHeight: minedHeight ?? BigInt.from(2500000),
     expiredUnmined: expiredUnmined,
     accountBalanceDelta: 0,

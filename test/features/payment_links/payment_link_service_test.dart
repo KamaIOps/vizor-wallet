@@ -923,6 +923,26 @@ void main() {
     );
   });
 
+  test('broadcast and recovery claim IDs use the same protocol byte order', () {
+    const displayA =
+        '012c6894d79c62d7f49659bf2405b6b67fda282aa89127539d77de76523be0d6';
+    const protocolA =
+        'd6e03b5276de779d532791a82a28da7fb6b60524bf5996f4d7629cd794682c01';
+    const displayB =
+        '3b73c8a9b97669586f626db527361744a413af21b483ab25b818f4ac5fad8860';
+    const protocolB =
+        '6088ad5facf418b825ab83b421af13a444173627b56d626f586976b9a9c8733b';
+    final broadcast = paymentLinkBroadcastTxidsToProtocolOrder(
+      '$displayA,$displayB',
+    );
+    final recovered = paymentLinkActiveClaimTxids([
+      _transaction(txid: protocolA, txKind: 'sent'),
+      _transaction(txid: protocolB, txKind: 'sent'),
+    ]).join(',');
+    expect(broadcast, '$protocolA,$protocolB');
+    expect(recovered, broadcast);
+  });
+
   test('recovers only active sent claim transaction ids', () {
     expect(
       paymentLinkActiveClaimTxids([
