@@ -12,6 +12,8 @@ import 'package:zcash_wallet/src/features/payment_links/services/payment_link_re
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_service.dart';
 import 'package:zcash_wallet/src/features/payment_links/widgets/payment_link_copy.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
+import 'package:zcash_wallet/src/providers/app_security_provider.dart';
+import 'package:zcash_wallet/src/features/payment_links/providers/payment_link_claim_coordinator_provider.dart';
 
 import 'support/mobile_regtest_flow.dart';
 
@@ -118,7 +120,7 @@ void main() {
       final receiverUuid = await accountUuidAtOrder(1);
       final receiverStartingBalance = await _readAccountBalance(receiverUuid);
 
-      final operations = _paymentLinkOperations(tester);
+      var operations = _paymentLinkOperations(tester);
       await Clipboard.setData(ClipboardData(text: link.toUri().toString()));
       await _openGiftCardsFromSettings(tester);
       await tapAppButton(
@@ -194,9 +196,9 @@ void main() {
       );
       expect(pendingClaim.txidHex, isNot(minedFunding.txidHex));
 
-      // One block past the target so the reconciler's timer cannot land on
-      // the exact confirmation boundary and decide the outcome.
-      await mineRegtestBlocks(kPaymentLinkClaimConfirmationTarget + 1);
+      // Receipt display completes at one confirmation; recovery must still
+      // retain the claim secret until six confirmed blocks have been scanned.
+      await mineRegtestBlocks(kPaymentLinkReceiptConfirmationTarget);
       final minedClaim = await _waitForHistoryTransaction(
         tester,
         accountUuid: receiverUuid,
@@ -233,6 +235,44 @@ void main() {
         timeout: const Duration(minutes: 2),
       );
       await _leaveGiftCards(tester);
+
+      // Recreate the Flutter app and provider state from the persisted wallet
+      // at one confirmation. This is a bootstrap restart within the E2E
+      // process, not an OS process relaunch.
+      final oldContainer = ProviderScope.containerOf(
+        tester.element(find.byType(ZcashWalletApp)),
+      );
+      await oldContainer
+          .read(paymentLinkClaimCoordinatorProvider)
+          .quiesceAndDrain();
+      oldContainer.read(appSecurityProvider.notifier).lock();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await stopRustWorkForCleanup();
+      await tester.pumpWidget(await buildBootstrappedZcashWalletApp());
+      await enterPasscode(tester, mobileE2ePasscode);
+      await waitForHome(tester);
+      operations = _paymentLinkOperations(tester);
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final restored = (await operations.inspectReceivedLinkClaims(
+          await operations.loadReceivedLinkRecoveries(),
+        )).singleWhere((record) => record.address == link.address);
+        expect(restored.status, PaymentLinkReceivedStatus.received);
+        expect(restored.claimLink, isNotNull);
+        expect(restored.claimSubmittedAt, receivedRecord.claimSubmittedAt);
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await _openGiftCardsFromSettings(tester);
+      await tapWidget(
+        tester,
+        const ValueKey('payment_links_mobile_received_tab'),
+      );
+      expect(
+        find.descendant(of: receivedRow, matching: find.text('Received')),
+        findsOneWidget,
+      );
+      await _leaveGiftCards(tester);
+      logE2e('one-confirmation receipt survived app bootstrap restart');
 
       // Receipt display is already complete; spendability and recovery cleanup
       // still wait for six confirmations.
