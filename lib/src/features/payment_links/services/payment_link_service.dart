@@ -235,16 +235,31 @@ List<String> paymentLinkClaimDetailTxids({
 /// an unrelated input or an arbitrary output.
 @visibleForTesting
 String? paymentLinkClaimDestinationPoolFromDetails({
+  required String claimTxids,
   required Iterable<rust_sync.TransactionDetail> details,
   required String destinationAddress,
   required BigInt expectedAmountZatoshi,
 }) {
+  final expectedTxids = claimTxids
+      .split(',')
+      .map((txid) => txid.trim())
+      .where((txid) => txid.isNotEmpty)
+      .toSet();
+  if (expectedTxids.isEmpty) return null;
+  final availableDetails = details.toList();
   String? observedPool;
-  for (final detail in details) {
+  for (final txid in expectedTxids) {
+    final matchingDetails = availableDetails.where(
+      (detail) => paymentLinkTxidsMatch(txid, detail.txidHex),
+    );
+    // History and detail loading can each be incomplete after broadcast.
+    // Persisting a pool from a subset would prevent later enrichment retries.
+    if (matchingDetails.isEmpty) return null;
+    final detail = matchingDetails.first;
     final matchingOutputs = detail.outputs
         .where((output) => output.address == destinationAddress)
         .toList();
-    if (matchingOutputs.isEmpty) continue;
+    if (matchingOutputs.isEmpty) return null;
     var selectedOutput = matchingOutputs.first;
     for (final output in matchingOutputs) {
       if (output.amountZatoshi == expectedAmountZatoshi) {
@@ -253,7 +268,7 @@ String? paymentLinkClaimDestinationPoolFromDetails({
       }
     }
     final pool = selectedOutput.pool.trim();
-    if (pool.isEmpty) continue;
+    if (pool.isEmpty) return null;
     if (observedPool != null && observedPool != pool) return null;
     observedPool = pool;
   }
@@ -783,11 +798,7 @@ class PaymentLinkService implements PaymentLinkOperations {
     // must never alter the claim's lifecycle status.
     await Future.wait(
       awaitingReceipt
-          .where(
-            (record) =>
-                record.status == PaymentLinkReceivedStatus.receiving &&
-                record.claimDestinationPool == null,
-          )
+          .where((record) => record.claimDestinationPool == null)
           .map((record) async {
             try {
               final pool = await _loadRetainedClaimDestinationPool(
@@ -795,11 +806,8 @@ class PaymentLinkService implements PaymentLinkOperations {
                 network: endpoint.networkName,
               );
               if (pool == null) return;
-              await _receivedStore.markReceiving(
+              await _receivedStore.updateClaimDestinationPool(
                 address: record.address,
-                destinationAccountUuid: record.destinationAccountUuid!,
-                claimTxids: record.claimTxids!,
-                claimSubmittedAt: record.claimSubmittedAt,
                 claimDestinationPool: pool,
               );
             } catch (error, stackTrace) {
@@ -1555,12 +1563,15 @@ class PaymentLinkService implements PaymentLinkOperations {
       );
     }
     final pool = paymentLinkClaimDestinationPoolFromDetails(
+      claimTxids: claimTxids,
       details: details,
       destinationAddress: destinationAddress,
       expectedAmountZatoshi: expectedAmountZatoshi,
     );
     if (pool == null && details.length > 1) {
-      log('PaymentLinkService: claim destination outputs disagree on pool');
+      log(
+        'PaymentLinkService: claim destination pool is incomplete or ambiguous',
+      );
     }
     return pool;
   }

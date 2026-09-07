@@ -127,21 +127,12 @@ class GiftCardActivityIndex {
     final duplicateInboundIndexes = <int>{};
     for (final record in pendingClaims) {
       final txids = _splitTxids(record.claimTxids).toSet();
-      final matchingIndexes = <int>[];
-      for (var index = 0; index < source.length; index++) {
-        final tx = source[index];
-        if ((tx.txKind == 'received' || tx.txKind == 'receiving') &&
-            _matchesAny(txids, tx.txidHex)) {
-          matchingIndexes.add(index);
-        }
-      }
-      if (matchingIndexes.isNotEmpty) {
-        // A partial/multi-tx claim is one Gift Card activity item. Keep the
-        // first actual inbound transaction authoritative for its detail and
-        // suppress the other matching receive legs as duplicate rows.
-        duplicateInboundIndexes.addAll(matchingIndexes.skip(1));
-        continue;
-      }
+      final hasInbound = source.any(
+        (tx) =>
+            (tx.txKind == 'received' || tx.txKind == 'receiving') &&
+            _matchesAny(txids, tx.txidHex),
+      );
+      if (hasInbound) continue;
       source.add(
         rust_sync.TransactionInfo(
           txidHex: txids.first,
@@ -165,16 +156,24 @@ class GiftCardActivityIndex {
     // The persisted record remains the business identity after confirmation.
     // A claim that was broadcast in multiple legs must therefore still
     // produce one row once it reaches `received` and leaves pendingClaims.
-    final seenGiftCardIds = <String>{};
+    final representativeIndexes = <String, int>{};
     for (var index = 0; index < source.length; index++) {
-      if (duplicateInboundIndexes.contains(index)) continue;
       final transaction = source[index];
       if (transaction.txKind != 'received' &&
           transaction.txKind != 'receiving') {
         continue;
       }
       final stableId = metadataFor(transaction)?.stableId;
-      if (stableId != null && !seenGiftCardIds.add(stableId)) {
+      if (stableId == null) continue;
+      final previousIndex = representativeIndexes[stableId];
+      if (previousIndex == null) {
+        representativeIndexes[stableId] = index;
+      } else if (source[previousIndex].expiredUnmined &&
+          !transaction.expiredUnmined) {
+        // An expired leg does not represent a claim with another live leg.
+        duplicateInboundIndexes.add(previousIndex);
+        representativeIndexes[stableId] = index;
+      } else {
         duplicateInboundIndexes.add(index);
       }
     }

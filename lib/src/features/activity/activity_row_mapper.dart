@@ -35,10 +35,11 @@ ActivityRowData buildTransactionActivityRow({
   VoidCallback? onTap,
 }) {
   final colors = context.colors;
+  // A visible expired leg does not fail a multi-leg claim still being received.
+  final isFailed = transaction.expiredUnmined && !giftCardClaimInFlight;
   final isPending =
-      !transaction.expiredUnmined &&
+      !isFailed &&
       (transaction.minedHeight == BigInt.zero || giftCardClaimInFlight);
-  final isFailed = transaction.expiredUnmined;
   final kind = transaction.txKind;
   final amount = giftCardAmountZatoshi ?? transaction.displayAmount;
   final isReceived = kind == 'received';

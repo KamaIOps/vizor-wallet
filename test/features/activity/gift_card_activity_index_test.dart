@@ -90,6 +90,51 @@ void main() {
     expect(metadata?.amountZatoshi, BigInt.from(100000000));
   });
 
+  for (final status in [
+    PaymentLinkReceivedStatus.receiving,
+    PaymentLinkReceivedStatus.received,
+  ]) {
+    test('prefers a live claim leg regardless of history order at $status', () {
+      final submittedAt = DateTime.utc(2026, 9, 7);
+      final record = PaymentLinkReceivedRecord.fromLink(_link('multi'))
+          .copyWith(
+            status: status,
+            destinationAccountUuid: 'receiver',
+            claimTxids: 'expired,active',
+            claimSubmittedAt: submittedAt,
+          );
+      final index = GiftCardActivityIndex.forAccount(
+        accountUuid: 'receiver',
+        createdRecords: [],
+        receivedRecords: [record],
+      );
+      final expired = _transaction(
+        txidHex: 'expired',
+        txKind: 'receiving',
+        expiredUnmined: true,
+      );
+      final active = _transaction(txidHex: 'active', txKind: 'received');
+      final unrelated = _transaction(txidHex: 'ordinary', txKind: 'received');
+      for (final history in [
+        [expired, active, unrelated],
+        [active, expired, unrelated],
+      ]) {
+        final rows = index.withPendingClaims(history);
+        expect(rows, [active, unrelated]);
+        final metadata = index.metadataFor(rows.first)!;
+        expect(metadata.stableId, 'gift-card:multi');
+        expect(metadata.activityTimestamp, submittedAt);
+        expect(metadata.amountZatoshi, record.amountZatoshi);
+      }
+      // Receiver history may not have detected the active leg yet.
+      final onlyExpired = index.withPendingClaims([expired]).single;
+      expect(
+        index.metadataFor(onlyExpired)!.isClaimInFlight,
+        status == PaymentLinkReceivedStatus.receiving,
+      );
+    });
+  }
+
   test('matches created and redeemed transactions for the active account', () {
     final createdTxid = List.filled(32, '12').join();
     final redeemedTxid = List.filled(32, '34').join();
@@ -241,11 +286,12 @@ VizorPaymentLink _link(String address) {
 rust_sync.TransactionInfo _transaction({
   required String txidHex,
   required String txKind,
+  bool expiredUnmined = false,
 }) {
   return rust_sync.TransactionInfo(
     txidHex: txidHex,
     minedHeight: BigInt.one,
-    expiredUnmined: false,
+    expiredUnmined: expiredUnmined,
     accountBalanceDelta: 0,
     fee: BigInt.zero,
     blockTime: BigInt.from(1800000000),

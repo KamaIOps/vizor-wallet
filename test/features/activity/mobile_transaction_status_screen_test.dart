@@ -192,6 +192,29 @@ Widget _app(
 }
 
 void main() {
+  testWidgets(
+    'an expired claim leg stays pending while the card is receiving',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(393, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _app(
+          _tx(kind: 'receiving', minedHeight: BigInt.zero, expired: true),
+          giftCard: _giftCard(
+            kind: GiftCardActivityKind.redeemed,
+            isClaimInFlight: true,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Redeeming a card...'), findsOneWidget);
+      expect(find.text('Redeeming...'), findsOneWidget);
+      expect(find.text('Failed'), findsNothing);
+      expect(find.text('Refunded'), findsNothing);
+    },
+  );
+
   testWidgets('redeemed receipt refreshes when only the network fee arrives', (
     tester,
   ) async {

@@ -33,6 +33,45 @@ void main() {
     },
   );
 
+  for (final received in [false, true]) {
+    test(
+      'pool enrichment preserves claim lifecycle when received=$received',
+      () async {
+        final storage = _FakePaymentLinkReceivedStorage();
+        final store = PaymentLinkReceivedStore(storage);
+        final link = _link();
+        final submittedAt = DateTime.utc(2026, 9, 7);
+        await store.saveReady(link);
+        await store.markClaimStarted(
+          address: link.address,
+          destinationAccountUuid: 'receiver',
+        );
+        await store.markReceiving(
+          address: link.address,
+          destinationAccountUuid: 'receiver',
+          claimTxids: 'a,b',
+          claimSubmittedAt: submittedAt,
+        );
+        if (received) await store.markReceived(address: link.address);
+        final before = (await store.load()).single;
+        await store.updateClaimDestinationPool(
+          address: link.address,
+          claimDestinationPool: 'ironwood',
+        );
+        final after = (await PaymentLinkReceivedStore(storage).load()).single;
+        expect(after.status, before.status);
+        expect(after.isClaimInFlight, !received);
+        expect(after.claimDestinationPool, 'ironwood');
+        expect(after.claimTxids, 'a,b');
+        expect(after.destinationAccountUuid, 'receiver');
+        expect(after.claimSubmittedAt, before.claimSubmittedAt);
+        expect(after.updatedAt, before.updatedAt);
+        expect(after.claimLink!.mnemonic, before.claimLink!.mnemonic);
+        expect(after.fiatSnapshot!.amount, before.fiatSnapshot!.amount);
+      },
+    );
+  }
+
   test('rejects a submitted record without its original claim time', () async {
     final storage = _FakePaymentLinkReceivedStorage();
     final store = PaymentLinkReceivedStore(storage);

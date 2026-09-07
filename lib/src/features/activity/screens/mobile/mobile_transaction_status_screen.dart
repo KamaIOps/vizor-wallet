@@ -258,7 +258,7 @@ class _MobileTransactionStatusScreenState
       (_transaction?.txKind ?? widget.args.txKind) == 'migration';
 
   _TxPhase _phaseFor(GiftCardActivityMetadata? giftCard) {
-    if (_phase == _TxPhase.succeeded && giftCard?.isClaimInFlight == true) {
+    if (giftCard?.isClaimInFlight == true) {
       return _TxPhase.pending;
     }
     return _phase;
@@ -344,7 +344,6 @@ class _MobileTransactionStatusScreenState
     final privacyModeEnabled = ref.watch(privacyModeProvider);
     final tx = _transaction;
     final detail = _detail;
-    final failed = _phase == _TxPhase.failed;
     final activeAccountUuid =
         ref.watch(accountProvider).value?.activeAccountUuid ??
         _activeAccountUuid;
@@ -356,6 +355,7 @@ class _MobileTransactionStatusScreenState
         : null;
     final giftCard =
         _resolvedGiftCard(tx, activeAccountUuid) ?? suppliedGiftCard;
+    final failed = _phaseFor(giftCard) == _TxPhase.failed;
 
     final amountText = _amountText(
       tx,

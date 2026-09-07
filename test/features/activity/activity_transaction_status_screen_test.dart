@@ -66,6 +66,39 @@ void main() {
     });
   }
 
+  testWidgets(
+    'an expired claim leg stays pending while the card is receiving',
+    (tester) async {
+      await _pumpScreen(
+        tester,
+        args: ActivityTransactionStatusArgs(
+          txidHex: _txidHex,
+          txKind: 'receiving',
+          initialTransaction: _transaction(
+            txKind: 'receiving',
+            minedHeight: BigInt.zero,
+            expiredUnmined: true,
+          ),
+          giftCard: GiftCardActivityMetadata(
+            kind: GiftCardActivityKind.redeemed,
+            amountZatoshi: BigInt.from(100000),
+            artworkId: 'ruby',
+            message: null,
+            isClaimInFlight: true,
+          ),
+        ),
+      );
+      final view = tester.widget<GiftCardActivityDetailView>(
+        find.byType(GiftCardActivityDetailView),
+      );
+      expect(view.isInFlight, isTrue);
+      expect(view.isFailed, isFalse);
+      expect(find.text('In progress'), findsOneWidget);
+      expect(find.text('Failed'), findsNothing);
+      expect(find.text('Refunded'), findsNothing);
+    },
+  );
+
   testWidgets('renders created Gift Card activity metadata', (tester) async {
     await _pumpScreen(
       tester,

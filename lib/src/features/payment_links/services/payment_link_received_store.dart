@@ -443,6 +443,28 @@ class PaymentLinkReceivedStore {
     });
   }
 
+  /// Enriches claim metadata without restarting an already received claim.
+  Future<PaymentLinkReceivedRecord> updateClaimDestinationPool({
+    required String address,
+    required String claimDestinationPool,
+  }) {
+    return _runExclusive(() async {
+      final records = await _loadUnlocked();
+      final existing = _findRequired(records, address);
+      if (existing.status != PaymentLinkReceivedStatus.receiving &&
+          existing.status != PaymentLinkReceivedStatus.received) {
+        throw StateError(
+          'Only a submitted claim can update its destination pool.',
+        );
+      }
+      final pool = claimDestinationPool.trim();
+      if (pool.isEmpty) throw ArgumentError.value(claimDestinationPool);
+      final updated = existing.copyWith(claimDestinationPool: pool);
+      await _writeRecords(_replaceByAddress(records, updated));
+      return updated;
+    });
+  }
+
   Future<PaymentLinkReceivedRecord> clearConfirmedClaimSecret({
     required String address,
   }) {

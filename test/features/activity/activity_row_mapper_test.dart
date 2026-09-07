@@ -63,6 +63,33 @@ void main() {
     },
   );
 
+  testWidgets('an expired visible leg does not fail an in-flight card', (
+    tester,
+  ) async {
+    final tx = _transaction(
+      txKind: 'receiving',
+      minedHeight: BigInt.zero,
+      expiredUnmined: true,
+    );
+    final row = await mapRow(
+      tester,
+      tx,
+      giftCardKind: GiftCardActivityKind.redeemed,
+      giftCardClaimInFlight: true,
+    );
+    expect(row.title, 'Redeeming a card ...');
+    expect(row.statusText, 'In progress');
+    expect(row.amountSubtitle, isNot('Refunded'));
+    final ordinary = await mapRow(tester, tx);
+    expect(ordinary.statusText, 'Failed');
+    final failedCard = await mapRow(
+      tester,
+      tx,
+      giftCardKind: GiftCardActivityKind.redeemed,
+    );
+    expect(failedCard.statusText, 'Failed');
+  });
+
   testWidgets('unconfirmed send renders as an in-flight loader row', (
     tester,
   ) async {

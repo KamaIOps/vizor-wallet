@@ -505,9 +505,13 @@ class _ActivityTransactionStatusScreenState
     required bool privacyModeEnabled,
   }) {
     final colors = context.colors;
-    final (statusText, statusIconName, statusColor) = tx.expiredUnmined
+    final isFailed = tx.expiredUnmined && !giftCard.isClaimInFlight;
+    final isInFlight =
+        !isFailed &&
+        (tx.minedHeight == BigInt.zero || giftCard.isClaimInFlight);
+    final (statusText, statusIconName, statusColor) = isFailed
         ? ('Failed', AppIcons.cancel, colors.text.destructive)
-        : tx.minedHeight == BigInt.zero || giftCard.isClaimInFlight
+        : isInFlight
         ? ('In progress', AppIcons.loader, colors.text.secondary)
         : ('Completed', AppIcons.checkCircle, colors.text.positiveStrong);
     final amountText = hideAmountIfPrivacyMode(
@@ -516,10 +520,8 @@ class _ActivityTransactionStatusScreenState
     );
     return GiftCardActivityDetailView(
       kind: giftCard.kind,
-      isInFlight:
-          !tx.expiredUnmined &&
-          (tx.minedHeight == BigInt.zero || giftCard.isClaimInFlight),
-      isFailed: tx.expiredUnmined,
+      isInFlight: isInFlight,
+      isFailed: isFailed,
       artwork: PaymentLinkCardArtwork.fromProtocolId(giftCard.artworkId),
       amountText: amountText,
       supportingText:

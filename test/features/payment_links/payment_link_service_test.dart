@@ -18,6 +18,8 @@ import 'package:zcash_wallet/src/features/payment_links/services/payment_link_re
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_service.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_transaction_matching.dart';
 import 'package:zcash_wallet/src/providers/account_provider.dart';
+import 'package:zcash_wallet/src/providers/sync_provider.dart';
+import '../../fakes/fake_sync_notifier.dart';
 import 'package:zcash_wallet/src/providers/app_security_provider.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 import 'package:zcash_wallet/src/rust/api/wallet.dart' as rust_wallet;
@@ -108,6 +110,7 @@ void main() {
     );
     expect(
       paymentLinkClaimDestinationPoolFromDetails(
+        claimTxids: displayTxid,
         details: [
           rust_sync.TransactionDetail(
             txidHex: storageTxid,
@@ -143,6 +146,7 @@ void main() {
     );
     expect(
       paymentLinkClaimDestinationPoolFromDetails(
+        claimTxids: displayTxid,
         details: const [],
         destinationAddress: 'destination-ua',
         expectedAmountZatoshi: BigInt.from(445000000),
@@ -150,6 +154,66 @@ void main() {
       isNull,
     );
   });
+
+  test(
+    'pool enrichment requires every claim detail and destination output',
+    () {
+      rust_sync.TransactionDetail detail(
+        String txid,
+        String pool, {
+        String address = 'destination',
+      }) => rust_sync.TransactionDetail(
+        txidHex: txid,
+        txKind: 'sent',
+        outputs: [
+          rust_sync.TransactionDetailOutput(
+            address: address,
+            amountZatoshi: BigInt.from(50000),
+            pool: pool,
+          ),
+        ],
+      );
+      String? pool(List<rust_sync.TransactionDetail> details) =>
+          paymentLinkClaimDestinationPoolFromDetails(
+            claimTxids: 'a,b',
+            details: details,
+            destinationAddress: 'destination',
+            expectedAmountZatoshi: BigInt.from(100000),
+          );
+      // Both missing local history and a failed detail lookup yield a subset.
+      expect(
+        paymentLinkClaimDetailTxids(claimTxids: 'a,b', historyTxids: ['a']),
+        ['a'],
+      );
+      expect(pool([detail('a', 'ironwood')]), isNull);
+      expect(
+        pool([detail('a', 'ironwood'), detail('unrelated', 'ironwood')]),
+        isNull,
+      );
+      expect(pool([detail('a', 'ironwood'), detail('a', 'ironwood')]), isNull);
+      expect(pool([detail('a', 'ironwood'), detail('b', 'orchard')]), isNull);
+      expect(pool([detail('a', 'ironwood'), detail('b', '')]), isNull);
+      expect(
+        pool([
+          detail('a', 'ironwood'),
+          detail('b', 'ironwood', address: 'other'),
+        ]),
+        isNull,
+      );
+      expect(
+        pool([detail('a', 'ironwood'), detail('b', 'ironwood')]),
+        'ironwood',
+      );
+      expect(
+        pool([
+          detail('b', 'ironwood'),
+          detail('a', 'ironwood'),
+          detail('other', 'orchard'),
+        ]),
+        'ironwood',
+      );
+    },
+  );
 
   group('claim destination hydration', () {
     final api = _ClaimDestinationRustApi();
@@ -176,6 +240,11 @@ void main() {
       container = ProviderContainer(
         overrides: [
           accountProvider.overrideWith(() => accounts),
+          syncProvider.overrideWith(
+            () => FakeSyncNotifier(
+              SyncState(scannedHeight: 100, chainTipHeight: 100),
+            ),
+          ),
           appSecurityProvider.overrideWith(_UnlockedSecurityNotifier.new),
           rpcEndpointProvider.overrideWith(_ClaimDestinationRpcNotifier.new),
           paymentLinkRecoveryStoreProvider.overrideWithValue(
@@ -233,6 +302,59 @@ void main() {
         expect(await unrelated.readAsString(), 'keep');
       },
     );
+
+    for (final missing in ['history', 'detail']) {
+      test(
+        'retries incomplete $missing after receipt without restarting the claim',
+        () async {
+          api.poolFixture = true;
+          api.localClaimTxids = missing == 'history' ? ['a'] : ['a', 'b'];
+          api.failingDetailTxids = missing == 'detail' ? {'b'} : {};
+          final store = container.read(paymentLinkReceivedStoreProvider);
+          final link = _link();
+          await store.saveReady(link);
+          await store.markClaimStarted(
+            address: link.address,
+            destinationAccountUuid: 'receiver',
+          );
+          await store.markReceiving(
+            address: link.address,
+            destinationAccountUuid: 'receiver',
+            claimTxids: 'a,b',
+          );
+          final claimDirectory = Directory(
+            '${supportDirectory.path}/${paymentLinkClaimWalletDirectoryName(link)}',
+          );
+          await claimDirectory.create();
+          await File(
+            '${claimDirectory.path}/zcash_wallet.db',
+          ).writeAsString('claim-wallet');
+          await container.read(syncProvider.future);
+
+          final incomplete = (await service.inspectReceivedLinkClaims(
+            await store.load(),
+          )).single;
+          expect(incomplete.status, PaymentLinkReceivedStatus.received);
+          expect(incomplete.claimDestinationPool, isNull);
+          expect(incomplete.claimLink, isNotNull);
+
+          api.localClaimTxids = ['a', 'b'];
+          api.failingDetailTxids = {};
+          final enriched = (await service.inspectReceivedLinkClaims(
+            await store.load(),
+          )).single;
+          expect(enriched.claimDestinationPool, 'ironwood');
+          expect(enriched.status, PaymentLinkReceivedStatus.received);
+          expect(enriched.isClaimInFlight, isFalse);
+          expect(enriched.updatedAt, incomplete.updatedAt);
+          expect(enriched.claimSubmittedAt, incomplete.claimSubmittedAt);
+          expect(enriched.claimLink, isNotNull);
+          final lookupCount = api.detailLookups;
+          await service.inspectReceivedLinkClaims(await store.load());
+          expect(api.detailLookups, lookupCount);
+        },
+      );
+    }
 
     test(
       'a locked wallet stops before looking up a claim destination',
@@ -1396,12 +1518,85 @@ class _ClaimDestinationRustApi implements RustLibApi {
   var lookupStarted = Completer<void>();
   Completer<String>? lookupGate;
   int failures = 0;
+  bool poolFixture = false;
+  List<String> localClaimTxids = [];
+  Set<String> failingDetailTxids = {};
+  int detailLookups = 0;
 
   @override
   Future<List<rust_wallet.AccountInfo>> crateApiWalletListAccounts({
     required String dbPath,
     required String network,
-  }) async => [];
+  }) async {
+    if (!poolFixture) return [];
+    final isClaimWallet = dbPath.contains(
+      paymentLinkClaimWalletDirectoryName(_link()),
+    );
+    return [
+      rust_wallet.AccountInfo(
+        uuid: isClaimWallet ? 'claim-wallet' : 'receiver',
+        name: 'Test',
+        unifiedAddress: isClaimWallet ? _link().address : 'u1receiveraddress',
+        isSeedAnchor: true,
+        isHardware: false,
+      ),
+    ];
+  }
+
+  @override
+  Future<void> crateApiSyncRunPaymentLinkClaimSync({
+    required String claimId,
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+  }) async {
+    if (!poolFixture) throw StateError('Unexpected claim sync');
+  }
+
+  @override
+  Future<List<rust_sync.TransactionInfo>> crateApiSyncGetTransactionHistory({
+    required String dbPath,
+    required String network,
+    required String accountUuid,
+    int? limit,
+  }) async {
+    if (!poolFixture) throw StateError('Unexpected history lookup');
+    final isClaimWallet = accountUuid == 'claim-wallet';
+    return [
+      for (final txid in isClaimWallet ? localClaimTxids : ['a', 'b'])
+        _transaction(
+          txid: txid,
+          txKind: isClaimWallet ? 'sent' : 'received',
+          minedHeight: 100,
+        ),
+    ];
+  }
+
+  @override
+  Future<rust_sync.TransactionDetail> crateApiSyncGetTransactionDetail({
+    required String dbPath,
+    required String network,
+    required String accountUuid,
+    required String txidHex,
+    required String txKind,
+  }) async {
+    if (!poolFixture) throw StateError('Unexpected detail lookup');
+    detailLookups++;
+    if (failingDetailTxids.contains(txidHex)) {
+      throw StateError('Detail unavailable');
+    }
+    return rust_sync.TransactionDetail(
+      txidHex: txidHex,
+      txKind: txKind,
+      outputs: [
+        rust_sync.TransactionDetailOutput(
+          address: 'u1receiveraddress',
+          amountZatoshi: BigInt.from(50000),
+          pool: 'ironwood',
+        ),
+      ],
+    );
+  }
 
   @override
   Future<void> crateApiVotingResetVotingSessionState({
@@ -1416,6 +1611,10 @@ class _ClaimDestinationRustApi implements RustLibApi {
     lookupStarted = Completer<void>();
     lookupGate = null;
     failures = 0;
+    poolFixture = false;
+    localClaimTxids = [];
+    failingDetailTxids = {};
+    detailLookups = 0;
   }
 
   @override
