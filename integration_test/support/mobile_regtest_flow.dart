@@ -1011,6 +1011,7 @@ Future<void> mineRegtestBlocks(int blocks) async {
   while (DateTime.now().isBefore(deadline)) {
     final lightwalletdHeight = await rust_wallet.getLatestBlockHeight(
       lightwalletdUrl: mobileE2eLightwalletdUrl,
+      network: 'regtest',
     );
     if (lightwalletdHeight.toInt() >= targetHeight) {
       logE2e('lightwalletd reached mined height $targetHeight');
