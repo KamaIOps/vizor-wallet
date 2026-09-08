@@ -81,9 +81,12 @@ class FdroidMetadataTest(unittest.TestCase):
         self.assertIn(f"AllowedAPKSigningKeys: {GENERATOR.SIGNING_SHA256}", rendered)
         self.assertIn("AutoUpdateMode: Version mobile/v%v", rendered)
         self.assertIn(
-            "git -C $$flutter$$ checkout -f "
-            "db50e20168db8fee486b9abf32fc912de3bc5b6a",
+            "flutterVersion=$(sed -n -E ",
             rendered,
+        )
+        self.assertEqual(
+            rendered.count("git -C $$flutter$$ checkout -f $flutterVersion"),
+            3,
         )
         self.assertEqual(
             rendered.count("cargo fetch --locked --manifest-path rust/Cargo.toml"),
@@ -95,33 +98,20 @@ class FdroidMetadataTest(unittest.TestCase):
             ),
             3,
         )
-        self.assertEqual(rendered.count(f"flutter@{GENERATOR.FLUTTER_VERSION}"), 3)
-        self.assertNotIn("flutter@stable", rendered)
+        self.assertEqual(rendered.count("flutter@stable"), 3)
+        self.assertNotIn(
+            "db50e20168db8fee486b9abf32fc912de3bc5b6a",
+            rendered,
+        )
         self.assertNotIn("rustup@", rendered)
         self.assertNotIn("source $CARGO_HOME/env", rendered)
-        self.assertEqual(
-            rendered.count(
-                'echo "deb https://deb.debian.org/debian trixie main" > '
-                "/etc/apt/sources.list.d/trixie.list"
-            ),
-            3,
-        )
+        self.assertNotIn("sources.list.d/trixie.list", rendered)
         self.assertEqual(
             rendered.count("apt-get install -y build-essential rustup"),
             3,
         )
-        self.assertEqual(
-            rendered.count(
-                "apt-get install -y -t trixie openjdk-21-jdk-headless"
-            ),
-            3,
-        )
-        self.assertEqual(
-            rendered.count(
-                "update-java-alternatives -s java-1.21.0-openjdk-amd64"
-            ),
-            3,
-        )
+        self.assertNotIn("apt-get install -y -t trixie", rendered)
+        self.assertNotIn("update-java-alternatives", rendered)
         self.assertEqual(
             rendered.count("export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64"),
             6,
@@ -147,8 +137,9 @@ class FdroidMetadataTest(unittest.TestCase):
             rendered.count(
                 "export CARGO_HOME=/tmp/vizor-android-reproducible/cargo-home"
             ),
-            6,
+            3,
         )
+        self.assertNotIn("export GRADLE_USER_HOME=", rendered)
         self.assertIn("  TetheredNet:", rendered)
         self.assertEqual(rendered.count("functions.vizor.cash"), 2)
         self.assertNotIn("third-party or Vizor-operated", rendered)
