@@ -6999,6 +6999,12 @@ void main() {
       find.byKey(const ValueKey('swap_receive_amount_field')),
       '105.26',
     );
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_receive_amount_field')),
+      '105.267',
+    );
+    await tester.pump();
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '105.26');
     await _enterDestinationText(
       tester,
       '0x52908400098527886e0f7030069857d2e4169ee7',
