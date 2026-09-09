@@ -516,6 +516,7 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
   // address is still validating; lets us bounce back to the recipient step if
   // the prefilled address turns out invalid (see _maybeFallBackToRecipientStep).
   var _amountJumpPendingAddressCheck = false;
+  var _paymentRequestDetached = false;
   var _phase = _SendPhase.compose;
   var _isConfirmingSend = false;
 
@@ -791,6 +792,14 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
 
   void _handleAddressChanged({bool clearContact = true}) {
     setState(() {
+      if (widget.isPaymentRequest &&
+          !_paymentRequestDetached &&
+          _addressController.text.trim() != widget.initialRecipient?.trim()) {
+        // Changing the payee abandons the request. Typing the old address again
+        // must not resurrect its framing or the discarded payment fields.
+        _paymentRequestDetached = true;
+        _clearComposedPayment();
+      }
       if (clearContact) {
         _contactLabel = null;
         _contactPictureId = null;
@@ -925,20 +934,46 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
         // The amount above is a copy. Keep this page's in step with the
         // pushed page as it is edited, so a pop that carries no value
         // (system back, edge swipe) still leaves the edit here.
-        onAmountEdited: (edited) {
-          if (mounted) _adoptAmountStepResult(edited);
-        },
-        onMemoEdited: (memo, preserveWhitespace) {
-          if (!mounted) return;
-          setState(() {
-            _memo = memo;
-            _preserveMemoWhitespace = preserveWhitespace;
-          });
-        },
+        onAmountEdited: _isAnsweringPaymentRequest
+            ? (edited) {
+                if (mounted && _isAnsweringPaymentRequest) {
+                  _adoptAmountStepResult(edited);
+                }
+              }
+            : null,
+        onMemoEdited: _isAnsweringPaymentRequest
+            ? (memo, preserveWhitespace) {
+                if (!mounted || !_isAnsweringPaymentRequest) return;
+                setState(() {
+                  _memo = memo;
+                  _preserveMemoWhitespace = preserveWhitespace;
+                });
+              }
+            : null,
       ),
     );
     if (!mounted) return;
-    _adoptAmountStepResult(result);
+    if (_isAnsweringPaymentRequest) {
+      _adoptAmountStepResult(result);
+    } else {
+      setState(_clearComposedPayment);
+    }
+  }
+
+  // Called inside setState when the payer cancels the amount step or changes
+  // a request's recipient. Invalidate pending quotes as well as visible input.
+  void _clearComposedPayment() {
+    _validateSeq++;
+    _clearMaxMode();
+    _invalidateReviewFeeQuote();
+    _amountText = '';
+    _fiatAmountText = '';
+    _amountInputMode = MobileSendAmountInputMode.zec;
+    _amountError = '';
+    _memo = '';
+    _preserveMemoWhitespace = false;
+    _error = null;
+    _setAmountControllerText('');
   }
 
   /// The amount this screen would hand back to the page below if it popped now.
@@ -1703,6 +1738,7 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
   /// did not ask for.
   bool get _isAnsweringPaymentRequest =>
       widget.isPaymentRequest &&
+      !_paymentRequestDetached &&
       (widget.initialRecipient?.trim() ?? '') == _addressController.text.trim();
 
   /// The request's label, or null once the recipient no longer matches.
@@ -1915,6 +1951,9 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
         }
       case _SendStep.amount:
         _amountFocus.unfocus();
+        if (!_isAnsweringPaymentRequest) {
+          setState(_clearComposedPayment);
+        }
         if (widget.useRouteSteps) {
           if (_canPopRoute) {
             // Normal flow: amount is a pushed /send/amount page — pop it back

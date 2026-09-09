@@ -553,6 +553,7 @@ Widget _sendFlowRouterApp({
           loadWalletDbPath: () async => '/tmp/zcash-test',
           openScanner: (_, {required String networkName}) async => null,
           initialRecipient: initialRecipient,
+          initialAmountStep: isPaymentRequest,
           initialAmount: initialAmount,
           initialMemo: initialMemo,
           preserveInitialMemoWhitespace: preserveInitialMemoWhitespace,
@@ -1045,6 +1046,7 @@ void main() {
         initialLocation: '/send',
         initialRecipient: _shieldedAddress,
         initialAmount: '1.5',
+        isPaymentRequest: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -1075,6 +1077,7 @@ void main() {
         initialLocation: '/send',
         initialRecipient: _shieldedAddress,
         initialAmount: '1.5',
+        isPaymentRequest: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -1126,6 +1129,7 @@ void main() {
         initialLocation: '/send',
         initialRecipient: _shieldedAddress,
         initialAmount: '1.5',
+        isPaymentRequest: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -1178,6 +1182,148 @@ void main() {
     expect(find.text('Select Recipient'), findsOneWidget);
     expect(find.text('Address validation failed'), findsOneWidget);
     expect(find.text('Enter Amount'), findsNothing);
+  });
+
+  for (final systemBack in [false, true]) {
+    testWidgets(
+      'ordinary amount cancellation resets USD input (systemBack=$systemBack)',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          await tester.pumpWidget(_sendFlowRouterApp());
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('mobile_send_open_from_home')),
+          );
+          await tester.pumpAndSettle();
+          await _toAmountStep(tester, _shieldedAddress);
+          await tester.tap(
+            find.byKey(const ValueKey('mobile_send_amount_mode_toggle')),
+          );
+          await tester.pumpAndSettle();
+          await _enterAmount(tester, '20');
+          expect(
+            find.bySemanticsLabel(RegExp('Enter amount in ZEC')),
+            findsOneWidget,
+          );
+          if (systemBack) {
+            await tester.binding.handlePopRoute();
+          } else {
+            await tester.tap(find.bySemanticsLabel('Back'));
+          }
+          await tester.pumpAndSettle();
+          await _enterAddress(tester, _transparentAddress);
+          await tester.tap(find.byKey(const ValueKey('mobile_send_continue')));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<TextField>(
+                  find.byKey(const ValueKey('mobile_send_amount_input')),
+                )
+                .controller!
+                .text,
+            isEmpty,
+          );
+          expect(
+            find.bySemanticsLabel(RegExp('Enter amount in USD')),
+            findsOneWidget,
+          );
+          expect(find.text('Finish & review'), findsNothing);
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
+  }
+
+  testWidgets(
+    'changing request recipient discards amount memo and request framing',
+    (tester) async {
+      await tester.pumpWidget(
+        _sendFlowRouterApp(
+          initialLocation: '/send',
+          initialRecipient: _shieldedAddress,
+          initialAmount: '1.5',
+          initialMemo: 'request memo',
+          isPaymentRequest: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await _enterAddress(tester, _transparentAddress);
+      // Returning to the original address must not resurrect a discarded request.
+      await _enterAddress(tester, _shieldedAddress);
+      await tester.tap(find.byKey(const ValueKey('mobile_send_continue')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('mobile_send_amount_input')),
+            )
+            .controller!
+            .text,
+        isEmpty,
+      );
+      await _enterAmount(tester, '2');
+      await tester.tap(find.byKey(const ValueKey('mobile_send_review_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Review Send'), findsOneWidget);
+      expect(find.text('Review Payment'), findsNothing);
+      expect(find.text('request memo'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'amountless request keeps memo when returning through recipient',
+    (tester) async {
+      await tester.pumpWidget(
+        _sendFlowRouterApp(
+          initialLocation: '/send',
+          initialRecipient: _shieldedAddress,
+          initialMemo: 'amountless request memo',
+          isPaymentRequest: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Enter Amount'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('mobile_send_continue')));
+      await tester.pumpAndSettle();
+      await _enterAmount(tester, '1');
+      await tester.tap(find.byKey(const ValueKey('mobile_send_review_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Review Payment'), findsOneWidget);
+      expect(find.text('amountless request memo'), findsOneWidget);
+    },
+  );
+
+  testWidgets('ordinary root amount cancellation resets input in place', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _sendFlowRouterApp(
+        initialLocation: '/send',
+        initialRecipient: _shieldedAddress,
+        initialAmount: '1.5',
+        initialMemo: 'old memo',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mobile_send_continue')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('mobile_send_amount_input')),
+          )
+          .controller!
+          .text,
+      isEmpty,
+    );
   });
 
   testWidgets('route-step mode lets amount and review pop as pages', (
@@ -1241,43 +1387,56 @@ void main() {
     expect(find.text('edited on review'), findsOneWidget);
   });
 
-  testWidgets('a memo edited on the review reaches the recipient page and '
-      'keeps Continue usable', (tester) async {
-    await tester.pumpWidget(_sendFlowRouterApp());
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('mobile_send_open_from_home')));
-    await tester.pumpAndSettle();
-    await _toReviewStep(tester);
+  testWidgets(
+    'ordinary send clears the reviewed memo after cancelling amount',
+    (tester) async {
+      await tester.pumpWidget(_sendFlowRouterApp());
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('mobile_send_open_from_home')),
+      );
+      await tester.pumpAndSettle();
+      await _toReviewStep(tester);
 
-    await tester.tap(find.byKey(const ValueKey('mobile_send_memo_row')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('mobile_send_memo_editable')),
-      'relayed memo',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('mobile_send_memo_save')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('mobile_send_memo_row')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('mobile_send_memo_editable')),
+        'relayed memo',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('mobile_send_memo_save')));
+      await tester.pumpAndSettle();
 
-    // Back to the amount page: its quote was for the old memo, so Continue
-    // must re-quote rather than dead-end.
-    await tester.tap(find.bySemanticsLabel('Back'));
-    await tester.pumpAndSettle();
-    expect(find.text('Enter Amount'), findsOneWidget);
-    expect(find.text('Finish & review'), findsOneWidget);
+      // Back to the amount page: its quote was for the old memo, so Continue
+      // must re-quote rather than dead-end.
+      await tester.tap(find.bySemanticsLabel('Back'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter Amount'), findsOneWidget);
+      expect(find.text('Finish & review'), findsOneWidget);
 
-    // Back again to the recipient page, then forward twice: the memo edited
-    // two pages up must still be the one reviewed.
-    await tester.tap(find.bySemanticsLabel('Back'));
-    await tester.pumpAndSettle();
-    expect(find.text('Select Recipient'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('mobile_send_continue')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('mobile_send_review_button')));
-    await tester.pumpAndSettle();
-    expect(find.text('Review Send'), findsOneWidget);
-    expect(find.text('relayed memo'), findsOneWidget);
-  });
+      // Cancelling the amount step discards the memo as well as the amount.
+      await tester.tap(find.bySemanticsLabel('Back'));
+      await tester.pumpAndSettle();
+      expect(find.text('Select Recipient'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('mobile_send_continue')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('mobile_send_amount_input')),
+            )
+            .controller!
+            .text,
+        isEmpty,
+      );
+      await _enterAmount(tester, '1.5');
+      await tester.tap(find.byKey(const ValueKey('mobile_send_review_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Review Send'), findsOneWidget);
+      expect(find.text('relayed memo'), findsNothing);
+    },
+  );
 
   testWidgets('a send route pushed from home still pops on system back', (
     tester,
