@@ -51,6 +51,42 @@ class FigmaCompareScenario {
 /// because they are already used to review the same UI states.
 const figmaCompareScenarios = <FigmaCompareScenario>[
   FigmaCompareScenario(
+    id: 'gift-card-claim-rejected',
+    description: 'gift-card-claim-rejected',
+    builder: buildClaimRejectedUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-claim-busy',
+    description: 'gift-card-claim-busy',
+    builder: buildClaimBusyUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-archived-outcome',
+    description: 'gift-card-archived-outcome',
+    builder: buildClaimArchivedUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-outcome-list',
+    description: 'gift-card-outcome-list',
+    builder: buildClaimOutcomeListUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-archive-closed',
+    description: 'gift-card-archive-closed',
+    builder: buildClaimArchiveClosedUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-archive-open',
+    description: 'gift-card-archive-open',
+    builder: buildClaimArchiveOpenUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
     id: 'gift-card-claimed-elsewhere',
     description: 'Gift Card already claimed outcome',
     builder: buildClaimedElsewhereUseCase,
