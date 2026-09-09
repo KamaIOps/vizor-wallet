@@ -31,7 +31,7 @@ void main() {
       await openPaymentLinksFromSettings(tester);
       await openReceivedTab(tester);
       expect(find.text('View card'), findsNothing);
-      await tapPaymentLinkText(tester, 'View archive');
+      await tapPaymentLinkText(tester, 'Archived (1)');
       await tapPaymentLinkText(tester, 'View card');
       await expectOutcomeText(tester, 'Already claimed');
       await tapPaymentLinkText(tester, 'Restore card');

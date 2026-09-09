@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:zcash_wallet/src/features/payment_links/widgets/payment_link_archive_header.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
@@ -56,7 +57,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(operations.receivedRecords.single.archived, isTrue);
       expect(find.text('View card'), findsNothing);
-      await tester.tap(find.text('View archive'));
+      final disclosure = find.byType(PaymentLinkArchiveHeader);
+      expect(tester.getSize(disclosure).height, greaterThanOrEqualTo(48));
+      expect(
+        tester.widget<PaymentLinkArchiveHeader>(disclosure).expanded,
+        isFalse,
+      );
+      await tester.tapAt(
+        tester.getRect(disclosure).centerRight - const Offset(8, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<PaymentLinkArchiveHeader>(disclosure).expanded,
+        isTrue,
+      );
+      await tester.tap(find.text('Archived (1)'));
+      await tester.pumpAndSettle();
+      expect(find.text('View card'), findsNothing);
+      await tester.tap(find.text('Archived (1)'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('View card'));
       await tester.pumpAndSettle();

@@ -14,7 +14,6 @@ import '../../../core/layout/app_layout.dart';
 import '../../../core/layout/app_main_sidebar.dart';
 import '../../../core/layout/mobile/app_mobile_sheet.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
@@ -36,6 +35,7 @@ import '../services/payment_link_received_store.dart';
 import '../services/payment_link_recovery_store.dart';
 import '../services/payment_link_service.dart';
 import '../widgets/payment_link_claim_outcome_view.dart';
+import '../widgets/payment_link_archive_header.dart';
 import '../widgets/payment_link_card_flip.dart';
 import '../widgets/payment_link_card_selector_rail.dart';
 import '../widgets/payment_link_confetti.dart';
@@ -2190,14 +2190,13 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       if (_visibleReceivedCards.any((r) => r.archived))
         PaymentLinkCardsSection(
           label: 'Archived',
+          header: PaymentLinkArchiveHeader(
+            count: _visibleReceivedCards.where((r) => r.archived).length,
+            expanded: _showArchivedCards,
+            onToggle: () =>
+                setState(() => _showArchivedCards = !_showArchivedCards),
+          ),
           cards: [
-            AppButton(
-              onPressed: () =>
-                  setState(() => _showArchivedCards = !_showArchivedCards),
-              child: Text(
-                _showArchivedCards ? 'Close archive' : 'View archive',
-              ),
-            ),
             if (_showArchivedCards)
               ..._visibleReceivedCards
                   .where((r) => r.archived)

@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import '../src/core/widgets/app_button.dart';
+import '../src/features/payment_links/widgets/payment_link_archive_header.dart';
 import '../src/core/theme/app_theme.dart';
 import '../src/features/payment_links/widgets/payment_link_desktop_views.dart';
 import '../src/features/payment_links/widgets/mobile/payment_link_mobile_views.dart';
@@ -109,13 +109,12 @@ Widget _outcomeList({bool archive = false, bool expanded = false}) {
     if (archive)
       PaymentLinkCardsSection(
         label: 'Archived',
-        cards: [
-          AppButton(
-            onPressed: () {},
-            child: Text(expanded ? 'Close archive' : 'View archive'),
-          ),
-          if (expanded) row('Already claimed', 'View card'),
-        ],
+        header: PaymentLinkArchiveHeader(
+          count: 1,
+          expanded: expanded,
+          onToggle: () {},
+        ),
+        cards: [if (expanded) row('Already claimed', 'View card')],
       ),
   ];
   return _wrapOutcome(

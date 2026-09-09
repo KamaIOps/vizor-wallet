@@ -1248,12 +1248,13 @@ class _PaymentLinkCardsDesktopViewState
               const SizedBox(height: AppSpacing.base),
               for (final (index, section) in widget.sections.indexed) ...[
                 if (index > 0) const SizedBox(height: AppSpacing.sm),
-                Text(
-                  section.label,
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: context.colors.text.secondary,
-                  ),
-                ),
+                section.header ??
+                    Text(
+                      section.label,
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: context.colors.text.secondary,
+                      ),
+                    ),
                 const SizedBox(height: AppSpacing.xxs),
                 ...section.cards,
               ],

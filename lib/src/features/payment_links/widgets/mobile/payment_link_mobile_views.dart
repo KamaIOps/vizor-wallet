@@ -364,7 +364,9 @@ class PaymentLinkCardsMobileView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasCards = sections.any((section) => section.cards.isNotEmpty);
+    final hasCards = sections.any(
+      (section) => section.cards.isNotEmpty || section.header != null,
+    );
     return _MobilePaymentLinkFrame(
       title: screenTitle,
       onBack: onBack,
@@ -413,15 +415,17 @@ class PaymentLinkCardsMobileView extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: AppSpacing.base),
                       children: [
                         for (final (index, section) in sections.indexed)
-                          if (section.cards.isNotEmpty) ...[
+                          if (section.cards.isNotEmpty ||
+                              section.header != null) ...[
                             if (index > 0)
                               const SizedBox(height: AppSpacing.sm),
-                            Text(
-                              section.label,
-                              style: AppTypography.bodyMedium.copyWith(
-                                color: context.colors.text.secondary,
-                              ),
-                            ),
+                            section.header ??
+                                Text(
+                                  section.label,
+                                  style: AppTypography.bodyMedium.copyWith(
+                                    color: context.colors.text.secondary,
+                                  ),
+                                ),
                             const SizedBox(height: AppSpacing.xxs),
                             // Rows sit on the page like the desktop list —
                             // no surface card around a section.
