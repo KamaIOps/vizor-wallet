@@ -11,6 +11,7 @@ import android.os.PersistableBundle
 import android.os.SystemClock
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.util.UUID
 
 internal class SensitiveClipboardHandler(private val context: Context) {
     private val clipboardManager =
@@ -44,10 +45,12 @@ internal class SensitiveClipboardHandler(private val context: Context) {
         val expirationSeconds =
             ((arguments["expirationSeconds"] as? Number)?.toLong() ?: DEFAULT_EXPIRATION_SECONDS)
                 .coerceIn(1L, MAX_EXPIRATION_SECONDS)
+        val token = UUID.randomUUID().toString()
         val clip = ClipData.newPlainText("", text)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             clip.description.extras = PersistableBundle().apply {
                 putBoolean(SENSITIVE_CLIPBOARD_KEY, true)
+                putString(COPY_TOKEN_KEY, token)
             }
         }
         clipboardManager.setPrimaryClip(clip)
@@ -56,7 +59,7 @@ internal class SensitiveClipboardHandler(private val context: Context) {
         val expirationMillis = expirationSeconds * 1_000L
         val expiresAt = SystemClock.elapsedRealtime() + expirationMillis
         pendingExpiration = PendingExpiration(
-            text = text,
+            token = token,
             copyGeneration = generation,
             expiresAtElapsedRealtime = expiresAt
         )
@@ -68,27 +71,11 @@ internal class SensitiveClipboardHandler(private val context: Context) {
     }
 
     /**
-     * Retires the pending expiry, but only on evidence that the secret is gone.
-     *
-     * A clipboard read cannot always be trusted. From Android 10 the system
-     * serves `getPrimaryClip()` only to the app that owns the focused window,
-     * and it refuses by returning **null rather than throwing**. A null read
-     * therefore cannot tell "the clipboard is empty" apart from "we are not
-     * allowed to look", and the second reading means the secret is still on the
-     * system clipboard where every installed app can read it.
-     *
-     * So the pending entry, and the plaintext it carries, is kept whenever the
-     * answer is unknown -- no window focus, `SecurityException`, null clip --
-     * and released only on proof that the secret is gone: a readable clip
-     * holding something else, or one this method has just cleared. Keeping a
-     * secret in this process a while longer is the cheap mistake; leaving it on
-     * the system clipboard with nothing scheduled to remove it is not
-     * recoverable.
-     *
-     * Every "keep" is a promise of a later retry, which is why MainActivity
-     * calls [retryExpiredClear] from `onWindowFocusChanged` as well as
-     * `onResume`: `onResume` runs before the window regains focus, so on its
-     * own it would never see a readable clipboard.
+     * Inspect metadata only: reading the body can show an Android clipboard-access
+     * toast for text the user copied in another app. Metadata still requires focus
+     * on Android 10+, so denied/null reads retain the token for a foreground retry.
+     * MainActivity retries on resume and window focus (resume can precede focus).
+     * No plaintext is retained by the expiration callback.
      */
     private fun clearIfExpired(generation: Long) {
         val pending = pendingExpiration ?: return
@@ -98,30 +85,29 @@ internal class SensitiveClipboardHandler(private val context: Context) {
         // pending entry on it.
         if (!canReadClipboard()) return
 
-        val currentText = try {
-            clipboardManager.primaryClip
-                ?.takeIf { it.itemCount > 0 }
-                ?.getItemAt(0)
-                ?.text
-                ?.toString()
+        val description = try {
+            clipboardManager.primaryClipDescription
         } catch (_: SecurityException) {
             return
-        }
-        // Focus can be lost between the check above and the read, and OEMs vary
-        // in what they return when they refuse, so a null here is still
-        // "unknown", not "empty".
-        if (currentText == null) return
+        } ?: return // Empty and access-denied cannot be distinguished here.
 
-        if (currentText == pending.text) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                clipboardManager.clearPrimaryClip()
-            } else {
-                clipboardManager.setPrimaryClip(ClipData.newPlainText("", ""))
+        if (description.extras?.getString(COPY_TOKEN_KEY) == pending.token) {
+            // Focus may have changed during the metadata read. Extras identify a
+            // copy, not an authenticated owner; Android offers no atomic
+            // compare-and-clear API, so this remains best-effort.
+            if (!canReadClipboard()) return
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    clipboardManager.clearPrimaryClip()
+                } else {
+                    clipboardManager.setPrimaryClip(ClipData.newPlainText("", ""))
+                }
+            } catch (_: SecurityException) {
+                return
             }
         }
-        // Either the secret was just cleared or the clipboard readably holds
-        // something else. Both mean it is off the clipboard, so the entry and
-        // its plaintext can go.
+        // A different/missing token means the clipboard was replaced. Retire
+        // this expiry without touching the replacement, even if its text matches.
         if (pendingExpiration === pending) {
             pendingExpiration = null
         }
@@ -141,13 +127,14 @@ internal class SensitiveClipboardHandler(private val context: Context) {
     }
 
     private data class PendingExpiration(
-        val text: String,
+        val token: String,
         val copyGeneration: Long,
         val expiresAtElapsedRealtime: Long
     )
 
     companion object {
         const val CHANNEL = "com.zcash.wallet/sensitive_clipboard"
+        private const val COPY_TOKEN_KEY = "com.keplr.vizor.extra.CLIPBOARD_COPY_TOKEN"
         private const val SENSITIVE_CLIPBOARD_KEY = "android.content.extra.IS_SENSITIVE"
         private const val DEFAULT_EXPIRATION_SECONDS = 60L
         private const val MAX_EXPIRATION_SECONDS = 24L * 60L * 60L
