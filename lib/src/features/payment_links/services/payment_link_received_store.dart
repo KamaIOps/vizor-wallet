@@ -145,7 +145,8 @@ class PaymentLinkReceivedRecord {
   final bool archived;
 
   /// Local transactions that predate this attempt, excluded from recovery.
-  final List<String> claimPriorTxids;
+  /// Null means an older record has no baseline; [] is a known empty baseline.
+  final List<String>? claimPriorTxids;
 
   bool get canArchive =>
       !isClaimInFlight &&
@@ -175,7 +176,7 @@ class PaymentLinkReceivedRecord {
     String? claimDestinationPool,
     PaymentLinkAvailability? availability,
     bool? archived,
-    List<String>? claimPriorTxids,
+    Object? claimPriorTxids = _fieldNotProvided,
   }) {
     return PaymentLinkReceivedRecord(
       network: network,
@@ -201,7 +202,9 @@ class PaymentLinkReceivedRecord {
       claimDestinationPool: claimDestinationPool ?? this.claimDestinationPool,
       availability: availability ?? this.availability,
       archived: archived ?? this.archived,
-      claimPriorTxids: claimPriorTxids ?? this.claimPriorTxids,
+      claimPriorTxids: identical(claimPriorTxids, _fieldNotProvided)
+          ? this.claimPriorTxids
+          : claimPriorTxids as List<String>?,
     );
   }
 }
@@ -353,7 +356,7 @@ class PaymentLinkReceivedStore {
         availability:
             existing?.availability ?? PaymentLinkAvailability.unchecked,
         archived: existing?.archived ?? false,
-        claimPriorTxids: existing?.claimPriorTxids ?? const [],
+        claimPriorTxids: existing == null ? const [] : existing.claimPriorTxids,
       );
       await _writeRecords(_replaceByAddress(records, record));
       return record;
@@ -459,7 +462,7 @@ class PaymentLinkReceivedStore {
         status: PaymentLinkReceivedStatus.submitting,
         availability: PaymentLinkAvailability.checking,
         archived: false,
-        claimPriorTxids: List.unmodifiable(priorTxids),
+        claimPriorTxids: List<String>.unmodifiable(priorTxids),
         destinationAccountUuid: normalizedAccountUuid,
         claimTxids: null,
         updatedAt: submissionTime,
@@ -771,6 +774,9 @@ PaymentLinkReceivedRecord _recordFromJson(Object? value) {
   final artworkId = value['artworkId'];
   final message = value['message'];
   final statusRaw = value['status'];
+  final availabilityRaw = value['availability'];
+  final archivedRaw = value['archived'];
+  final priorTxidsRaw = value['claimPriorTxids'];
   final claimLinkRaw = value['claimLink'];
   final destinationAccountUuid = value['destinationAccountUuid'];
   final claimTxids = value['claimTxids'];
@@ -875,6 +881,30 @@ PaymentLinkReceivedRecord _recordFromJson(Object? value) {
     );
   }
 
+  // Missing or null new fields are supported for older development records.
+  // Present but malformed values still fail the entire read rather than
+  // silently changing a claim's recovery or visibility semantics.
+  if ((availabilityRaw != null && availabilityRaw is! String) ||
+      (archivedRaw != null && archivedRaw is! bool) ||
+      (priorTxidsRaw != null &&
+          (priorTxidsRaw is! List ||
+              priorTxidsRaw.any((id) => id is! String)))) {
+    throw const PaymentLinkReceivedStoreFormatException(
+      'Received-card outcome fields are invalid.',
+    );
+  }
+  final availability = availabilityRaw == null
+      ? switch (status) {
+          PaymentLinkReceivedStatus.readyToClaim =>
+            PaymentLinkAvailability.unchecked,
+          PaymentLinkReceivedStatus.submitting =>
+            PaymentLinkAvailability.checking,
+          PaymentLinkReceivedStatus.receiving ||
+          PaymentLinkReceivedStatus.received =>
+            PaymentLinkAvailability.available,
+        }
+      : PaymentLinkAvailability.values.byName(availabilityRaw as String);
+
   return PaymentLinkReceivedRecord(
     network: network,
     address: address,
@@ -884,13 +914,11 @@ PaymentLinkReceivedRecord _recordFromJson(Object? value) {
     message: message as String?,
     fiatSnapshot: PaymentLinkFiatSnapshot.fromPayload(value['fiat']),
     status: status,
-    availability: PaymentLinkAvailability.values.byName(
-      value['availability'] as String,
-    ),
-    archived: value['archived'] as bool,
-    claimPriorTxids: List<String>.unmodifiable(
-      (value['claimPriorTxids'] as List).cast<String>(),
-    ),
+    availability: availability,
+    archived: (archivedRaw as bool?) ?? false,
+    claimPriorTxids: priorTxidsRaw == null
+        ? null
+        : List<String>.unmodifiable((priorTxidsRaw as List).cast<String>()),
     claimLink: claimLink,
     destinationAccountUuid: destinationAccountUuid as String?,
     claimTxids: claimTxids as String?,

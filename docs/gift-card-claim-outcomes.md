@@ -17,7 +17,8 @@ chain, not by the order of taps in Vizor.
   Unspent top-ups prevent that conclusion. Pending scan ranges limit the
   confirmation height. `sent_notes` plus the local `transactions.created`
   marker identifies transactions eligible for metadata recovery. OVK-recovered
-  outgoing notes alone cannot distinguish competitors sharing the card's keys. Each attempt persists the prior
+  outgoing notes alone cannot distinguish competitors sharing the card's keys.
+  Each attempt persists the prior
   local transaction IDs before submission, so restart recovery includes failed
   legs and excludes older attempts.
 - `Check status` scans without retransmitting. Foreground background recovery
@@ -32,10 +33,42 @@ chain, not by the order of taps in Vizor.
   a card changes only its visibility; archived cards can be restored. Active
   claims cannot be hidden.
 
-The stored Gift Card format is unreleased. Availability and archive fields are
-part of the current format; no migration from earlier experimental records is
-provided. This change does not resolve the separate sender-side ambiguous draft
-export/account-deletion flow.
+## Existing development data
+
+The three outcome fields are optional when reading older records from
+`zcash_gift_card_received_v1` (payload version remains 1):
+
+- Missing/null `availability` defaults to `unchecked` for ready cards,
+  `checking` for submitting cards, and `available` for receiving/received cards
+  (their existing transaction lifecycle still controls the displayed status).
+- Missing/null `archived` defaults to `false`.
+- Missing/null `claimPriorTxids` remains **unknown**, distinct from a known empty
+  list. Loading, copying, and saving the card must preserve that distinction.
+  Starting a new claim captures a fresh baseline before submission.
+
+Existing ready cards can be checked and claimed normally. Existing receiving
+cards with saved claim transaction IDs continue receipt/reorg recovery without
+requiring the baseline. An old `submitting` card with neither transaction IDs
+nor a baseline remains `Checking result`: automatic/manual checks do not adopt
+older transactions, retransmit them, or release account-deletion protection.
+Its bearer link and retained claim database remain available for manual
+investigation. Adding an empty baseline by hand is not a safe recovery step.
+
+No reset is needed solely because these three fields are absent. Present but
+malformed fields still fail decoding. This is not a general migration for older
+incompatible formats: the existing timestamp, transaction-ID, link, and other
+record validations remain in force.
+
+For developers switching branches: an older app may discard new fields when it
+writes records. This version can read the result, but cannot recover lost archive
+or outcome metadata; a lost submitting baseline again requires manual review.
+Keep separate development data or backups when switching versions. This change
+does not make older apps understand the new statuses, or remove the requirement
+to rebuild Dart and Rust together for the preceding FRB changes. No additional
+Rust API or database schema change is introduced by optional-field support.
+
+The separate sender-side ambiguous draft export/account-deletion flow remains
+outside this change.
 
 ## Validation
 

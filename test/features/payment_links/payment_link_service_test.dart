@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -221,6 +222,7 @@ void main() {
     late ProviderContainer container;
     late PaymentLinkService service;
     late Directory supportDirectory;
+    late _PaymentLinkServiceReceivedStorage receivedStorage;
     const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
     setUpAll(() => RustLib.initMock(api: api));
     tearDownAll(RustLib.dispose);
@@ -237,6 +239,7 @@ void main() {
           );
       api.reset();
       accounts = _ClaimDestinationAccountNotifier();
+      receivedStorage = _PaymentLinkServiceReceivedStorage();
       container = ProviderContainer(
         overrides: [
           accountProvider.overrideWith(() => accounts),
@@ -251,7 +254,7 @@ void main() {
             PaymentLinkRecoveryStore(_FakePaymentLinkRecoveryStorage()),
           ),
           paymentLinkReceivedStoreProvider.overrideWithValue(
-            PaymentLinkReceivedStore(_PaymentLinkServiceReceivedStorage()),
+            PaymentLinkReceivedStore(receivedStorage),
           ),
         ],
       );
@@ -265,6 +268,131 @@ void main() {
           .setMockMethodCallHandler(pathChannel, null);
       await supportDirectory.delete(recursive: true);
     });
+
+    for (final oldTransactions in [
+      <String>[],
+      ['old-attempt'],
+    ]) {
+      test(
+        'legacy submitting without baseline remains protected: $oldTransactions',
+        () async {
+          api.poolFixture = true;
+          api.localClaimTxids = oldTransactions;
+          final store = container.read(paymentLinkReceivedStoreProvider);
+          final link = _link();
+          await store.saveReady(link);
+          await store.markClaimStarted(
+            address: link.address,
+            destinationAccountUuid: 'receiver',
+          );
+          final payload =
+              jsonDecode(receivedStorage.value!) as Map<String, dynamic>;
+          final row =
+              (payload['records'] as List).single as Map<String, dynamic>;
+          for (final field in ['availability', 'archived', 'claimPriorTxids']) {
+            row.remove(field);
+          }
+          receivedStorage.value = jsonEncode(payload);
+          final directory = Directory(
+            '${supportDirectory.path}/${paymentLinkClaimWalletDirectoryName(link)}',
+          );
+          await directory.create();
+          final db = File('${directory.path}/zcash_wallet.db');
+          await db.writeAsString('keep claim wallet');
+          for (final allowResubmit in [false, true]) {
+            final restored = (await service.inspectReceivedLinkClaims(
+              await store.load(),
+              allowResubmit: allowResubmit,
+            )).single;
+            expect(restored.status, PaymentLinkReceivedStatus.submitting);
+            expect(restored.availability, PaymentLinkAvailability.checking);
+            expect(restored.claimTxids, isNull);
+            expect(restored.claimPriorTxids, isNull);
+            expect(restored.canArchive, isFalse);
+            expect(restored.claimLink!.toUri(), link.toUri());
+            expect(await store.countReceivingForAccount('receiver'), 1);
+          }
+          expect(api.claimSyncCalls, 0);
+          expect(await db.readAsString(), 'keep claim wallet');
+        },
+      );
+    }
+
+    test(
+      'a known empty baseline can still settle an interrupted new claim',
+      () async {
+        api.poolFixture = true;
+        final store = container.read(paymentLinkReceivedStoreProvider);
+        final link = _link();
+        await store.saveReady(link);
+        await store.markClaimStarted(
+          address: link.address,
+          destinationAccountUuid: 'receiver',
+          priorTxids: [],
+        );
+        final directory = Directory(
+          '${supportDirectory.path}/${paymentLinkClaimWalletDirectoryName(link)}',
+        );
+        await directory.create();
+        await File(
+          '${directory.path}/zcash_wallet.db',
+        ).writeAsString('claim wallet');
+        final restored = (await service.inspectReceivedLinkClaims(
+          await store.load(),
+          allowResubmit: false,
+        )).single;
+        expect(restored.status, PaymentLinkReceivedStatus.readyToClaim);
+        expect(restored.availability, PaymentLinkAvailability.failed);
+        expect(restored.claimLink, isNotNull);
+        expect(api.claimSyncModes, [false]);
+        expect(await store.countReceivingForAccount('receiver'), 0);
+      },
+    );
+
+    test(
+      'legacy receiving with saved txids still reconciles its receipt',
+      () async {
+        api.poolFixture = true;
+        api.localClaimTxids = ['a', 'b'];
+        final store = container.read(paymentLinkReceivedStoreProvider);
+        final link = _link();
+        await store.saveReady(link);
+        await store.markClaimStarted(
+          address: link.address,
+          destinationAccountUuid: 'receiver',
+        );
+        await store.markReceiving(
+          address: link.address,
+          destinationAccountUuid: 'receiver',
+          claimTxids: 'a,b',
+        );
+        final payload =
+            jsonDecode(receivedStorage.value!) as Map<String, dynamic>;
+        final row = (payload['records'] as List).single as Map<String, dynamic>;
+        for (final field in ['availability', 'archived', 'claimPriorTxids']) {
+          row.remove(field);
+        }
+        receivedStorage.value = jsonEncode(payload);
+        final directory = Directory(
+          '${supportDirectory.path}/${paymentLinkClaimWalletDirectoryName(link)}',
+        );
+        await directory.create();
+        await File(
+          '${directory.path}/zcash_wallet.db',
+        ).writeAsString('keep claim wallet');
+        await container.read(syncProvider.future);
+        final restored = (await service.inspectReceivedLinkClaims(
+          await store.load(),
+          allowResubmit: false,
+        )).single;
+        expect(restored.status, PaymentLinkReceivedStatus.received);
+        expect(restored.claimTxids, 'a,b');
+        expect(restored.claimPriorTxids, isNull);
+        expect(restored.claimLink, isNotNull); // Only one confirmation so far.
+        expect(api.claimSyncModes, [false]);
+        expect(await store.countReceivingForAccount('receiver'), 0);
+      },
+    );
 
     test(
       'recovery cannot settle a submission still preparing transactions',

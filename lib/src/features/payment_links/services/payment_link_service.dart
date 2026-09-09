@@ -1545,6 +1545,12 @@ class PaymentLinkService implements PaymentLinkOperations {
     final destinationAccountUuid = record.destinationAccountUuid;
     if (link == null || destinationAccountUuid == null) return;
 
+    // Without the pre-attempt snapshot, local transactions could belong to
+    // earlier attempts. Preserve legacy submitting records and their account
+    // protection instead of guessing success/failure or retransmitting them.
+    final priorTxids = record.claimPriorTxids;
+    if (priorTxids == null) return;
+
     final tempWallet = await _claimWallet.locate(link);
     if (!await File(tempWallet.dbPath).exists()) return;
 
@@ -1567,7 +1573,7 @@ class PaymentLinkService implements PaymentLinkOperations {
       claimTxids: '',
     );
     final attemptTxids = evidence.localClaimTxids
-        .where((id) => !record.claimPriorTxids.contains(id))
+        .where((id) => !priorTxids.contains(id))
         .toList();
     if (attemptTxids.isEmpty) {
       await _receivedStore.markReadyToClaim(
