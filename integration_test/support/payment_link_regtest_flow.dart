@@ -417,12 +417,24 @@ Future<T> paymentLinkZcashdRpc<T>(
   }
 }
 
+/// Converts a stored claim's protocol-order ID to zcashd RPC display order.
+String paymentLinkClaimTxidToRpcOrder(String txid) {
+  final normalized = normalizePaymentLinkTxid(txid);
+  if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(normalized)) {
+    throw const FormatException('Invalid claim transaction ID.');
+  }
+  return [
+    for (var end = normalized.length; end > 0; end -= 2)
+      normalized.substring(end - 2, end),
+  ].join();
+}
+
 Future<void> waitForPaymentLinkMempoolTxids(
   WidgetTester tester,
   Iterable<String> txids, {
   Duration timeout = const Duration(minutes: 2),
 }) async {
-  final expected = txids.map(normalizePaymentLinkTxid).toSet();
+  final expected = txids.map(paymentLinkClaimTxidToRpcOrder).toSet();
   Set<String> last = const {};
   final deadline = DateTime.now().add(timeout);
   while (DateTime.now().isBefore(deadline)) {

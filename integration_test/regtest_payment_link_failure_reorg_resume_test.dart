@@ -119,7 +119,7 @@ void main() {
 
       for (final txid in claimTxids) {
         await paymentLinkZcashdRpc<bool>('prioritisetransaction', [
-          txid,
+          paymentLinkClaimTxidToRpcOrder(txid),
           0,
           100_000_000,
         ]);
@@ -225,7 +225,7 @@ Future<void> _replaceClaimBranch(
   await paymentLinkZcashdRpc<Object?>('invalidateblock', [invalidatedHash]);
   for (final txid in claimTxids) {
     await paymentLinkZcashdRpc<bool>('prioritisetransaction', [
-      txid,
+      paymentLinkClaimTxidToRpcOrder(txid),
       0,
       -100_000_000,
     ]);
