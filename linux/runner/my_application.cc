@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "single_instance.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -16,9 +17,23 @@ struct _MyApplication {
   FlMethodChannel* payment_uri_channel;
   GPtrArray* pending_payment_uris;
   gboolean payment_uri_dart_ready;
+  SingleInstanceGuard* instance_guard;
+  gboolean is_primary;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+static void show_startup_error(const gchar* message) {
+  g_printerr("%s\n", message);
+  if (gtk_init_check(nullptr, nullptr)) {
+    GtkWidget* dialog = gtk_message_dialog_new(
+        nullptr, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
+        "%s", message);
+    gtk_window_set_title(GTK_WINDOW(dialog), APP_DISPLAY_NAME);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+  }
+}
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
@@ -129,11 +144,17 @@ static void register_payment_uri_channel(MyApplication* self, FlView* view) {
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  if (!self->is_primary) {
+    return;
+  }
   register_icon_theme_paths();
   gtk_window_set_default_icon_name(APP_ICON_NAME);
 
   if (self->main_window != nullptr) {
-    gtk_window_present(self->main_window);
+    // Reactivation must not expose the window before Flutter's first frame.
+    if (gtk_widget_get_visible(GTK_WIDGET(self->main_window))) {
+      gtk_window_present(self->main_window);
+    }
     return;
   }
 
@@ -222,18 +243,9 @@ static gboolean my_application_local_command_line(GApplication* application,
 
   g_autoptr(GError) error = nullptr;
   if (!g_application_register(application, nullptr, &error)) {
-    // Unique mode needs a session bus to negotiate ownership of the
-    // application ID, and a session without a usable D-Bus -- a minimal window
-    // manager, a container -- has none. Treating that as fatal exited before a
-    // window was ever created, so the app simply would not launch where it
-    // used to.
-    //
-    // Single-instance behaviour is a nicety; starting at all is not. Retry as
-    // a non-unique application, which skips the negotiation entirely. Nothing
-    // about the launch is lost: the local branch below still collects the
-    // zcash: arguments this process was started with and hands them to Dart.
-    // Only forwarding a link to an already-running instance is given up, and
-    // without a session bus there was no way to reach one anyway.
+    // A minimal desktop may have no usable session bus. Preserve its local
+    // launch and payment URI arguments; the OS lock below still excludes
+    // another wallet process when D-Bus cannot negotiate ownership.
     g_warning("Failed to register on the session bus (%s); continuing as a "
               "non-unique instance.",
               error->message);
@@ -264,6 +276,31 @@ static gboolean my_application_local_command_line(GApplication* application,
       g_application_activate(application);
     }
     *exit_status = 0;
+    return TRUE;
+  }
+
+  // Negotiate the D-Bus owner before taking the OS lock. Otherwise a secondary
+  // process could claim the bus name while the lock owner is still registering.
+  const SingleInstanceAcquireResult instance_result =
+      self->instance_guard->Acquire(APPLICATION_ID);
+  if (instance_result == SingleInstanceAcquireResult::kError) {
+    g_autofree gchar* message = g_strdup_printf(
+        "%s could not safely open wallet storage.\n\n%s",
+        APP_DISPLAY_NAME, g_strerror(self->instance_guard->last_error()));
+    show_startup_error(message);
+    *exit_status = 1;
+    return TRUE;
+  }
+  self->is_primary = instance_result == SingleInstanceAcquireResult::kPrimary;
+
+  if (!self->is_primary) {
+    // The owner may be on another D-Bus session. Do not start Flutter or touch
+    // the keyring when that owner cannot be activated through this session.
+    g_autofree gchar* message = g_strdup_printf(
+        "%s is already running in another session.\n\n"
+        "Close the other window before opening this one.", APP_DISPLAY_NAME);
+    show_startup_error(message);
+    *exit_status = 1;
     return TRUE;
   }
 
@@ -302,6 +339,8 @@ static void my_application_dispose(GObject* object) {
   g_clear_pointer(&self->pending_payment_uris, g_ptr_array_unref);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
+  delete self->instance_guard;
+  self->instance_guard = nullptr;
 }
 
 static void my_application_class_init(MyApplicationClass* klass) {
@@ -316,6 +355,8 @@ static void my_application_class_init(MyApplicationClass* klass) {
 
 static void my_application_init(MyApplication* self) {
   self->main_window = nullptr;
+  self->instance_guard = new SingleInstanceGuard();
+  self->is_primary = FALSE;
   self->pending_payment_uris = g_ptr_array_new_with_free_func(g_free);
   self->payment_uri_dart_ready = FALSE;
 }
