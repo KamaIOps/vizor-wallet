@@ -26,7 +26,7 @@ class SystemPaymentLinkClipboard implements PaymentLinkClipboard {
 
   @override
   Future<void> copySecret(String text) {
-    return SensitiveClipboard.copyText(text);
+    return SensitiveClipboard.copyText(text, autoClear: false);
   }
 
   @override

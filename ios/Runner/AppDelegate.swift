@@ -909,12 +909,13 @@ private enum SensitiveClipboardHandler {
       }
 
       let expirationSeconds = max(1, seconds(from: args["expirationSeconds"]) ?? 60)
+      var options: [UIPasteboard.OptionsKey: Any] = [.localOnly: true]
+      if (args["autoClear"] as? Bool) != false {
+        options[.expirationDate] = Date().addingTimeInterval(expirationSeconds)
+      }
       UIPasteboard.general.setItems(
         [[plainTextType: text]],
-        options: [
-          .expirationDate: Date().addingTimeInterval(expirationSeconds),
-          .localOnly: true,
-        ]
+        options: options
       )
       result(nil)
     default:

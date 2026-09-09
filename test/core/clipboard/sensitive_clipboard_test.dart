@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/clipboard/sensitive_clipboard.dart';
+import 'package:zcash_wallet/src/features/payment_links/services/payment_link_clipboard.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +41,55 @@ void main() {
       });
     },
   );
+
+  test(
+    'gift links disable native expiry while using the sensitive channel',
+    () async {
+      final calls = <MethodCall>[];
+      SensitiveClipboard.debugSupportsNativeClipboardOverride = true;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(nativeChannel, (call) async {
+            calls.add(call);
+            return null;
+          });
+
+      await const SystemPaymentLinkClipboard().copySecret('gift link');
+
+      expect(calls.single.method, 'copyText');
+      expect(calls.single.arguments, {
+        'text': 'gift link',
+        'expirationSeconds': 60,
+        'autoClear': false,
+      });
+    },
+  );
+
+  testWidgets('gift link copy cancels previous expiry and schedules no timer', (
+    tester,
+  ) async {
+    String? clipboardText;
+    SensitiveClipboard.debugSupportsNativeClipboardOverride = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboardText = (call.arguments as Map)['text'] as String;
+          } else if (call.method == 'Clipboard.getData') {
+            return {'text': clipboardText};
+          }
+          return null;
+        });
+
+    await SensitiveClipboard.copyText('same text');
+    await const SystemPaymentLinkClipboard().copySecret('same text');
+    await tester.pump(const Duration(minutes: 2));
+    await SensitiveClipboard.debugRetryExpiredFallbackClear();
+    expect(clipboardText, 'same text');
+
+    // A subsequent mnemonic copy must still expire normally.
+    await SensitiveClipboard.copyText('mnemonic');
+    await tester.pump(const Duration(minutes: 1));
+    expect(clipboardText, isEmpty);
+  });
 
   test(
     'fallback copy clears the unchanged clipboard after expiration',

@@ -21,14 +21,18 @@ abstract final class SensitiveClipboard {
   @visibleForTesting
   static Future<void> Function(Duration duration)? debugExpirationDelay;
 
+  /// Set [autoClear] to false to retain native privacy flags without scheduling
+  /// expiry. A successful copy still cancels any previous pending expiry.
   static Future<void> copyText(
     String text, {
     Duration expiration = sensitiveClipboardDefaultExpiration,
+    bool autoClear = true,
   }) async {
     if (_supportsNativeClipboard) {
       await _channel.invokeMethod<void>('copyText', {
         'text': text,
         'expirationSeconds': expiration.inSeconds,
+        if (!autoClear) 'autoClear': false,
       });
       _supersedePendingExpiration();
       return;
@@ -48,6 +52,7 @@ abstract final class SensitiveClipboard {
       // throws -- clipboard writes are denied often enough (backgrounded app,
       // OS policy) that this is a real state, not a theoretical one.
       final copyGeneration = _supersedePendingExpiration();
+      if (!autoClear) return;
       final pending = _PendingClipboardExpiration(
         text: text,
         copyGeneration: copyGeneration,

@@ -79,6 +79,25 @@ class SensitiveClipboardHandlerTest {
         else assertEquals("", current!!.getItemAt(0).text)
     }
 
+    @Test fun nonExpiringCopyKeepsSensitiveFlagAndCancelsEarlierExpiry() {
+        copy()
+        val result = mock(MethodChannel.Result::class.java)
+        handler.handle(MethodCall("copyText", mapOf(
+            "text" to "secret", "autoClear" to false
+        )), result)
+        verify(result).success(null)
+        assertTrue(current!!.description.extras!!.getBoolean("android.content.extra.IS_SENSITIVE"))
+        val giftLink = current
+        advance(120)
+        handler.retryExpiredClear()
+        assertSame(giftLink, current)
+        verify(clipboard, never()).primaryClipDescription
+
+        copy("mnemonic")
+        advance(60)
+        assertCleared()
+    }
+
     @Test fun expiresOnlyAfterDeadlineAndMarksSensitive() {
         copy()
         assertTrue(current!!.description.extras!!.getBoolean("android.content.extra.IS_SENSITIVE"))

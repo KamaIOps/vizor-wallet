@@ -56,6 +56,11 @@ internal class SensitiveClipboardHandler(private val context: Context) {
         clipboardManager.setPrimaryClip(clip)
 
         val generation = ++copyGeneration
+        if (arguments["autoClear"] == false) {
+            pendingExpiration = null
+            result.success(null)
+            return
+        }
         val expirationMillis = expirationSeconds * 1_000L
         val expiresAt = SystemClock.elapsedRealtime() + expirationMillis
         pendingExpiration = PendingExpiration(
