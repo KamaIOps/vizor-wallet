@@ -14,7 +14,8 @@ chain, not by the order of taps in Vizor.
   when at least one leg failed.
 - A card is labelled `Already claimed` only when all its observed shielded
   outputs have settled spends outside its locally created/recorded claims.
-  Unspent top-ups prevent that conclusion. Pending scan ranges limit the
+  Unspent positive-value top-ups prevent that conclusion; zero-value change
+  outputs do not represent remaining funds. Pending scan ranges limit the
   confirmation height. `sent_notes` plus the local `transactions.created`
   marker identifies transactions eligible for metadata recovery. OVK-recovered
   outgoing notes alone cannot distinguish competitors sharing the card's keys.
@@ -77,6 +78,12 @@ local receipt identity, reorgs, stale checks, secret retention, archive/restore,
 read-only status checks, partial submissions, and desktop/mobile outcomes.
 Capture scenarios: `gift-card-claimed-elsewhere`, `gift-card-claim-failed`, and
 `gift-card-claim-checking` (both form factors).
+
+The macOS outcomes E2E runner covers three scenarios with real Rust wallets and
+regtest transactions: competing claims, accepted-response loss and restart
+recovery, and archived-card restoration after restart. Run
+`scripts/e2e/flutter-macos-regtest-gift-card-outcomes.sh` explicitly; it uses the
+shared local Docker chain. See `scripts/e2e/README.md` for phases and logs.
 
 The explicit two-wallet competition scenario is compiled by:
 
