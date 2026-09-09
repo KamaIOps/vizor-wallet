@@ -2278,17 +2278,21 @@ pub async fn run_payment_link_claim_sync(
     lightwalletd_url: &str,
     network: WalletNetwork,
     cancel: Arc<AtomicBool>,
+    allow_resubmit: bool,
 ) -> Result<(), String> {
     const MAX_RETRIES: u32 = 3;
     let mut last_error = String::new();
 
     for attempt in 0..=MAX_RETRIES {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Gift Card scan cancelled".to_string());
+        }
         if attempt > 0 {
             let delay_secs = 1u64 << attempt;
             for _ in 0..delay_secs {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 if cancel.load(Ordering::Relaxed) {
-                    return Ok(());
+                    return Err("Gift Card scan cancelled".to_string());
                 }
             }
         }
@@ -2298,9 +2302,13 @@ pub async fn run_payment_link_claim_sync(
             lightwalletd_url,
             network,
             cancel.clone(),
+            allow_resubmit,
         )
         .await
         {
+            Ok(()) if cancel.load(Ordering::Relaxed) => {
+                return Err("Gift Card scan cancelled".to_string())
+            }
             Ok(()) => return Ok(()),
             Err(error) => {
                 let strategy = error.recovery_strategy();
@@ -2320,6 +2328,7 @@ async fn run_payment_link_claim_sync_once(
     lightwalletd_url: &str,
     network: WalletNetwork,
     cancel: Arc<AtomicBool>,
+    allow_resubmit: bool,
 ) -> Result<(), SyncError> {
     let should_exit = || cancel.load(Ordering::Relaxed);
     let mut client = open_lwd_channel(lightwalletd_url).await?;
@@ -2420,15 +2429,20 @@ async fn run_payment_link_claim_sync_once(
                 }
                 RefreshedTipRelation::Unchanged | RefreshedTipRelation::UnchangedUnverified => {
                     ensure_complete_scan_state(&mut db, current_tip_height)?;
-                    let _ = crate::wallet::sync::resubmit_pending_transactions(
-                        db_data_path,
-                        lightwalletd_url,
-                        &mut client,
-                        u32::try_from(current_tip_height).unwrap_or(u32::MAX),
-                        &std::collections::HashSet::new(),
-                        &should_exit,
-                    )
-                    .await;
+                    if allow_resubmit {
+                        let exclusions =
+                            crate::wallet::sync::payment_link_resubmit_exclusions(db_data_path)
+                                .map_err(SyncError::db)?;
+                        let _ = crate::wallet::sync::resubmit_pending_transactions(
+                            db_data_path,
+                            lightwalletd_url,
+                            &mut client,
+                            u32::try_from(current_tip_height).unwrap_or(u32::MAX),
+                            &exclusions,
+                            &should_exit,
+                        )
+                        .await;
+                    }
                     return Ok(());
                 }
             }
