@@ -49,6 +49,7 @@ mod enhance;
 mod error;
 mod lwd;
 pub(crate) mod mempool;
+mod tip_cache;
 
 use enhance::run_enhancement;
 pub(crate) use error::SyncError;
@@ -61,6 +62,10 @@ pub(crate) use lwd::{
     get_latest_block, get_taddress_txids, get_transaction, next_stream_message,
     open_background_direct_lwd_channel, open_isolated_lwd_channel, open_lwd_channel,
     open_lwd_channel_with_cancel, send_transaction, send_transaction_with_status,
+};
+pub(crate) use tip_cache::{
+    get_latest_block_recorded, latest_block_for_transaction,
+    latest_block_for_transaction_with_client,
 };
 
 /// Progress event sent to caller (Dart or Swift).
@@ -2318,7 +2323,7 @@ async fn run_sync_impl(
     // authoritative: `WalletDb::update_chain_tip` deliberately ignores a
     // height below the maximum scanned block, so assigning the server height
     // first could later report completion above a lagging endpoint.
-    let tip_result = get_latest_block(&mut client).await;
+    let tip_result = get_latest_block_recorded(&mut client, lightwalletd_url, network).await;
     let Some(tip_result) = tip_rpc_result_unless_exiting(tip_result, should_exit()) else {
         log::info!("[{}] sync: exiting after initial tip fetch", elapsed());
         return Ok(());
@@ -2668,7 +2673,8 @@ async fn run_sync_impl(
         // empty range from a lagging replica.
         if last_periodic_tip_refresh_attempt.elapsed() >= TIP_REFRESH_INTERVAL {
             last_periodic_tip_refresh_attempt = std::time::Instant::now();
-            let fresh_tip_result = get_latest_block(&mut client).await;
+            let fresh_tip_result =
+                get_latest_block_recorded(&mut client, lightwalletd_url, network).await;
             let Some(fresh_tip_result) =
                 tip_rpc_result_unless_exiting(fresh_tip_result, should_exit())
             else {
@@ -2793,7 +2799,8 @@ async fn run_sync_impl(
                     completion_tip_validation_required,
                     last_completion_tip_validation.elapsed(),
                 ) {
-                    let fresh_tip_result = get_latest_block(&mut client).await;
+                    let fresh_tip_result =
+                        get_latest_block_recorded(&mut client, lightwalletd_url, network).await;
                     let Some(fresh_tip_result) =
                         tip_rpc_result_unless_exiting(fresh_tip_result, should_exit())
                     else {
@@ -3420,7 +3427,8 @@ async fn run_sync_impl(
             );
             return Ok(());
         }
-        let fresh_tip_result = get_latest_block(&mut client).await;
+        let fresh_tip_result =
+            get_latest_block_recorded(&mut client, lightwalletd_url, network).await;
         let Some(fresh_tip_result) = tip_rpc_result_unless_exiting(fresh_tip_result, should_exit())
         else {
             log::info!("[{}] sync: exiting after post-batch tip fetch", elapsed());
