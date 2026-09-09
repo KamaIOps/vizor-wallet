@@ -49,7 +49,7 @@ const _readyStatusAllowance = 160.0;
 // Two lines of supporting text plus its gap above the CTA.
 const _supportingTextAllowance = 44.0;
 
-enum PaymentLinkRedeemMobileState { paste, loading, invalid, unavailable }
+enum PaymentLinkRedeemMobileState { paste, loading, invalid }
 
 enum PaymentLinkReadyMobileState { waiting, soon, ready }
 
@@ -483,6 +483,7 @@ class PaymentLinkCardListMobileRow extends StatelessWidget {
     required this.amountText,
     required this.dateText,
     this.statusText,
+    this.actionLabel,
     this.onAction,
     this.showLoader = false,
     this.showLinkActions = false,
@@ -498,6 +499,7 @@ class PaymentLinkCardListMobileRow extends StatelessWidget {
   final String amountText;
   final String dateText;
   final String? statusText;
+  final String? actionLabel;
   final VoidCallback? onAction;
   final bool showLoader;
   final bool showLinkActions;
@@ -508,7 +510,7 @@ class PaymentLinkCardListMobileRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return SizedBox(
-      height: 64,
+      height: actionLabel == null ? 64 : 88,
       child: Row(
         children: [
           ClipRRect(
@@ -529,6 +531,15 @@ class PaymentLinkCardListMobileRow extends StatelessWidget {
                     color: colors.text.primary,
                   ),
                 ),
+                if (actionLabel != null)
+                  Text(
+                    statusText!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: context.colors.text.secondary,
+                    ),
+                  ),
                 Text(
                   dateText,
                   maxLines: 1,
@@ -556,7 +567,7 @@ class PaymentLinkCardListMobileRow extends StatelessWidget {
             ),
           ] else if (statusText case final label?)
             _MobileCardStatus(
-              label: label,
+              label: actionLabel ?? label,
               onTap: onAction,
               showLoader: showLoader,
             ),
@@ -1063,8 +1074,6 @@ class PaymentLinkRedeemMobileView extends StatelessWidget {
     this.pasteLabel = kPaymentLinkPasteLabel,
     this.invalidTitle = kPaymentLinkInvalidTitle,
     this.invalidSubtitle = kPaymentLinkInvalidSubtitle,
-    this.unavailableTitle = 'This card has no available balance.',
-    this.unavailableSubtitle = kPaymentLinkUnavailableSubtitle,
     this.clearLabel = kPaymentLinkClearClipboardLabel,
     super.key,
   });
@@ -1080,30 +1089,23 @@ class PaymentLinkRedeemMobileView extends StatelessWidget {
   final String pasteLabel;
   final String invalidTitle;
   final String invalidSubtitle;
-  final String unavailableTitle;
-  final String unavailableSubtitle;
   final String clearLabel;
 
   @override
   Widget build(BuildContext context) {
     final loading = state == PaymentLinkRedeemMobileState.loading;
     final invalid = state == PaymentLinkRedeemMobileState.invalid;
-    final unavailable = state == PaymentLinkRedeemMobileState.unavailable;
-    final showError = invalid || unavailable;
 
     final cardContent = switch (state) {
       PaymentLinkRedeemMobileState.paste => _MobileRedeemDropZone(
         child: _actions(),
       ),
-      PaymentLinkRedeemMobileState.invalid ||
-      PaymentLinkRedeemMobileState.unavailable => _MobileRedeemDropZone(
+      PaymentLinkRedeemMobileState.invalid => _MobileRedeemDropZone(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              invalid
-                  ? (fromQrCode ? 'This card could not be read.' : invalidTitle)
-                  : unavailableTitle,
+              fromQrCode ? 'This card could not be read.' : invalidTitle,
               textAlign: TextAlign.center,
               style: AppTypography.bodyMediumStrong.copyWith(
                 color: context.colors.text.destructive,
@@ -1111,11 +1113,9 @@ class PaymentLinkRedeemMobileView extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.xxs),
             Text(
-              invalid
-                  ? (fromQrCode
-                        ? 'Scan again or paste another card link.'
-                        : invalidSubtitle)
-                  : unavailableSubtitle,
+              fromQrCode
+                  ? 'Scan again or paste another card link.'
+                  : invalidSubtitle,
               textAlign: TextAlign.center,
               style: AppTypography.bodyMedium.copyWith(
                 color: context.colors.text.secondary,
@@ -1170,7 +1170,7 @@ class PaymentLinkRedeemMobileView extends StatelessWidget {
                 ),
               ),
             ),
-          if (showError && !fromQrCode)
+          if (invalid && !fromQrCode)
             Positioned(
               top: _redeemSurfaceTop + _cardHeight + AppSpacing.md,
               left: 0,

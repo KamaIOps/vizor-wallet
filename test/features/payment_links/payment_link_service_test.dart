@@ -267,6 +267,76 @@ void main() {
     });
 
     test(
+      'recovery cannot settle a submission still preparing transactions',
+      () async {
+        api.poolFixture = true;
+        api.estimateGate = Completer<rust_sync.SendMaxEstimateResult>();
+        final submission = service.claimPreparedLink(_claimSession());
+        final failed = expectLater(submission, throwsStateError);
+        await api.estimateStarted.future;
+        final store = container.read(paymentLinkReceivedStoreProvider);
+        expect(
+          (await store.load()).single.status,
+          PaymentLinkReceivedStatus.submitting,
+        );
+        final records = await service.inspectReceivedLinkClaims(
+          await store.load(),
+          allowResubmit: false,
+        );
+        expect(records.single.status, PaymentLinkReceivedStatus.submitting);
+        expect(api.claimSyncCalls, 0);
+        api.estimateGate!.completeError(StateError('preparation failed'));
+        await failed;
+        expect(
+          (await store.load()).single.availability,
+          PaymentLinkAvailability.failed,
+        );
+      },
+    );
+
+    test('manual and background claim checks serialize their scans', () async {
+      api.poolFixture = true;
+      api.localClaimTxids = ['pending'];
+      api.claimHistory = [_transaction(txid: 'pending', txKind: 'sent')];
+      api.syncGate = Completer<void>();
+      final store = container.read(paymentLinkReceivedStoreProvider);
+      final link = _link();
+      await store.saveReady(link);
+      await store.markClaimStarted(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+      );
+      await store.markReceiving(
+        address: link.address,
+        destinationAccountUuid: 'receiver',
+        claimTxids: 'pending',
+      );
+      final directory = Directory(
+        '${supportDirectory.path}/${paymentLinkClaimWalletDirectoryName(link)}',
+      );
+      await directory.create();
+      await File(
+        '${directory.path}/zcash_wallet.db',
+      ).writeAsString('claim-wallet');
+      await container.read(syncProvider.future);
+      final background = service.inspectReceivedLinkClaims(await store.load());
+      await api.syncStarted.future;
+      final manual = service.inspectReceivedLinkClaims(
+        await store.load(),
+        allowResubmit: false,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(api.claimSyncModes, [true]);
+      api.syncGate!.complete();
+      await Future.wait([background, manual]);
+      expect(api.claimSyncModes, [true, false]);
+      expect(
+        (await store.load()).single.status,
+        PaymentLinkReceivedStatus.receiving,
+      );
+    });
+
+    test(
       'deleted claim destinations are cleaned before sync or history lookup',
       () async {
         final store = container.read(paymentLinkReceivedStoreProvider);
@@ -300,6 +370,61 @@ void main() {
         expect(await store.load(), isEmpty);
         expect(await claimDirectory.exists(), isFalse);
         expect(await unrelated.readAsString(), 'keep');
+      },
+    );
+
+    test(
+      'restart recovery keeps failed legs and excludes earlier attempts',
+      () async {
+        api.poolFixture = true;
+        api.localClaimTxids = ['old', 'parent', 'child'];
+        api.conflictedTxids = ['child'];
+        api.claimHistory = [
+          _transaction(txid: 'old', txKind: 'sent', expiredUnmined: true),
+          _transaction(txid: 'parent', txKind: 'sent', minedHeight: 95),
+          _transaction(txid: 'child', txKind: 'sent'),
+        ];
+        final store = container.read(paymentLinkReceivedStoreProvider);
+        final link = _link();
+        await store.saveReady(link);
+        await store.markClaimStarted(
+          address: link.address,
+          destinationAccountUuid: 'receiver',
+          priorTxids: ['old'],
+        );
+        expect((await store.load()).single.claimPriorTxids, ['old']);
+        final claimDirectory = Directory(
+          '${supportDirectory.path}/${paymentLinkClaimWalletDirectoryName(link)}',
+        );
+        await claimDirectory.create();
+        await File(
+          '${claimDirectory.path}/zcash_wallet.db',
+        ).writeAsString('claim-wallet');
+        await container.read(syncProvider.future);
+        final recovered = (await service.inspectReceivedLinkClaims(
+          await store.load(),
+          allowResubmit: false,
+        )).single;
+        expect(recovered.status, PaymentLinkReceivedStatus.readyToClaim);
+        expect(recovered.availability, PaymentLinkAvailability.failed);
+        expect(recovered.destinationAccountUuid, isNull);
+        expect(recovered.claimLink, isNotNull);
+        expect(recovered.claimPriorTxids, isEmpty);
+
+        // A later attempt must not inherit an older failed transaction.
+        await store.markClaimStarted(
+          address: link.address,
+          destinationAccountUuid: 'receiver',
+          priorTxids: ['old', 'parent', 'child'],
+        );
+        api.localClaimTxids.add('fresh');
+        api.claimHistory = [_transaction(txid: 'fresh', txKind: 'sent')];
+        final pending = (await service.inspectReceivedLinkClaims(
+          await store.load(),
+          allowResubmit: false,
+        )).single;
+        expect(pending.status, PaymentLinkReceivedStatus.receiving);
+        expect(pending.claimTxids, 'fresh');
       },
     );
 
@@ -923,6 +1048,26 @@ void main() {
     );
   });
 
+  test('mixed claim outcomes settle only after every leg is terminal', () {
+    final transactions = [
+      _transaction(txid: 'mined', txKind: 'sent', minedHeight: 10),
+      _transaction(txid: 'expired', txKind: 'sent', expiredUnmined: true),
+    ];
+    bool settled(String ids, int height, {List<String> conflicts = const []}) =>
+        paymentLinkClaimFailureSettled(
+          claimTxids: ids,
+          transactions: transactions,
+          conflictedTxids: conflicts,
+          verifiedHeight: BigInt.from(height),
+        );
+    expect(settled('mined,expired', 15), isTrue);
+    expect(settled('mined,expired', 14), isFalse);
+    expect(settled('mined,missing', 15), isFalse);
+    expect(settled('mined,conflicted', 15, conflicts: ['conflicted']), isTrue);
+    expect(settled('mined', 15), isFalse);
+    expect(settled('', 15), isFalse);
+  });
+
   test('broadcast and recovery claim IDs use the same protocol byte order', () {
     const displayA =
         '012c6894d79c62d7f49659bf2405b6b67fda282aa89127539d77de76523be0d6';
@@ -935,23 +1080,7 @@ void main() {
     final broadcast = paymentLinkBroadcastTxidsToProtocolOrder(
       '$displayA,$displayB',
     );
-    final recovered = paymentLinkActiveClaimTxids([
-      _transaction(txid: protocolA, txKind: 'sent'),
-      _transaction(txid: protocolB, txKind: 'sent'),
-    ]).join(',');
     expect(broadcast, '$protocolA,$protocolB');
-    expect(recovered, broadcast);
-  });
-
-  test('recovers only active sent claim transaction ids', () {
-    expect(
-      paymentLinkActiveClaimTxids([
-        _transaction(txid: 'active', txKind: 'sent'),
-        _transaction(txid: 'expired', txKind: 'sent', expiredUnmined: true),
-        _transaction(txid: 'funding', txKind: 'received'),
-      ]),
-      ['active'],
-    );
   });
 
   test('claim exposes only the amount promised by the link', () {
@@ -1604,8 +1733,28 @@ class _ClaimDestinationRustApi implements RustLibApi {
   int failures = 0;
   bool poolFixture = false;
   List<String> localClaimTxids = [];
+  List<String> conflictedTxids = [];
+  List<rust_sync.TransactionInfo>? claimHistory;
   Set<String> failingDetailTxids = {};
   int detailLookups = 0;
+  Completer<rust_sync.SendMaxEstimateResult>? estimateGate;
+  var estimateStarted = Completer<void>();
+  Completer<void>? syncGate;
+  var syncStarted = Completer<void>();
+  int claimSyncCalls = 0;
+  List<bool> claimSyncModes = [];
+
+  @override
+  Future<rust_sync.SendMaxEstimateResult> crateApiSyncEstimateSendMax({
+    required String dbPath,
+    required String network,
+    required String accountUuid,
+    required String toAddress,
+    String? memo,
+  }) {
+    estimateStarted.complete();
+    return estimateGate!.future;
+  }
 
   @override
   Future<List<rust_wallet.AccountInfo>> crateApiWalletListAccounts({
@@ -1628,13 +1777,31 @@ class _ClaimDestinationRustApi implements RustLibApi {
   }
 
   @override
+  Future<rust_sync.PaymentLinkSpendEvidence>
+  crateApiSyncGetPaymentLinkSpendEvidence({
+    required String dbPath,
+    required String accountUuid,
+    required String claimTxids,
+  }) async => rust_sync.PaymentLinkSpendEvidence(
+    allFundsSpentElsewhere: false,
+    conflictedTxids: conflictedTxids,
+    localClaimTxids: localClaimTxids,
+    verifiedHeight: BigInt.from(100),
+  );
+
+  @override
   Future<void> crateApiSyncRunPaymentLinkClaimSync({
+    required bool allowResubmit,
     required String claimId,
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
   }) async {
     if (!poolFixture) throw StateError('Unexpected claim sync');
+    claimSyncCalls++;
+    claimSyncModes.add(allowResubmit);
+    if (!syncStarted.isCompleted) syncStarted.complete();
+    await syncGate?.future;
   }
 
   @override
@@ -1646,6 +1813,7 @@ class _ClaimDestinationRustApi implements RustLibApi {
   }) async {
     if (!poolFixture) throw StateError('Unexpected history lookup');
     final isClaimWallet = accountUuid == 'claim-wallet';
+    if (isClaimWallet && claimHistory != null) return claimHistory!;
     return [
       for (final txid in isClaimWallet ? localClaimTxids : ['a', 'b'])
         _transaction(
@@ -1697,8 +1865,16 @@ class _ClaimDestinationRustApi implements RustLibApi {
     failures = 0;
     poolFixture = false;
     localClaimTxids = [];
+    conflictedTxids = [];
+    claimHistory = null;
     failingDetailTxids = {};
     detailLookups = 0;
+    estimateGate = null;
+    estimateStarted = Completer<void>();
+    syncGate = null;
+    syncStarted = Completer<void>();
+    claimSyncCalls = 0;
+    claimSyncModes = [];
   }
 
   @override

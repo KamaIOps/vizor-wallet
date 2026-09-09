@@ -430,12 +430,22 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
   final List<PaymentLinkClaimSession> claimedSessions = [];
   final List<String> discardedClaimAddresses = [];
   final List<String> retainedClaimAddresses = [];
+  PaymentLinkAvailability? claimAvailability;
+  final List<bool> inspectResubmitModes = [];
   final List<String> keptLinkAddresses = [];
   final List<bool> allowLongSyncCalls = [];
   final List<VizorPaymentLink> preparedLinks = [];
   int createdLoadCalls = 0;
   int receivedLoadCalls = 0;
   int fundingMetadataRetries = 0;
+
+  @override
+  Future<void> setReceivedCardArchived(String address, bool archived) async {
+    _replaceReceivedRecord(
+      address,
+      (record) => record.copyWith(archived: archived),
+    );
+  }
 
   @override
   Future<PaymentLinkFundingQuote> quoteMaxFunding({
@@ -581,8 +591,10 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
 
   @override
   Future<List<PaymentLinkReceivedRecord>> inspectReceivedLinkClaims(
-    List<PaymentLinkReceivedRecord> records,
-  ) async {
+    List<PaymentLinkReceivedRecord> records, {
+    bool allowResubmit = true,
+  }) async {
+    inspectResubmitModes.add(allowResubmit);
     for (var index = 0; index < receivedRecords.length; index++) {
       final record = receivedRecords[index];
       final status = receivedClaimStatuses[record.address] ?? record.status;
@@ -640,6 +652,11 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
       feeZatoshi: BigInt.from(kPaymentLinkClaimFeeReserveZatoshi),
       fundingConfirmationCount: fundingConfirmationCount,
       waitingForFundingConfirmations: waitingForFundingConfirmations,
+      availability:
+          claimAvailability ??
+          (claimable
+              ? PaymentLinkAvailability.available
+              : PaymentLinkAvailability.noBalance),
     );
   }
 
@@ -665,6 +682,10 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
         session.link.address,
         (record) => record.copyWith(
           status: PaymentLinkReceivedStatus.receiving,
+          availability:
+              result.status == PaymentLinkClaimBroadcastStatus.broadcasted
+              ? PaymentLinkAvailability.available
+              : PaymentLinkAvailability.checking,
           destinationAccountUuid: session.destinationAccountUuid,
           claimTxids: result.txids,
           claimSubmittedAt: DateTime.utc(2026, 8, 6, 2),
@@ -677,6 +698,7 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
         session.link.address,
         (record) => record.copyWith(
           status: PaymentLinkReceivedStatus.readyToClaim,
+          availability: PaymentLinkAvailability.failed,
           destinationAccountUuid: null,
           claimTxids: null,
           updatedAt: DateTime.utc(2026, 8, 6, 2),
@@ -719,6 +741,10 @@ class FakePaymentLinkOperations implements PaymentLinkOperations {
         ),
       );
     }
+    _replaceReceivedRecord(
+      session.link.address,
+      (record) => record.copyWith(availability: session.availability),
+    );
   }
 
   Future<PaymentLinkClaimResult> _claimLink(VizorPaymentLink link) async {

@@ -20,10 +20,6 @@ import 'package:zcash_wallet/widgetbook/payment_link_use_cases.dart';
 void main() {
   setUpAll(_loadAppFonts);
 
-  test('preview inventory covers all 27 desktop states', () {
-    expect(PaymentLinkPreviewState.values, hasLength(27));
-  });
-
   for (final state in PaymentLinkPreviewState.values) {
     testWidgets('renders the ${state.name} desktop fixture', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1080, 720));

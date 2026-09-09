@@ -7,6 +7,81 @@ import 'package:zcash_wallet/src/features/payment_links/services/payment_link_li
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_received_store.dart';
 
 void main() {
+  test('an old outcome cannot settle a newer submission', () async {
+    final store = PaymentLinkReceivedStore(_FakePaymentLinkReceivedStorage());
+    final link = _link();
+    await store.saveReady(link);
+    final old = await store.markClaimStarted(
+      address: link.address,
+      destinationAccountUuid: 'a',
+    );
+    await store.markReadyToClaim(address: link.address, expected: old);
+    await store.markClaimStarted(
+      address: link.address,
+      destinationAccountUuid: 'b',
+    );
+    await store.markReadyToClaim(
+      address: link.address,
+      expected: old,
+      availability: PaymentLinkAvailability.claimedElsewhere,
+    );
+    final current = (await store.load()).single;
+    expect(current.status, PaymentLinkReceivedStatus.submitting);
+    expect(current.destinationAccountUuid, 'b');
+    expect(await store.countReceivingForAccount('b'), 1);
+  });
+
+  test(
+    'archive preserves the secret and outcome across restart and restore',
+    () async {
+      final storage = _FakePaymentLinkReceivedStorage();
+      final store = PaymentLinkReceivedStore(storage);
+      final link = _link();
+      await store.saveReady(link);
+      await store.setAvailability(
+        link.address,
+        PaymentLinkAvailability.claimedElsewhere,
+      );
+      await store.setArchived(link.address, true);
+      final reopened = PaymentLinkReceivedStore(storage);
+      var record = (await reopened.load()).single;
+      expect(record.archived, isTrue);
+      expect(record.availability, PaymentLinkAvailability.claimedElsewhere);
+      expect(record.claimLink!.toUri(), link.toUri());
+      await reopened.setArchived(link.address, false);
+      record = (await reopened.load()).single;
+      expect(record.archived, isFalse);
+      expect(record.claimLink!.toUri(), link.toUri());
+    },
+  );
+
+  test('late empty preview cannot settle or hide an in-flight claim', () async {
+    final store = PaymentLinkReceivedStore(_FakePaymentLinkReceivedStorage());
+    final link = _link();
+    await store.saveReady(link);
+    await store.markClaimStarted(
+      address: link.address,
+      destinationAccountUuid: 'receiver',
+    );
+    await store.setAvailability(
+      link.address,
+      PaymentLinkAvailability.noBalance,
+    );
+    await expectLater(store.setArchived(link.address, true), throwsStateError);
+    expect(await store.countReceivingForAccount('receiver'), 1);
+    expect(
+      (await store.load()).single.availability,
+      PaymentLinkAvailability.checking,
+    );
+    await store.markReadyToClaim(address: link.address);
+    await store.setAvailability(
+      link.address,
+      PaymentLinkAvailability.claimedElsewhere,
+    );
+    expect(await store.countReceivingForAccount('receiver'), 0);
+    expect((await store.load()).single.claimLink!.toUri(), link.toUri());
+  });
+
   test(
     'retains fiat after submission, completion, and restart without bearer data',
     () async {

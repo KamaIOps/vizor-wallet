@@ -96,7 +96,10 @@ void main() {
         operations.receivedRecords.single.claimLink?.toUri(),
         incomingLink.toUri(),
       );
-      expect(find.text('This card has no available balance.'), findsOneWidget);
+      expect(
+        find.text('There is currently no balance available to claim.'),
+        findsOneWidget,
+      );
     },
   );
   for (final pricingEnabled in [true, false]) {
@@ -852,8 +855,11 @@ void main() {
           router.routerDelegate.currentConfiguration.uri.path,
           '/payment-links',
         );
-        expect(find.text('Receiving...'), findsOneWidget);
-        expect(find.text('Your gift is still being received.'), findsOneWidget);
+        expect(find.text('Checking result'), findsOneWidget);
+        expect(
+          find.text('Claim result is not confirmed. Check its status.'),
+          findsOneWidget,
+        );
         expect(find.text('Claim the gift'), findsNothing);
         expect(find.text('Try again'), findsNothing);
       },

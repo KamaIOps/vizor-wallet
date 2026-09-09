@@ -23,6 +23,7 @@ import 'payment_request_use_cases.dart';
 import 'request_amount_use_cases.dart';
 import 'pay_use_cases.dart';
 import 'payment_link_mobile_use_cases.dart';
+import 'payment_link_claim_outcome_use_cases.dart';
 import 'payment_link_use_cases.dart';
 import 'receive_use_cases.dart';
 import 'received_receipt_use_cases.dart';
@@ -1278,6 +1279,18 @@ class WidgetbookApp extends StatelessWidget {
                   name: 'Redeem',
                   useCases: [
                     WidgetbookUseCase(
+                      name: 'Already claimed',
+                      builder: buildClaimedElsewhereUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Claim failed',
+                      builder: buildClaimFailedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Checking result',
+                      builder: buildClaimCheckingUseCase,
+                    ),
+                    WidgetbookUseCase(
                       name: 'Paste link',
                       builder: buildPaymentLinkRedeemPasteUseCase,
                     ),
@@ -1295,7 +1308,7 @@ class WidgetbookApp extends StatelessWidget {
                     ),
                     WidgetbookUseCase(
                       name: 'No available balance',
-                      builder: buildPaymentLinkRedeemUnavailableUseCase,
+                      builder: buildClaimNoBalanceUseCase,
                     ),
                   ],
                 ),
