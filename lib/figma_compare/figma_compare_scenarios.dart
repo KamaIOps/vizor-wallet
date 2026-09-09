@@ -30,6 +30,8 @@ class FigmaCompareScenario {
     required this.builder,
     this.desktop = true,
     this.mobile = false,
+    this.scrollToEnd = false,
+    this.allowFocus = false,
   });
 
   final String id;
@@ -37,6 +39,8 @@ class FigmaCompareScenario {
   final FigmaCompareScenarioBuilder builder;
   final bool desktop;
   final bool mobile;
+  final bool scrollToEnd;
+  final bool allowFocus;
 }
 
 /// Deterministic previews for the screens changed on the current branch.
@@ -46,6 +50,26 @@ class FigmaCompareScenario {
 /// because they are already used to review the same UI states.
 const figmaCompareScenarios = <FigmaCompareScenario>[
   FigmaCompareScenario(
+    id: 'voting-share-status',
+    description: 'Desktop completed vote with shares still submitting',
+    builder: buildDesktopVotingVotedUseCase,
+    scrollToEnd: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-voting-share-in-progress',
+    description: 'Mobile encrypted vote shares while submission is in progress',
+    builder: buildVotingShareStatusUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-voting-share-complete',
+    description: 'Mobile encrypted vote shares after submission completes',
+    builder: buildVotingShareStatusCompleteUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
     id: 'donation-zec-empty',
     description: 'Desktop donation composer with an empty ZEC amount',
     builder: buildDonationZecEmptyUseCase,
@@ -54,6 +78,12 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
     id: 'donation-zec-selected',
     description: 'Desktop donation composer with 0.02 ZEC selected',
     builder: buildDonationZecSelectedUseCase,
+  ),
+  FigmaCompareScenario(
+    id: 'donation-zec-middle-cursor',
+    description: 'Desktop donation amount with a middle text cursor',
+    builder: buildDonationZecMiddleCursorUseCase,
+    allowFocus: true,
   ),
   FigmaCompareScenario(
     id: 'donation-usd-selected',
@@ -161,6 +191,28 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
     id: 'pay-recipient',
     description: 'Pay recipient selection with recent contacts',
     builder: buildPayRecipientUseCase,
+  ),
+  FigmaCompareScenario(
+    id: 'pay-amount-empty-focused',
+    description: 'Desktop Pay amount with empty focused input',
+    builder: buildPayAmountUseCase,
+    allowFocus: true,
+  ),
+  FigmaCompareScenario(
+    id: 'pay-amount-empty-unfocused',
+    description: 'Desktop Pay amount with empty unfocused input',
+    builder: buildPayAmountEmptyUnfocusedUseCase,
+  ),
+  FigmaCompareScenario(
+    id: 'pay-amount-value-focused',
+    description: 'Desktop Pay amount with a focused value',
+    builder: buildPayAmountValueFocusedUseCase,
+    allowFocus: true,
+  ),
+  FigmaCompareScenario(
+    id: 'pay-amount-value-unfocused',
+    description: 'Desktop Pay amount with an unfocused value',
+    builder: buildPayAmountValueUnfocusedUseCase,
   ),
   FigmaCompareScenario(
     id: 'pay-recipient-new-address',
@@ -673,10 +725,19 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
   ),
   FigmaCompareScenario(
     id: 'mobile-voting-voted',
-    description: 'Mobile completed coinholder vote detail',
+    description: 'Mobile completed vote detail with shares still submitting',
     builder: buildMobileVotingVotedUseCase,
     desktop: false,
     mobile: true,
+    scrollToEnd: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-voting-voted-complete',
+    description: 'Mobile completed vote detail with every share submitted',
+    builder: buildMobileVotingVotedCompleteUseCase,
+    desktop: false,
+    mobile: true,
+    scrollToEnd: true,
   ),
   FigmaCompareScenario(
     id: 'mobile-voting-proposal-default',

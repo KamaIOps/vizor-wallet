@@ -16,6 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 GENERATOR_PATH = ROOT / "scripts" / "generate-fdroid-metadata.py"
 RUST_WRAPPER_PATH = ROOT / "scripts" / "run-with-android-reproducible-rust.sh"
 REPRODUCIBLE_BUILD_PATH = ROOT / "scripts" / "build-android-reproducible.sh"
+ANDROID_APP_GRADLE_PATH = ROOT / "android" / "app" / "build.gradle.kts"
 SPEC = importlib.util.spec_from_file_location("generate_fdroid_metadata", GENERATOR_PATH)
 assert SPEC is not None and SPEC.loader is not None
 GENERATOR = importlib.util.module_from_spec(SPEC)
@@ -80,9 +81,12 @@ class FdroidMetadataTest(unittest.TestCase):
         self.assertIn(f"AllowedAPKSigningKeys: {GENERATOR.SIGNING_SHA256}", rendered)
         self.assertIn("AutoUpdateMode: Version mobile/v%v", rendered)
         self.assertIn(
-            "git -C $$flutter$$ checkout -f "
-            "db50e20168db8fee486b9abf32fc912de3bc5b6a",
+            "flutterVersion=$(sed -n -E ",
             rendered,
+        )
+        self.assertEqual(
+            rendered.count("git -C $$flutter$$ checkout -f $flutterVersion"),
+            3,
         )
         self.assertEqual(
             rendered.count("cargo fetch --locked --manifest-path rust/Cargo.toml"),
@@ -90,24 +94,55 @@ class FdroidMetadataTest(unittest.TestCase):
         )
         self.assertEqual(
             rendered.count(
-                f"--default-toolchain {GENERATOR.RELEASE_RUST_TOOLCHAIN}"
+                f"rustup toolchain install {GENERATOR.RELEASE_RUST_TOOLCHAIN}"
             ),
             3,
         )
-        self.assertEqual(rendered.count(f"flutter@{GENERATOR.FLUTTER_VERSION}"), 3)
-        self.assertNotIn("flutter@stable", rendered)
+        self.assertEqual(rendered.count("flutter@stable"), 3)
+        self.assertNotIn(
+            "db50e20168db8fee486b9abf32fc912de3bc5b6a",
+            rendered,
+        )
+        self.assertNotIn("rustup@", rendered)
+        self.assertNotIn("source $CARGO_HOME/env", rendered)
+        self.assertNotIn("sources.list.d/trixie.list", rendered)
+        self.assertEqual(
+            rendered.count("apt-get install -y build-essential rustup"),
+            3,
+        )
+        self.assertNotIn("apt-get install -y -t trixie", rendered)
+        self.assertNotIn("update-java-alternatives", rendered)
+        self.assertEqual(
+            rendered.count("export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64"),
+            6,
+        )
+        self.assertEqual(
+            rendered.count("export PUB_CACHE=$(pwd)/.pub-cache"),
+            6,
+        )
+        self.assertEqual(rendered.count("    scandelete:\n      - .pub-cache"), 3)
         self.assertEqual(
             rendered.count(
-                "export PUB_CACHE=/tmp/vizor-android-reproducible/pub-cache"
+                "cp -a $PUB_CACHE/. /tmp/vizor-android-reproducible/pub-cache/"
             ),
-            6,
+            3,
+        )
+        self.assertLess(
+            rendered.index("    scandelete:\n      - .pub-cache"),
+            rendered.index(
+                "cp -a $PUB_CACHE/. /tmp/vizor-android-reproducible/pub-cache/"
+            ),
         )
         self.assertEqual(
             rendered.count(
                 "export CARGO_HOME=/tmp/vizor-android-reproducible/cargo-home"
             ),
-            6,
+            3,
         )
+        self.assertNotIn("export GRADLE_USER_HOME=", rendered)
+        self.assertIn("  TetheredNet:", rendered)
+        self.assertEqual(rendered.count("functions.vizor.cash"), 2)
+        self.assertNotIn("third-party or Vizor-operated", rendered)
 
     def test_rejects_unexpected_signing_key(self) -> None:
         metadata = release_metadata()
@@ -150,6 +185,14 @@ class FdroidMetadataTest(unittest.TestCase):
             self.assertIn("CurrentVersion: 0.0.35", output.read_text(encoding="utf-8"))
 
 
+class AndroidApkMetadataTest(unittest.TestCase):
+    def test_disables_dependency_metadata_only_for_apks(self) -> None:
+        build_config = ANDROID_APP_GRADLE_PATH.read_text(encoding="utf-8")
+        self.assertIn("dependenciesInfo {", build_config)
+        self.assertIn("includeInApk = false", build_config)
+        self.assertNotIn("includeInBundle = false", build_config)
+
+
 class FdroidBuildScriptTest(unittest.TestCase):
     def test_dry_run_matches_stable_version_code_contract(self) -> None:
         result = subprocess.run(
@@ -171,7 +214,8 @@ class FdroidBuildScriptTest(unittest.TestCase):
         command_output = result.stdout.replace("\\", "")
         self.assertIn("baseVersionCode=350999", command_output)
         self.assertIn("rust=1.98.0", command_output)
-        self.assertIn("--target-platform android-arm64,android-arm,android-x64", command_output)
+        self.assertIn("--target-platform android-arm64", command_output)
+        self.assertNotIn("android-arm64,android-arm,android-x64", command_output)
         self.assertIn("--dart-define=VIZOR_FORM_FACTOR=mobile", command_output)
         self.assertIn(
             "--dart-define=VIZOR_COINGECKO_PRICE_BASE_URL=https://functions.vizor.cash/api/v3",
@@ -187,6 +231,38 @@ class FdroidBuildScriptTest(unittest.TestCase):
         )
         self.assertIn("signing=unsigned", command_output)
         self.assertIn("offline=true", command_output)
+
+    def test_dry_run_builds_only_requested_abi(self) -> None:
+        cases = (
+            ("armeabi-v7a", "351999", "android-arm"),
+            ("arm64-v8a", "352999", "android-arm64"),
+            ("x86_64", "354999", "android-x64"),
+        )
+        for abi, version_code, target_platform in cases:
+            with self.subTest(abi=abi):
+                result = subprocess.run(
+                    [
+                        str(ROOT / "scripts" / "build-android-fdroid.sh"),
+                        "--version",
+                        "0.0.35",
+                        "--expected-abi",
+                        abi,
+                        "--expected-version-code",
+                        version_code,
+                        "--dry-run",
+                    ],
+                    check=True,
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                )
+                command_output = result.stdout.replace("\\", "")
+                self.assertIn(
+                    f"--target-platform {target_platform}", command_output
+                )
+                self.assertNotIn(
+                    "android-arm64,android-arm,android-x64", command_output
+                )
 
     def test_dry_run_rejects_wrong_abi_version_code(self) -> None:
         result = subprocess.run(
@@ -231,7 +307,12 @@ class AndroidReproducibleBuildScriptTest(unittest.TestCase):
         )
         command_output = result.stdout.replace("\\", "")
         self.assertIn("signing=required", command_output)
+        self.assertIn("targetAbi=all", command_output)
         self.assertIn("offline=false", command_output)
+        self.assertIn(
+            "--target-platform android-arm64,android-arm,android-x64",
+            command_output,
+        )
         self.assertIn("--build-name 0.0.35", command_output)
         self.assertIn("--build-number 350999", command_output)
         self.assertIn(
@@ -267,7 +348,6 @@ class AndroidReproducibleBuildScriptTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 2)
         self.assertIn("FLUTTER_BIN must be an absolute path", result.stderr)
-
 
 class AndroidReproducibleRustWrapperTest(unittest.TestCase):
     def _run_with_fake_rustup(self, *, installed: bool) -> tuple[subprocess.CompletedProcess, pathlib.Path]:

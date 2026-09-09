@@ -455,6 +455,7 @@ pub async fn create_pczt_from_proposal(
     }
     let live_expiry_height = match super::send::live_send_expiry_height(
         lightwalletd_url,
+        network,
         zcash_protocol::consensus::BlockHeight::from(stored.proposal.min_target_height()),
     )
     .await
@@ -570,6 +571,7 @@ pub async fn create_tex_pczts_from_proposal(
     }
     let live_expiry_height = match super::send::live_send_expiry_height(
         lightwalletd_url,
+        network,
         zcash_protocol::consensus::BlockHeight::from(stored.proposal.min_target_height()),
     )
     .await
@@ -1499,7 +1501,7 @@ async fn store_and_broadcast_pczts_for_proposal(
     let txids_joined = txids.join(",");
     let total_count = prepared.len() as u32;
 
-    // Resolve a live tip before touching either the DB or the network. An
+    // Resolve a recent tip before touching either the DB or the network. An
     // already-expired set is terminal and must not be persisted as pending.
     let mut expiry_client =
         match crate::wallet::sync_engine::open_isolated_lwd_channel(lightwalletd_url).await {
@@ -1512,7 +1514,13 @@ async fn store_and_broadcast_pczts_for_proposal(
                 );
             }
         };
-    let latest = match crate::wallet::sync_engine::get_latest_block(&mut expiry_client).await {
+    let latest = match crate::wallet::sync_engine::latest_block_for_transaction_with_client(
+        &mut expiry_client,
+        lightwalletd_url,
+        network,
+    )
+    .await
+    {
         Ok(latest) => latest,
         Err(error) => {
             return release_pczt_proposal_after_failure(
@@ -2021,9 +2029,13 @@ pub async fn extract_and_broadcast_pczt(
     let mut client = crate::wallet::sync_engine::open_isolated_lwd_channel(lightwalletd_url)
         .await
         .map_err(|e| e.to_string())?;
-    let latest = crate::wallet::sync_engine::get_latest_block(&mut client)
-        .await
-        .map_err(|e| e.to_string())?;
+    let latest = crate::wallet::sync_engine::latest_block_for_transaction_with_client(
+        &mut client,
+        lightwalletd_url,
+        network,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
     if let Some(error) =
         pczt_broadcast_expiry_error(&txid, u32::from(tx.expiry_height()), latest.height)
     {

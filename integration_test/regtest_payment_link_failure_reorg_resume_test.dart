@@ -59,6 +59,7 @@ void main() {
       await waitForForegroundSyncIdle(tester);
 
       final fiveConfirmationTip = await rust_wallet.getLatestBlockHeight(
+        network: 'regtest',
         lightwalletdUrl: paymentLinkRegtestLightwalletdUrl,
       );
       for (final minedHeight in minedTransactions.values) {

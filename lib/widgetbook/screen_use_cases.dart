@@ -5062,6 +5062,11 @@ class _PreviewReceiveAddressService implements ReceiveAddressService {
   }
 
   @override
+  Future<String> reserveOrchardAddress({required String accountUuid}) async {
+    return 'u1widgetbookaccountsreservedaddress';
+  }
+
+  @override
   Future<String> renewShieldedAddress({required String accountUuid}) async {
     return 'u1widgetbookaccountsrenewedaddress';
   }

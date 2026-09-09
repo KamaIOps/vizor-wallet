@@ -587,6 +587,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<BigInt> crateApiWalletGetLatestBlockHeight({
     required String lightwalletdUrl,
+    required String network,
   });
 
   Future<String> crateApiWalletGetLightwalletdChainName({
@@ -4657,12 +4658,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<BigInt> crateApiWalletGetLatestBlockHeight({
     required String lightwalletdUrl,
+    required String network,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(lightwalletdUrl, serializer);
+          sse_encode_String(network, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -4675,7 +4678,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiWalletGetLatestBlockHeightConstMeta,
-        argValues: [lightwalletdUrl],
+        argValues: [lightwalletdUrl, network],
         apiImpl: this,
       ),
     );
@@ -4684,7 +4687,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiWalletGetLatestBlockHeightConstMeta =>
       const TaskConstMeta(
         debugName: "get_latest_block_height",
-        argNames: ["lightwalletdUrl"],
+        argNames: ["lightwalletdUrl", "network"],
       );
 
   @override

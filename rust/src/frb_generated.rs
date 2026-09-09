@@ -3227,11 +3227,14 @@ fn wire__crate__api__wallet__get_latest_block_height_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
+            let api_network = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
-                    let output_ok =
-                        crate::api::wallet::get_latest_block_height(api_lightwalletd_url)?;
+                    let output_ok = crate::api::wallet::get_latest_block_height(
+                        api_lightwalletd_url,
+                        api_network,
+                    )?;
                     Ok(output_ok)
                 })())
             }

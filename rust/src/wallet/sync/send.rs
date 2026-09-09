@@ -129,12 +129,10 @@ fn send_proposal_is_expired(
 
 pub(super) async fn live_send_expiry_height(
     lightwalletd_url: &str,
+    network: WalletNetwork,
     min_target_height: BlockHeight,
 ) -> Result<BlockHeight, String> {
-    let mut client = sync_engine::open_lwd_channel(lightwalletd_url)
-        .await
-        .map_err(|e| format!("Connect to lightwalletd before transaction construction: {e}"))?;
-    let tip = sync_engine::get_latest_block(&mut client)
+    let tip = sync_engine::latest_block_for_transaction(lightwalletd_url, network)
         .await
         .map_err(|e| format!("Read live chain tip before transaction construction: {e}"))?;
     let tip = u32::try_from(tip.height).map_err(|_| "Live chain tip exceeds u32")?;
@@ -1013,10 +1011,7 @@ pub(crate) async fn create_shield_transparent_pczt(
     account_uuid: &str,
 ) -> Result<ShieldTransparentPcztResult, String> {
     let live_expiry_height = {
-        let mut client = sync_engine::open_lwd_channel(lightwalletd_url)
-            .await
-            .map_err(|e| format!("Connect to lightwalletd before shielding PCZT: {e}"))?;
-        let tip = sync_engine::get_latest_block(&mut client)
+        let tip = sync_engine::latest_block_for_transaction(lightwalletd_url, network)
             .await
             .map_err(|e| format!("Read live chain tip before shielding PCZT: {e}"))?;
         let tip = u32::try_from(tip.height).map_err(|_| "Shielding PCZT chain tip exceeds u32")?;
@@ -1108,10 +1103,7 @@ pub(crate) async fn shield_transparent_balance(
 ) -> Result<ShieldTransparentResult, String> {
     let shielding_threshold = shielding_threshold()?;
     let live_expiry_height = {
-        let mut client = sync_engine::open_lwd_channel(lightwalletd_url)
-            .await
-            .map_err(|e| format!("Connect to lightwalletd before shielding: {e}"))?;
-        let tip = sync_engine::get_latest_block(&mut client)
+        let tip = sync_engine::latest_block_for_transaction(lightwalletd_url, network)
             .await
             .map_err(|e| format!("Read live chain tip before shielding: {e}"))?;
         let tip = u32::try_from(tip.height).map_err(|_| "Shielding chain tip exceeds u32")?;
@@ -1278,7 +1270,7 @@ async fn execute_stored_proposal(
 
     let min_target_height = BlockHeight::from(stored.proposal.min_target_height());
     let live_expiry_height =
-        match live_send_expiry_height(lightwalletd_url, min_target_height).await {
+        match live_send_expiry_height(lightwalletd_url, network, min_target_height).await {
             Ok(height) => height,
             Err(error) => {
                 return match finish_stored_proposal(proposal_id, &send_flow_id, true) {
@@ -2024,7 +2016,7 @@ pub(crate) async fn retire_unbroadcast_orchard_migration(
     let mut client = sync_engine::open_lwd_channel(lightwalletd_url)
         .await
         .map_err(|e| format!("Open migration recovery endpoint: {e}"))?;
-    let chain_tip = sync_engine::get_latest_block(&mut client)
+    let chain_tip = sync_engine::get_latest_block_recorded(&mut client, lightwalletd_url, network)
         .await
         .map_err(|e| format!("Read migration recovery chain tip: {e}"))?;
     let chain_tip_height =
@@ -2091,7 +2083,7 @@ async fn reconcile_scheduled_migration_txs_before_abandon(
     let mut client = sync_engine::open_lwd_channel(lightwalletd_url)
         .await
         .map_err(|e| format!("Open migration stop reconciliation endpoint: {e}"))?;
-    let chain_tip = sync_engine::get_latest_block(&mut client)
+    let chain_tip = sync_engine::get_latest_block_recorded(&mut client, lightwalletd_url, network)
         .await
         .map_err(|e| format!("Read migration stop reconciliation chain tip: {e}"))?;
     let chain_tip_height = u32::try_from(chain_tip.height)

@@ -365,6 +365,7 @@ Future<void> minePaymentLinkRegtestBlocks(int blocks) async {
   final deadline = DateTime.now().add(const Duration(seconds: 30));
   while (DateTime.now().isBefore(deadline)) {
     final lightwalletdHeight = await rust_wallet.getLatestBlockHeight(
+      network: 'regtest',
       lightwalletdUrl: paymentLinkRegtestLightwalletdUrl,
     );
     if (lightwalletdHeight.toInt() >= targetHeight) return;

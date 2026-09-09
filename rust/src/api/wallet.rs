@@ -150,16 +150,21 @@ fn nu6_3_activation_height(network: WalletNetwork) -> Option<u64> {
 }
 
 /// Get the latest block height from lightwalletd.
-pub fn get_latest_block_height(lightwalletd_url: String) -> Result<u64, String> {
+pub fn get_latest_block_height(lightwalletd_url: String, network: String) -> Result<u64, String> {
     catch(|| {
+        let network = keys::parse_network(&network)?;
         let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
         rt.block_on(async {
             let mut client = crate::wallet::sync_engine::open_lwd_channel(&lightwalletd_url)
                 .await
                 .map_err(|e| e.to_string())?;
-            let tip = crate::wallet::sync_engine::get_latest_block(&mut client)
-                .await
-                .map_err(|e| e.to_string())?;
+            let tip = crate::wallet::sync_engine::get_latest_block_recorded(
+                &mut client,
+                &lightwalletd_url,
+                network,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
 
             Ok(tip.height)
         })
@@ -204,9 +209,13 @@ pub fn get_chain_upgrade_status(
             let mut client = crate::wallet::sync_engine::open_lwd_channel(&lightwalletd_url)
                 .await
                 .map_err(|e| e.to_string())?;
-            let tip = crate::wallet::sync_engine::get_latest_block(&mut client)
-                .await
-                .map_err(|e| e.to_string())?;
+            let tip = crate::wallet::sync_engine::get_latest_block_recorded(
+                &mut client,
+                &lightwalletd_url,
+                network,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
             let info = tokio::time::timeout(
                 std::time::Duration::from_secs(10),
                 client.get_lightd_info(Empty {}),
@@ -724,7 +733,13 @@ async fn discover_used_software_accounts(
             return Vec::new();
         }
     };
-    let tip = match crate::wallet::sync_engine::get_latest_block(&mut client).await {
+    let tip = match crate::wallet::sync_engine::get_latest_block_recorded(
+        &mut client,
+        lightwalletd_url,
+        network,
+    )
+    .await
+    {
         Ok(tip) => tip.height,
         Err(e) => {
             log::warn!("software account discovery: could not get chain tip: {e}");

@@ -43,6 +43,10 @@ void runFigmaCompareCaptureTest({
           : 'pay-recipient',
     );
     final scenario = configuration.resolveScenario(expectedFormFactor);
+    if (scenario.allowFocus) {
+      EditableText.debugDeterministicCursor = true;
+      addTearDown(() => EditableText.debugDeterministicCursor = false);
+    }
     final output = File(
       configuration.outputPath.isEmpty
           ? '${Directory.systemTemp.path}/vizor-figma-compare/'
@@ -86,6 +90,14 @@ void runFigmaCompareCaptureTest({
     // resting state without using pumpAndSettle, which would hang on the
     // intentionally looping home-screen illustration motion.
     await tester.pump(const Duration(milliseconds: 400));
+
+    if (scenario.scrollToEnd) {
+      final scrollable = find.byType(Scrollable);
+      expect(scrollable, findsOneWidget);
+      final state = tester.state<ScrollableState>(scrollable);
+      state.position.jumpTo(state.position.maxScrollExtent);
+      await tester.pump();
+    }
 
     if (configuration.outputPath.isEmpty) {
       expect(find.byKey(captureBoundaryKey), findsOneWidget);
