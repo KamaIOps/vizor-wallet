@@ -71,6 +71,34 @@ void main() {
   }
 
   setUpAll(loadPaymentLinksTestFonts);
+
+  testWidgets(
+    'mobile keeps a saved unavailable Card during destination preparation',
+    (tester) async {
+      final accounts = SwitchablePaymentLinkAccountNotifier();
+      final operations = FakePaymentLinkOperations(
+        receivedRecords: [PaymentLinkReceivedRecord.fromLink(incomingLink)],
+        readClaimDestination: () => accounts.current,
+      );
+      await _openReceivedCard(tester, operations, accountNotifier: accounts);
+      await tester.tap(find.text('Claim the gift'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('payment_link_claim_account_account-2')),
+      );
+      operations.claimable = false;
+      await tester.tap(find.text('Claim gift'));
+      await tester.pumpAndSettle();
+      expect(operations.claimedLinks, isEmpty);
+      expect(operations.discardedClaimAddresses, isEmpty);
+      expect(operations.retainedClaimAddresses, [incomingLink.address]);
+      expect(
+        operations.receivedRecords.single.claimLink?.toUri(),
+        incomingLink.toUri(),
+      );
+      expect(find.text('This card has no available balance.'), findsOneWidget);
+    },
+  );
   for (final pricingEnabled in [true, false]) {
     testWidgets(
       'creation snapshots fiat only with pricing enabled: $pricingEnabled',

@@ -2483,7 +2483,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a Card that can no longer be claimed leaves Received', (
+  testWidgets('an unavailable saved Card remains recoverable and can retry', (
     tester,
   ) async {
     final operations = FakePaymentLinkOperations(
@@ -2508,10 +2508,59 @@ void main() {
     await tester.tap(find.text('Claim'));
     await tester.pumpAndSettle();
 
-    expect(row, findsNothing);
-    expect(operations.forgottenLinkAddresses, [incomingLink.address]);
-    expect(operations.receivedRecords, isEmpty);
+    expect(find.text('This Card has no available balance.'), findsOneWidget);
+    expect(operations.discardedClaimAddresses, isEmpty);
+    expect(operations.retainedClaimAddresses, [incomingLink.address]);
+    expect(
+      operations.receivedRecords.single.claimLink?.toUri(),
+      incomingLink.toUri(),
+    );
+
+    // Reopen from the list without obtaining the original link again.
+    operations.claimable = true;
+    await tester.tap(find.widgetWithText(AppBackLink, 'My Cards'));
+    await tester.pumpAndSettle();
+    expect(row, findsOneWidget);
+    await tester.tap(find.text('Claim'));
+    await tester.pumpAndSettle();
+    expect(find.text('Claim the gift card'), findsOneWidget);
+    expect(operations.preparedLinks, hasLength(2));
   });
+
+  testWidgets(
+    'confirmation refresh keeps a saved Card when funding is absent',
+    (tester) async {
+      final operations = FakePaymentLinkOperations(
+        receivedRecords: [PaymentLinkReceivedRecord.fromLink(incomingLink)],
+        claimable: false,
+        waitingForFundingConfirmations: true,
+        fundingConfirmationCount: 2,
+      );
+      await pumpPaymentLinksScreen(tester, operations: operations);
+      await tester.tap(find.text('Received'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Claim'));
+      await tester.pumpAndSettle();
+      expect(find.text('Wait 5:00 to claim'), findsOneWidget);
+
+      operations.waitingForFundingConfirmations = false;
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pumpAndSettle();
+      expect(find.text('This Card has no available balance.'), findsOneWidget);
+      expect(operations.discardedClaimAddresses, isEmpty);
+      expect(
+        operations.receivedRecords.single.claimLink?.toUri(),
+        incomingLink.toUri(),
+      );
+
+      operations.claimable = true;
+      await tester.tap(find.widgetWithText(AppBackLink, 'My Cards'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Claim'));
+      await tester.pumpAndSettle();
+      expect(find.text('Claim the gift card'), findsOneWidget);
+    },
+  );
 
   testWidgets('shows an interrupted funding draft without reclaim controls', (
     tester,

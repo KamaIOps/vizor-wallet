@@ -479,20 +479,12 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     unawaited(_paymentLinkOperations.keepReceivedLink(link));
   }
 
-  /// A Card that can never be claimed again stops being offered: the durable
-  /// record goes with the row, so a relaunch does not restore the Claim.
-  void _forgetUnavailableCard(VizorPaymentLink link) {
-    final listed = _receivedCards.any(
-      (record) =>
-          record.address == link.address &&
-          record.status == PaymentLinkReceivedStatus.readyToClaim,
-    );
-    if (!listed) return;
-    _receivedCards = [
-      for (final record in _receivedCards)
-        if (record.address != link.address) record,
-    ];
-    unawaited(_paymentLinkOperations.forgetReceivedLink(link));
+  /// An empty scan cannot prove that a Card will never receive funds. Keep
+  /// listed Cards and their wallets for retry; new previews remain disposable.
+  Future<void> _releaseUnavailableClaim(PaymentLinkClaimSession session) {
+    return _shouldKeepCard(session)
+        ? _paymentLinkOperations.retainPendingClaim(session)
+        : _paymentLinkOperations.discardClaimSession(session);
   }
 
   void _rememberReceivedLink(VizorPaymentLink link) {
@@ -1313,14 +1305,12 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         return;
       }
       if (!session.canClaim) {
-        await ref
-            .read(paymentLinkOperationsProvider)
-            .discardClaimSession(session);
+        await _releaseUnavailableClaim(session);
+        if (!mounted) return;
         setState(() {
           _receivedClaimSession = null;
           _longSyncLink = null;
           _retryLink = null;
-          _forgetUnavailableCard(link);
           _redeemState = PaymentLinkRedeemVisualState.unavailable;
           _page = PaymentLinksLocalPage.redeem;
         });
@@ -1431,13 +1421,11 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         return;
       }
       if (!refreshed.canClaim && !refreshed.waitingForFundingConfirmations) {
-        await ref
-            .read(paymentLinkOperationsProvider)
-            .discardClaimSession(refreshed);
+        await _releaseUnavailableClaim(refreshed);
+        if (!mounted) return;
         setState(() {
           _receivedClaimSession = null;
           _receivedLink = null;
-          _forgetUnavailableCard(link);
           _redeemState = PaymentLinkRedeemVisualState.unavailable;
           _page = PaymentLinksLocalPage.redeem;
         });
@@ -1642,12 +1630,12 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         throw const PaymentLinkClaimDestinationChangedException();
       }
       if (!prepared.canClaim && !prepared.waitingForFundingConfirmations) {
-        await _paymentLinkOperations.discardClaimSession(prepared);
+        await _releaseUnavailableClaim(prepared);
         pendingSession = null;
         if (!mounted) return;
         setState(() {
           _receivedLink = null;
-          _forgetUnavailableCard(link);
+          _receivedClaimSession = null;
           _redeemState = PaymentLinkRedeemVisualState.unavailable;
           _page = PaymentLinksLocalPage.redeem;
         });
