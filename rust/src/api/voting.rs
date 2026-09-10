@@ -28,6 +28,15 @@ use zcash_voting::wire::{
 
 pub use zcash_voting::vote::{DraftVote, SignedVoteCommitments};
 
+/// Supplies the disposable local chain anchor for regtest integration tests.
+/// This does not change mainnet/testnet trust or verification rules.
+pub fn configure_regtest_voting_participation(
+    chain_id: String,
+    validator_hash: String,
+) -> Result<(), String> {
+    crate::wallet::voting::participation::configure_regtest_trust(chain_id, validator_hash)
+}
+
 /// UFVK-only preparation for read-only participation discovery (also Keystone).
 pub fn prepare_voting_participation(ctx: ApiVotingRoundContext) -> Result<String, String> {
     crate::wallet::voting::participation::prepare(

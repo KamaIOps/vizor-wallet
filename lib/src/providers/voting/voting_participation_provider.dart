@@ -23,6 +23,15 @@ import 'voting_state.dart';
 const votingAlreadyUsedMessage =
     'These funds were already used for this round. Voting cannot be restarted on this device.';
 
+/// Integration tests can supply their signed, local regtest config identity.
+/// This changes routing support only, never a participation result.
+final votingParticipationSourceSupportedProvider =
+    Provider<bool Function(String, String)>(
+      (ref) =>
+          (network, source) =>
+              votingDiscoveryScopeForSource(network, source) != null,
+    );
+
 final votingParticipationClientProvider = Provider((ref) {
   final http = DartIoVotingHttpClient();
   ref.onDispose(() => http.close(force: true));
@@ -91,7 +100,10 @@ class VotingParticipationCoordinator {
     final source = ref.read(votingConfigSourceProvider).value?.sourceUrl;
     final network = ref.read(rpcEndpointProvider).networkName;
     if (source == null ||
-        votingDiscoveryScopeForSource(network, source) == null) {
+        !ref.read(votingParticipationSourceSupportedProvider)(
+          network,
+          source,
+        )) {
       return;
     }
     final cache = ref.read(votingHomeCacheProvider.notifier);
@@ -145,7 +157,10 @@ class VotingParticipationCoordinator {
     if (account == null ||
         source == null ||
         ref.read(appSecurityProvider).requiresUnlock ||
-        votingDiscoveryScopeForSource(network, source) == null) {
+        !ref.read(votingParticipationSourceSupportedProvider)(
+          network,
+          source,
+        )) {
       return Future.value();
     }
     final key = '$network|$source|$account|$round';

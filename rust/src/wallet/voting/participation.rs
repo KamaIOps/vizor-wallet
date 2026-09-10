@@ -21,6 +21,26 @@ use crate::wallet::sync::open_wallet_db_for_read;
 // See docs/voting-participation.md before updating these trust anchors.
 const PROD_VALIDATORS: &str = "621A1E2C532170C3C0BC2E951D26C1CCA7A0EFB009AA15820D648D336C64F6BD";
 const STAGE_VALIDATORS: &str = "6E81F631CB63A527AB5A659529BA8942C46CCF78BA87D1B3AD4CF8AE5BDC2E8B";
+// Set only by the local integration harness. Production/testnet never consult
+// this anchor; their compiled trust roots remain authoritative.
+static REGTEST_TRUST: std::sync::OnceLock<(String, String)> = std::sync::OnceLock::new();
+pub fn configure_regtest_trust(chain: String, validator_hash: String) -> Result<(), String> {
+    let _: tendermint::chain::Id = chain.parse().map_err(|_| INVALID)?;
+    let hash = hex::decode(&validator_hash).map_err(|_| INVALID)?;
+    if hash.len() != 32 {
+        return Err(INVALID.into());
+    }
+    let anchor = (chain, validator_hash.to_uppercase());
+    if let Some(existing) = REGTEST_TRUST.get() {
+        return if existing == &anchor {
+            Ok(())
+        } else {
+            Err(INVALID.into())
+        };
+    }
+    REGTEST_TRUST.set(anchor).map_err(|_| INVALID.to_string())
+}
+
 const MAX_NOTES: usize = 1024;
 const MAX_JSON: usize = 8 * 1024 * 1024;
 const INVALID: &str = "Voting participation evidence could not be verified";
@@ -145,6 +165,10 @@ fn verify_header(
     let (chain, pin) = match network {
         "main" => ("zvote-1", PROD_VALIDATORS),
         "test" => ("svote-1", STAGE_VALIDATORS),
+        "regtest" => {
+            let (chain, pin) = REGTEST_TRUST.get().ok_or(INVALID)?;
+            (chain.as_str(), pin.as_str())
+        }
         _ => return Err(INVALID.into()),
     };
     let s = &commit.signed_header;
@@ -497,6 +521,25 @@ mod tests {
         let now = header.header.time.unix_timestamp();
         (value, keys, now)
     }
+    #[test]
+    fn regtest_anchor_is_explicit_and_cannot_change_public_network_trust() {
+        let (evidence, keys, now) = fixture("test");
+        assert!(verify(&keys, "regtest", &evidence.to_string(), now).is_err());
+        assert!(configure_regtest_trust("local".into(), "invalid".into()).is_err());
+        configure_regtest_trust("svote-1".into(), STAGE_VALIDATORS.into()).unwrap();
+        assert_eq!(
+            verify(&keys, "regtest", &evidence.to_string(), now).unwrap(),
+            [true, false]
+        );
+        assert!(configure_regtest_trust("different-chain".into(), PROD_VALIDATORS.into()).is_err());
+        assert!(verify(&keys, "main", &evidence.to_string(), now).is_err());
+        let (main, main_keys, main_now) = fixture("main");
+        assert_eq!(
+            verify(&main_keys, "main", &main.to_string(), main_now).unwrap(),
+            [true, false]
+        );
+    }
+
     #[test]
     fn verifies_real_membership_and_absence_on_both_chains() {
         for network in ["main", "test"] {

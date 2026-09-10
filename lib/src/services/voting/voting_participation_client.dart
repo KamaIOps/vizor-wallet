@@ -54,7 +54,10 @@ class VotingParticipationResult {
 }
 
 class VotingParticipationClient {
-  VotingParticipationClient(this.http, this.bridge);
+  VotingParticipationClient(this.http, this.bridge, {this.regtestEndpoint});
+
+  /// Local integration transport; ignored for mainnet and testnet.
+  final Uri? regtestEndpoint;
   final VotingHttpClient http;
   final VotingParticipationBridge bridge;
   static const requestTimeout = Duration(seconds: 10);
@@ -67,6 +70,15 @@ class VotingParticipationClient {
     final endpoint = switch (context.network) {
       'main' => Uri.parse('https://vote-rpc-primary.valargroup.org'),
       'test' => Uri.parse('https://stage.vote-rpc-primary.valargroup.org'),
+      'regtest'
+          when regtestEndpoint != null &&
+              regtestEndpoint!.scheme == 'http' &&
+              const [
+                '127.0.0.1',
+                'localhost',
+                '::1',
+              ].contains(regtestEndpoint!.host) =>
+        regtestEndpoint!,
       _ => throw StateError('Unsupported voting participation network'),
     };
     final deadline = clock().add(const Duration(minutes: 4));
