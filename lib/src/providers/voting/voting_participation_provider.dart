@@ -93,7 +93,8 @@ class VotingParticipationCoordinator {
   int _epoch = 0;
   Future<void> _tail = Future.value();
   final Map<String, Future<void>> _pending = {};
-  final Map<String, DateTime> _failed = {};
+  // In-memory only: a fresh app session may check immediately.
+  final Map<String, ({Duration delay, DateTime retryAt})> _failed = {};
 
   Future<void> checkHomeCandidates() async {
     if (ref.read(appSecurityProvider).requiresUnlock) return;
@@ -180,9 +181,7 @@ class VotingParticipationCoordinator {
           if (!current()) return;
           final clock = ref.read(votingHomeClockProvider);
           final failed = _failed[key];
-          if (!force &&
-              failed != null &&
-              clock().difference(failed) < const Duration(minutes: 1)) {
+          if (!force && failed != null && clock().isBefore(failed.retryAt)) {
             return;
           }
           final cache = ref.read(votingHomeCacheProvider.notifier);
@@ -277,7 +276,18 @@ class VotingParticipationCoordinator {
         })
         .catchError((Object _) {
           // Raw RPC errors may contain a queried identifier. Never log them.
-          if (ref.mounted) _failed[key] = ref.read(votingHomeClockProvider)();
+          // Lock/account/source changes cancel work; they are not failed checks.
+          if (!current()) return;
+          final previousMinutes = _failed[key]?.delay.inMinutes ?? 0;
+          final delay = Duration(
+            minutes: previousMinutes == 0
+                ? 1
+                : (previousMinutes * 2).clamp(1, 30),
+          );
+          _failed[key] = (
+            delay: delay,
+            retryAt: ref.read(votingHomeClockProvider)().add(delay),
+          );
         })
         .whenComplete(() {
           release();

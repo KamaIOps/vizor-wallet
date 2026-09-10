@@ -45,7 +45,11 @@ produce unknown status rather than accepting unverifiable remote assertions.
 ## Persistence and recovery
 
 A verified result is cached per network/config fingerprint/account/round. Successful
-checks are not repeated automatically; failures have a one-minute retry backoff.
+checks are not repeated automatically. Consecutive failures back off for 1, 2, 4,
+8, 16, then at most 30 minutes, per network/source/account/round. Existing Home
+triggers retry once that deadline passes; no retry timer is added. Backoff lives
+only in memory and resets after success. Cancelled work (lock, account or source
+change) and incomplete sync do not increase the delay.
 Detail's **Check again** explicitly retries and refreshes eligibility. Rewinding
 below the checked snapshot invalidates cached eligibility and participation hints.
 This is a restore-time observation, not continuous cross-device monitoring.

@@ -129,6 +129,105 @@ void main() {
     },
   );
 
+  test('participation backoff grows, caps, and resets after success', () async {
+    var now = DateTime.utc(2026, 9, 10);
+    final client = FakeVotingParticipationClient();
+    final container = _sessionContainer(
+      extraOverrides: [
+        votingParticipationClientProvider.overrideWithValue(client),
+        votingHomeClockProvider.overrideWithValue(() => now),
+        syncProvider.overrideWith(_PollEligibilitySyncNotifier.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(accountProvider.future);
+    await container.read(votingConfigSourceProvider.future);
+    final checker = container.read(votingParticipationProvider);
+    await checker.checkRound(kRoundId);
+    expect(client.calls, 1);
+    for (final minutes in [1, 2, 4, 8, 16, 30, 30]) {
+      final calls = client.calls;
+      now = now.add(
+        Duration(minutes: minutes) - const Duration(milliseconds: 1),
+      );
+      await checker.checkRound(kRoundId);
+      expect(
+        client.calls,
+        calls,
+        reason: 'Must wait the full $minutes minutes',
+      );
+      now = now.add(const Duration(milliseconds: 1));
+      await checker.checkRound(kRoundId);
+      expect(client.calls, calls + 1);
+    }
+    // Explicit user retry bypasses the current 30-minute wait.
+    client.result = const VotingParticipationResult(
+      fingerprint: 'notes',
+      usedCount: 0,
+      noteCount: 1,
+      remainingEligible: true,
+      localState: false,
+    );
+    final calls = client.calls;
+    await checker.checkRound(kRoundId, force: true);
+    expect(client.calls, calls + 1);
+    client.result = null;
+    await checker.checkRound(kRoundId, force: true);
+    expect(client.calls, calls + 2);
+    now = now.add(const Duration(minutes: 1));
+    // A forced failure preserves the success cache; invalidate the snapshot
+    // so the next automatic attempt exercises the reset backoff.
+    await container
+        .read(votingHomeCacheProvider.notifier)
+        .invalidateEligibilityAfterRewind(
+          network: 'main',
+          accountUuid: 'account-1',
+          scannedHeight: 0,
+        );
+    await checker.checkRound(kRoundId);
+    expect(
+      client.calls,
+      calls + 3,
+      reason: 'Success resets the failure delay to one minute',
+    );
+  });
+
+  test('participation cancellation does not impose a retry delay', () async {
+    final security = _MutableVotingSecurityNotifier(
+      const AppSecurityState(isPasswordConfigured: true, isUnlocked: true),
+    );
+    final client = FakeVotingParticipationClient()..gate = Completer<void>();
+    final container = _sessionContainer(
+      securityNotifier: security,
+      extraOverrides: [
+        votingParticipationClientProvider.overrideWithValue(client),
+        syncProvider.overrideWith(_PollEligibilitySyncNotifier.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(accountProvider.future);
+    await container.read(votingConfigSourceProvider.future);
+    final checker = container.read(votingParticipationProvider);
+    final pending = checker.checkRound(kRoundId);
+    await Future.doWhile(() async {
+      await Future<void>.delayed(Duration.zero);
+      return client.calls == 0;
+    }).timeout(const Duration(seconds: 5));
+    security.setUnlocked(false);
+    await container.pump();
+    client.gate!.complete();
+    await pending;
+    security.setUnlocked(true);
+    await container.pump();
+    client.gate = null;
+    await checker.checkRound(kRoundId);
+    expect(
+      client.calls,
+      2,
+      reason: 'Cancelled work must permit an immediate retry',
+    );
+  });
+
   test('Home participation checks only visible synced candidates', () async {
     final container = _sessionContainer(
       extraOverrides: [
