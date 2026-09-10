@@ -32,6 +32,121 @@ import '../../fakes/fake_sync_notifier.dart';
 import '../../support/payment_links_screen_support.dart';
 
 void main() {
+  for (final saveAccepted in [true, false]) {
+    testWidgets(
+      'share buttons track their own pending action (save: $saveAccepted)',
+      (tester) async {
+        final copyGate = Completer<void>();
+        final saveGate = Completer<bool>();
+        final clipboard = FakePaymentLinkClipboard(copyCompleter: copyGate);
+        final saver = FakePaymentLinkQrImageSaver(saveCompleter: saveGate);
+        final operations = FakePaymentLinkOperations(records: [fundedRecovery]);
+        await pumpPaymentLinksScreen(
+          tester,
+          operations: operations,
+          clipboard: clipboard,
+          qrImageSaver: saver,
+        );
+        await tester.tap(find.bySemanticsLabel('Show gift card QR code'));
+        await tester.pumpAndSettle();
+        final save = find.byKey(const ValueKey('payment_link_save_qr_button'));
+        final copy = find.byKey(
+          const ValueKey('payment_link_share_copy_button'),
+        );
+        await tester.tap(copy);
+        await tester.pump();
+        expect(find.text('Copying...'), findsOneWidget);
+        expect(find.text('Saving...'), findsNothing);
+        expect(tester.widget<AppButton>(save).onPressed, isNotNull);
+        await tester.tap(save);
+        await tester.pump();
+        await tester.runAsync(() async {
+          for (
+            var attempt = 0;
+            attempt < 50 && saver.savedImages.isEmpty;
+            attempt++
+          ) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        });
+        await tester.pump();
+        expect(saver.savedImages, hasLength(1));
+        expect(find.text('Saving...'), findsOneWidget);
+        copyGate.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('Copy link'), findsOneWidget);
+        expect(find.text('Saving...'), findsOneWidget);
+        expect(tester.widget<AppButton>(copy).onPressed, isNotNull);
+        expect(tester.widget<AppButton>(save).onPressed, isNull);
+        await tester.tap(save, warnIfMissed: false);
+        await tester.pump();
+        expect(saver.savedImages, hasLength(1));
+        saveGate.complete(saveAccepted);
+        await tester.pumpAndSettle();
+        expect(find.text('Save QR code'), findsOneWidget);
+        expect(find.text('Copy link'), findsOneWidget);
+        expect(tester.widget<AppButton>(save).onPressed, isNotNull);
+        expect(operations.sharedLinks, hasLength(saveAccepted ? 2 : 1));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('copying one card leaves other list icons unchanged', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final clipboard = FakePaymentLinkClipboard(copyCompleter: gate);
+    final second = PaymentLinkRecoveryRecord(
+      link: otherAccountLink,
+      sourceAccountUuid: 'account-1',
+      claimFeeReserveZatoshi: BigInt.from(10000),
+      state: PaymentLinkRecoveryState.funded,
+      updatedAt: DateTime.utc(2026, 8, 5),
+      fundingTxids: 'funding-txid-2',
+    );
+    final operations = FakePaymentLinkOperations(
+      records: [fundedRecovery, second],
+    );
+    await pumpPaymentLinksScreen(
+      tester,
+      operations: operations,
+      clipboard: clipboard,
+    );
+
+    final copy = find.byKey(const ValueKey('payment_link_card_copy_action'));
+    final qr = find.byKey(const ValueKey('payment_link_card_qr_action'));
+    Color? iconColor(Finder action) => tester
+        .widget<AppIcon>(
+          find.descendant(of: action, matching: find.byType(AppIcon)).first,
+        )
+        .color;
+    final qrColor = iconColor(qr.first);
+    final otherCopyColor = iconColor(copy.last);
+    await tester.tap(copy.first);
+    await tester.pump();
+    expect(clipboard.copiedSecrets, hasLength(1));
+    expect(iconColor(qr.first), qrColor);
+    expect(iconColor(qr.last), qrColor);
+    expect(iconColor(copy.last), otherCopyColor);
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(iconColor(qr.first), qrColor);
+    expect(iconColor(copy.last), otherCopyColor);
+    await tester.tap(copy.first, warnIfMissed: false);
+    await tester.pump();
+    expect(clipboard.copiedSecrets, hasLength(1));
+    await tester.tap(copy.last);
+    await tester.pump();
+    expect(clipboard.copiedSecrets, hasLength(2));
+    await tester.tap(qr.first);
+    await tester.pumpAndSettle();
+    expect(find.byType(PaymentLinkQrShareCard), findsOneWidget);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(operations.sharedLinks, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
   for (final settings in [
     (true, true, 100.0),
     (true, false, 100.0),

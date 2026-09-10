@@ -165,6 +165,9 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   bool _receivedShowsBack = false;
   bool _messageEditorRevealed = false;
   bool _operationInProgress = false;
+  final Set<String> _copyingLinkAddresses = {};
+  final Set<String> _savingQrAddresses = {};
+  final Set<String> _sharingQrAddresses = {};
   bool _choosingClaimAccount = false;
   bool _redeemFromQrCode = false;
   bool _receivedRefreshInProgress = false;
@@ -1279,8 +1282,10 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   }
 
   Future<void> _copyPaymentLink(VizorPaymentLink link) async {
-    if (_operationInProgress) return;
-    setState(() => _operationInProgress = true);
+    if (_operationInProgress || _copyingLinkAddresses.contains(link.address)) {
+      return;
+    }
+    setState(() => _copyingLinkAddresses.add(link.address));
     try {
       await ref
           .read(paymentLinkClipboardProvider)
@@ -1299,7 +1304,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     } catch (_) {
       if (mounted) _showError('Gift link could not be copied.');
     } finally {
-      if (mounted) setState(() => _operationInProgress = false);
+      if (mounted) setState(() => _copyingLinkAddresses.remove(link.address));
     }
   }
 
@@ -1999,6 +2004,9 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         hasPendingFundingMetadata: _pendingFundingMetadata != null,
         readyLink: _readyLink,
         readyFiatText: _savedCardFiatText(_readyLink),
+        readyCopyInProgress: _copyingLinkAddresses.contains(
+          _readyLink?.address,
+        ),
         fundingProgressByAddress: _fundingProgressByAddress,
         readyShowsBack: _readyShowsBack,
         receivedLink: _receivedLink,
@@ -2276,7 +2284,9 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
 
   Widget _buildRecoveryRow(PaymentLinkRecoveryRecord record) {
     final state = _recoveryRowState(record);
-    final copyEnabled = state.canUseLink && !_operationInProgress;
+    final actionsEnabled = state.canUseLink && !_operationInProgress;
+    final copyEnabled =
+        actionsEnabled && !_copyingLinkAddresses.contains(record.link.address);
     return PaymentLinkCardListRow(
       key: ValueKey('payment_link_recovery_${record.link.address}'),
       thumbnail: _cardThumbnail(record.link.presentation?.artworkId),
@@ -2286,14 +2296,16 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       onAction: null,
       showLinkActions: state.canUseLink,
       onCopyLink: copyEnabled ? () => _copyPaymentLink(record.link) : null,
-      onShowQr: copyEnabled ? () => _openShareQr(record) : null,
+      onShowQr: actionsEnabled ? () => _openShareQr(record) : null,
       showLoader: state.showLoader,
     );
   }
 
   Widget _buildMobileRecoveryRow(PaymentLinkRecoveryRecord record) {
     final state = _recoveryRowState(record);
-    final copyEnabled = state.canUseLink && !_operationInProgress;
+    final actionsEnabled = state.canUseLink && !_operationInProgress;
+    final copyEnabled =
+        actionsEnabled && !_copyingLinkAddresses.contains(record.link.address);
     return PaymentLinkCardListMobileRow(
       key: ValueKey('payment_link_mobile_recovery_${record.link.address}'),
       thumbnail: _cardThumbnail(record.link.presentation?.artworkId),
@@ -2302,7 +2314,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       statusText: state.canUseLink ? null : state.statusText,
       showLinkActions: state.canUseLink,
       onCopyLink: copyEnabled ? () => _copyPaymentLink(record.link) : null,
-      onShowQr: copyEnabled ? () => _openShareQr(record) : null,
+      onShowQr: actionsEnabled ? () => _openShareQr(record) : null,
       showLoader: state.showLoader,
     );
   }
@@ -2353,6 +2365,8 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   Widget _buildShareQr() {
     final record = _shareQrRecord;
     if (record == null) return _buildHome();
+    final saving = _savingQrAddresses.contains(record.link.address);
+    final copying = _copyingLinkAddresses.contains(record.link.address);
     return PaymentLinkShareQrDesktopView(
       shareCardKey: _shareQrCardKey,
       artwork: PaymentLinkCardArtwork.fromProtocolId(
@@ -2360,19 +2374,24 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       ),
       qrData: record.link.toUri().toString(),
       onBack: () => _showPage(PaymentLinksLocalPage.home),
-      onSaveQr: _operationInProgress ? null : () => _savePaymentLinkQr(record),
-      onCopyLink: _operationInProgress
+      onSaveQr: _operationInProgress || saving
+          ? null
+          : () => _savePaymentLinkQr(record),
+      onCopyLink: _operationInProgress || copying
           ? null
           : () => _copyPaymentLink(record.link),
-      saveLabel: _operationInProgress ? 'Saving...' : 'Save QR code',
-      copyLabel: _operationInProgress ? 'Copying...' : 'Copy link',
+      saveLabel: saving ? 'Saving...' : 'Save QR code',
+      copyLabel: copying ? 'Copying...' : 'Copy link',
     );
   }
 
   Future<void> _savePaymentLinkQr(PaymentLinkRecoveryRecord record) async {
-    if (_operationInProgress) return;
+    if (_operationInProgress ||
+        _savingQrAddresses.contains(record.link.address)) {
+      return;
+    }
     final pixelRatio = max(3.0, View.of(context).devicePixelRatio);
-    setState(() => _operationInProgress = true);
+    setState(() => _savingQrAddresses.add(record.link.address));
     try {
       final png = await capturePaymentLinkQr(
         _shareQrCardKey,
@@ -2398,7 +2417,9 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     } catch (_) {
       if (mounted) _showError('Gift card QR could not be saved.');
     } finally {
-      if (mounted) setState(() => _operationInProgress = false);
+      if (mounted) {
+        setState(() => _savingQrAddresses.remove(record.link.address));
+      }
     }
   }
 
@@ -2407,9 +2428,12 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     Uint8List png,
     Rect origin,
   ) async {
-    if (!mounted || _operationInProgress) return;
+    if (!mounted ||
+        _operationInProgress ||
+        !_sharingQrAddresses.add(link.address)) {
+      return;
+    }
     final share = ref.read(paymentLinkQrShareHandlerProvider);
-    setState(() => _operationInProgress = true);
     try {
       final shared = await share(png: png, sharePositionOrigin: origin);
       if (!shared) return;
@@ -2422,7 +2446,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         }
       }
     } finally {
-      if (mounted) setState(() => _operationInProgress = false);
+      _sharingQrAddresses.remove(link.address);
     }
   }
 
@@ -2635,6 +2659,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         _fundingProgressByAddress[link.address] ??
         const PaymentLinkFundingProgress(confirmationCount: 0);
     final readyToShare = fundingProgress.isReady;
+    final copying = _copyingLinkAddresses.contains(link.address);
     final front = PaymentLinkGiftCard(
       artwork: artwork,
       amountText: amountText,
@@ -2659,7 +2684,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       card: card,
       decoration: const PaymentLinkConfetti(),
       onBack: () => _showPage(PaymentLinksLocalPage.home),
-      onCopy: !readyToShare || _operationInProgress
+      onCopy: !readyToShare || _operationInProgress || copying
           ? null
           : () => _copyPaymentLink(link),
       onCardTap: readyToShare && hasMessage
@@ -2667,7 +2692,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
           : null,
       onReturnHome: () => _showPage(PaymentLinksLocalPage.home),
       waitingStatusLabel: _estimatedLinkWaitLabel(fundingProgress),
-      copyLabel: _operationInProgress ? 'Copying...' : 'Copy link',
+      copyLabel: copying ? 'Copying...' : 'Copy link',
     );
   }
 
