@@ -6,7 +6,6 @@ import 'package:flutter/widgets.dart';
 import '../src/core/layout/mobile/app_mobile_sheet.dart';
 import '../src/core/theme/app_theme.dart';
 import '../src/core/widgets/app_pane_modal_overlay.dart';
-import '../src/core/widgets/full_address_viewer.dart';
 import '../src/core/widgets/mobile/mobile_address_verify_sheet.dart';
 import '../src/features/send/widgets/verify_address_modal.dart';
 
@@ -24,8 +23,8 @@ const _sampleFullAddress =
 
 const _sampleTransparentAddress = 't1PV7nyJ3J6pZBh6sCrd5dSDd6uhXGVSpEX';
 
-/// Showcase address that mixes letter `O` and digit `0` so the two
-/// viewer layouts can be compared for glyph ambiguity.
+/// Showcase address that mixes letter `O` and digit `0` so Geist Mono's
+/// glyph distinction is visible in Widgetbook / figma-compare.
 const kAddressViewerShowcaseAddress =
     'u10O0qrstuvwxyzO0O0abcdefghijklO0O0mnopqrstuvwxO0O001234567890O0O0'
     'yzABCDEFGHJKO0O0LMNPQRSTUVWXO0O0';
@@ -68,49 +67,23 @@ Widget buildVerifyAddressKnownContactUseCase(BuildContext context) {
   );
 }
 
-/// Direction A: recessed code block with an inline Copy chip.
-Widget buildVerifyAddressCodeBlockUseCase(BuildContext context) {
-  return const _AddressVerifyModalFrame(
-    child: VerifyAddressModal(
-      address: kAddressViewerShowcaseAddress,
-      variant: VerifyAddressModalVariant.unknown,
-      layout: FullAddressViewerLayout.codeBlock,
-      onClose: _noop,
-    ),
-  );
-}
-
-/// Direction B: wrapping body with Copy address as the primary action.
+/// Desktop viewer with a mixed `O`/`0` address for glyph comparison.
 Widget buildVerifyAddressActionFooterUseCase(BuildContext context) {
   return const _AddressVerifyModalFrame(
     child: VerifyAddressModal(
       address: kAddressViewerShowcaseAddress,
       variant: VerifyAddressModalVariant.unknown,
-      layout: FullAddressViewerLayout.actionFooter,
       onClose: _noop,
     ),
   );
 }
 
-/// Mobile direction A: code-block sheet.
-Widget buildMobileVerifyAddressCodeBlockUseCase(BuildContext context) {
-  return const _MobileAddressVerifyFrame(
-    child: MobileAddressVerifySheet(
-      title: 'Unknown shielded address',
-      address: kAddressViewerShowcaseAddress,
-      layout: FullAddressViewerLayout.codeBlock,
-      onClose: _noop,
-    ),
-  );
-}
-
-/// Mobile direction B: primary Copy address footer.
+/// Mobile viewer with a mixed `O`/`0` address for glyph comparison.
 Widget buildMobileVerifyAddressActionFooterUseCase(BuildContext context) {
   return const _MobileAddressVerifyFrame(
     child: MobileAddressVerifySheet(
       title: 'Unknown shielded address',
       address: kAddressViewerShowcaseAddress,
-      layout: FullAddressViewerLayout.actionFooter,
       onClose: _noop,
     ),
   );

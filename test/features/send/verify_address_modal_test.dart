@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/core/widgets/app_button.dart';
 import 'package:zcash_wallet/src/core/widgets/app_profile_picture.dart';
-import 'package:zcash_wallet/src/core/widgets/full_address_viewer.dart';
 import 'package:zcash_wallet/src/core/widgets/review_info_row.dart';
 import 'package:zcash_wallet/src/features/accounts/widgets/account_modal_card.dart';
 import 'package:zcash_wallet/src/features/send/widgets/verify_address_modal.dart';
@@ -32,13 +31,9 @@ void main() {
       expect(find.text('Unknown shielded address'), findsOneWidget);
       expect(find.byType(ReviewInfoIconCircle), findsOneWidget);
       expect(find.text(_address), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('full_address_code_block')),
-        findsOneWidget,
-      );
-      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Copy address'), findsOneWidget);
 
-      // The add-to-contacts flow is deferred: Close plus the inline copy.
+      // The add-to-contacts flow is deferred: Copy address plus Close.
       expect(find.text('Add to contacts'), findsNothing);
       expect(find.byType(AppButton), findsNWidgets(2));
 
@@ -80,9 +75,7 @@ void main() {
       expect(find.text('Unknown shielded address'), findsNothing);
     });
 
-    testWidgets('copies the exact address from the inline Copy chip', (
-      tester,
-    ) async {
+    testWidgets('copies the exact address from Copy address', (tester) async {
       final copied = <String>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -116,23 +109,16 @@ void main() {
       expect(copied, [_address]);
     });
 
-    testWidgets('action footer uses Copy address as the primary action', (
-      tester,
-    ) async {
+    testWidgets('uses Copy address as the primary action', (tester) async {
       await _pump(
         tester,
         VerifyAddressModal(
           address: _address,
           variant: VerifyAddressModalVariant.unknown,
-          layout: FullAddressViewerLayout.actionFooter,
           onClose: () {},
         ),
       );
 
-      expect(
-        find.byKey(const ValueKey('full_address_code_block')),
-        findsNothing,
-      );
       expect(find.text('Copy address'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
       expect(find.text(_address), findsOneWidget);
@@ -163,7 +149,7 @@ void main() {
       expect(find.text('12 previous transactions'), findsOneWidget);
       expect(find.text('Unknown shielded address'), findsNothing);
       expect(find.text('Add to contacts'), findsNothing);
-      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Copy address'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
 
       await tester.tap(find.text('Close'));

@@ -125,7 +125,7 @@ void main() {
     );
     expect(find.text('Ethereum address'), findsOneWidget);
     expect(find.text(_recipientAddress), findsOneWidget);
-    expect(find.text('Copy'), findsOneWidget);
+    expect(find.text('Copy address'), findsOneWidget);
     expect(find.text('Hide address'), findsNothing);
 
     await tester.tapAt(const Offset(8, 8));

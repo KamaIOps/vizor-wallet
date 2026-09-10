@@ -3352,7 +3352,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Copy'), findsOneWidget);
+    expect(find.text('Copy address'), findsOneWidget);
     expect(find.text('Cancel'), findsWidgets);
     await tester.tap(find.text('Cancel').last);
     await tester.pumpAndSettle();

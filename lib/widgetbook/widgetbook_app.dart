@@ -1593,19 +1593,11 @@ class WidgetbookApp extends StatelessWidget {
                       builder: buildVerifyAddressKnownContactUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Code block copy',
-                      builder: buildVerifyAddressCodeBlockUseCase,
-                    ),
-                    WidgetbookUseCase(
-                      name: 'Action footer copy',
+                      name: 'O / 0 showcase',
                       builder: buildVerifyAddressActionFooterUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Mobile code block copy',
-                      builder: buildMobileVerifyAddressCodeBlockUseCase,
-                    ),
-                    WidgetbookUseCase(
-                      name: 'Mobile action footer copy',
+                      name: 'Mobile O / 0 showcase',
                       builder: buildMobileVerifyAddressActionFooterUseCase,
                     ),
                   ],

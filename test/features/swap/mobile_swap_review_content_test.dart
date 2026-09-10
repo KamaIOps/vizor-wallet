@@ -263,7 +263,7 @@ void main() {
     );
     expect(addressText.softWrap, isTrue);
     expect(addressText.style?.fontFamily, 'Geist Mono');
-    expect(find.text('Copy'), findsOneWidget);
+    expect(find.text('Copy address'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
   });
 }

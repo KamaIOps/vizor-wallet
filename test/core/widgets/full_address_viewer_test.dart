@@ -15,16 +15,10 @@ void main() {
     expect(fullAddressCopyText(_address).contains('\n'), isFalse);
   });
 
-  testWidgets('code block wraps the exact address in Geist Mono', (
+  testWidgets('address text wraps the exact string in Geist Mono', (
     tester,
   ) async {
-    await _pump(
-      tester,
-      const FullAddressBody(
-        address: _address,
-        layout: FullAddressViewerLayout.codeBlock,
-      ),
-    );
+    await _pump(tester, const FullAddressText(address: _address));
 
     final text = tester.widget<Text>(
       find.byKey(const ValueKey('full_address_text')),
@@ -32,28 +26,6 @@ void main() {
     expect(text.data, _address);
     expect(text.softWrap, isTrue);
     expect(text.style?.fontFamily, 'Geist Mono');
-    expect(
-      find.byKey(const ValueKey('full_address_code_block')),
-      findsOneWidget,
-    );
-    expect(find.text('Copy'), findsOneWidget);
-    expect(find.text('Copy address'), findsNothing);
-  });
-
-  testWidgets('action footer is wrapping text without the recessed block', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      const FullAddressBody(
-        address: _address,
-        layout: FullAddressViewerLayout.actionFooter,
-      ),
-    );
-
-    expect(find.byKey(const ValueKey('full_address_code_block')), findsNothing);
-    expect(find.text(_address), findsOneWidget);
-    expect(find.text('Copy'), findsNothing);
   });
 
   testWidgets('copy button writes the exact address without spaces', (

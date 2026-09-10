@@ -24,8 +24,7 @@ enum VerifyAddressModalAddressKind { shielded, transparent, external }
 /// send review screen (and later the received receipt).
 ///
 /// Renders the full address as a continuous Geist Mono string that wraps
-/// naturally, plus a visible copy control. [layout] selects between the
-/// recessed code-block treatment and the primary Copy address footer.
+/// naturally, with Copy address as the primary action.
 ///
 /// Static only — no provider wiring. The caller hosts this card inside an
 /// `AppPaneModalOverlay` and supplies the callbacks.
@@ -38,7 +37,6 @@ class VerifyAddressModal extends StatelessWidget {
     this.contactProfilePictureId,
     this.previousTransactionCount,
     this.unknownAddressKind = VerifyAddressModalAddressKind.shielded,
-    this.layout = FullAddressViewerLayout.codeBlock,
     super.key,
   }) : assert(
          variant == VerifyAddressModalVariant.unknown ||
@@ -48,9 +46,6 @@ class VerifyAddressModal extends StatelessWidget {
 
   /// Full unified address rendered as wrapping monospace text.
   final String address;
-
-  /// Copy-control placement. Defaults to the recessed code-block layout.
-  final FullAddressViewerLayout layout;
 
   final VerifyAddressModalVariant variant;
 
@@ -94,12 +89,10 @@ class VerifyAddressModal extends StatelessWidget {
         children: [
           SizedBox(height: _titleRowHeight, child: _header(context)),
           const SizedBox(height: AppSpacing.md),
-          FullAddressBody(address: address, layout: layout),
+          FullAddressText(address: address),
           const SizedBox(height: AppSpacing.md),
-          if (layout == FullAddressViewerLayout.actionFooter) ...[
-            FullAddressCopyButton(address: address, expand: true),
-            const SizedBox(height: AppSpacing.xs),
-          ],
+          FullAddressCopyButton(address: address, expand: true),
+          const SizedBox(height: AppSpacing.xs),
           Center(
             child: AppButton(
               key: const ValueKey('verify_address_close_button'),

@@ -1622,24 +1622,10 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
     mobile: true,
   ),
   FigmaCompareScenario(
-    id: 'verify-address-code-block',
-    description:
-        'Desktop full-address viewer: recessed code block with inline Copy',
-    builder: buildVerifyAddressCodeBlockUseCase,
-  ),
-  FigmaCompareScenario(
     id: 'verify-address-action-footer',
     description:
         'Desktop full-address viewer: wrapping address with Copy address CTA',
     builder: buildVerifyAddressActionFooterUseCase,
-  ),
-  FigmaCompareScenario(
-    id: 'mobile-verify-address-code-block',
-    description:
-        'Mobile full-address sheet: recessed code block with inline Copy',
-    builder: buildMobileVerifyAddressCodeBlockUseCase,
-    desktop: false,
-    mobile: true,
   ),
   FigmaCompareScenario(
     id: 'mobile-verify-address-action-footer',
