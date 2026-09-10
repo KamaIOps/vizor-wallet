@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/storage/app_secure_store.dart';
 import '../../services/voting/voting_config_loader.dart';
-import '../../services/voting/voting_home_startup.dart';
+import '../../services/voting/voting_storage_keys.dart';
 
 /// User-saved static config source shown in voting settings.
 ///
@@ -158,13 +158,7 @@ class AppSecureStoreVotingConfigSourceStore implements VotingConfigSourceStore {
 class VotingConfigSourceNotifier
     extends AsyncNotifier<VotingConfigSourceState> {
   @override
-  FutureOr<VotingConfigSourceState> build() {
-    final startup = ref.read(votingHomeStartupProvider);
-    if (startup != null) {
-      return _stateFromStorage(startup.sourceUrl, startup.savedSourcesJson);
-    }
-    return _load();
-  }
+  Future<VotingConfigSourceState> build() => _load();
 
   Future<VotingConfigSourceState> _load() async {
     final store = ref.read(votingConfigSourceStoreProvider);

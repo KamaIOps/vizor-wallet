@@ -124,7 +124,6 @@ import 'src/rust/frb_generated.dart';
 import 'src/rust/api/simple.dart' as rust_simple;
 import 'src/services/incoming_uri_service.dart';
 import 'src/providers/payment_request_flow_provider.dart';
-import 'src/services/voting/voting_home_startup.dart';
 
 void log(String message) => debugPrint('[zcash] $message');
 
@@ -177,7 +176,6 @@ Widget buildZcashWalletApp({
   return ProviderScope(
     overrides: [
       appBootstrapProvider.overrideWithValue(bootstrap),
-      votingHomeStartupProvider.overrideWithValue(bootstrap.votingHomeStartup),
       appBootstrapRetryProvider.overrideWithValue(() async {}),
       ...overrides,
     ],
@@ -220,9 +218,6 @@ class _BootstrappedZcashWalletAppState
       key: ValueKey(_scopeGeneration),
       overrides: [
         appBootstrapProvider.overrideWithValue(_bootstrap),
-        votingHomeStartupProvider.overrideWithValue(
-          _bootstrap.votingHomeStartup,
-        ),
         appBootstrapRetryProvider.overrideWithValue(_reloadBootstrap),
         ...widget.overrides,
       ],

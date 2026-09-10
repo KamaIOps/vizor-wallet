@@ -1,4 +1,3 @@
-import 'package:zcash_wallet/src/services/voting/voting_home_startup.dart';
 import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
 import 'dart:async';
 import '../../fakes/memory_voting_home_cache_store.dart';
@@ -139,15 +138,11 @@ void main() {
       expect(cache.fact(factKey).participation, isNotNull);
       container.dispose();
       container = ProviderContainer(
-        overrides: [
-          votingHomeCacheStoreProvider.overrideWithValue(store),
-          votingHomeStartupProvider.overrideWithValue(
-            VotingHomeStartup(cacheJson: store.value),
-          ),
-        ],
+        overrides: [votingHomeCacheStoreProvider.overrideWithValue(store)],
       );
       cache = container.read(votingHomeCacheProvider.notifier);
-      // No await: the first read restores the confirmed state.
+      expect(visible(), false);
+      await cache.ensureLoaded();
       expect(visible(), result.remainingEligible);
       expect(cache.fact(factKey).needsRecheck, true);
     }

@@ -4,9 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../services/voting/voting_home_startup.dart';
+import '../../services/voting/voting_storage_keys.dart';
 
-export '../../services/voting/voting_home_startup.dart'
+export '../../services/voting/voting_storage_keys.dart'
     show votingShowTestRoundsStorageKey;
 
 /// Title prefix that marks authenticated rounds as hideable test polls.
@@ -55,11 +55,7 @@ final votingRoundVisibilityStoreProvider = Provider<VotingRoundVisibilityStore>(
 /// Loads and updates the test round visibility preference.
 class ShowTestVotingRoundsNotifier extends AsyncNotifier<bool> {
   @override
-  FutureOr<bool> build() {
-    final startup = ref.read(votingHomeStartupProvider);
-    if (startup != null) return startup.showTestRounds;
-    return _load();
-  }
+  Future<bool> build() => _load();
 
   Future<bool> _load() async {
     try {

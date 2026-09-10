@@ -5,8 +5,11 @@ start hidden. A verified remaining eligible note set or an actionable local
 recovery plan confirms visibility; an active round alone does not. Decisions
 survive restart and do not depend on the current sync progress height.
 
-Bootstrap reads the local cache, selected source and test-round preference before
-Home's first frame. It performs no voting RPC or wallet query for this hydration.
+App bootstrap does not load voting state. Home renders first, then its post-frame
+refresh loads the local summary; source and test-round preferences load through
+their asynchronous providers. The card stays hidden until the saved decision is
+available, then a confirmed show restores without waiting for sync or RPC.
+Loaded decisions stay in memory across Home reentry.
 On entry or foreground resume, mainnet with the bundled prod voting source and
 testnet with the bundled stage voting source query their public discovery
 endpoint once. Network or selected source changes trigger the same check. Concurrent triggers share

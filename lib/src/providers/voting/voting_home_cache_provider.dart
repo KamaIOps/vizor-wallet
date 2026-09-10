@@ -11,9 +11,9 @@ import '../../services/voting/voting_models.dart';
 import '../../services/voting/voting_participation_client.dart';
 import 'voting_round_visibility_provider.dart';
 import 'voting_share_tracking_registry_provider.dart';
-import '../../services/voting/voting_home_startup.dart';
+import '../../services/voting/voting_storage_keys.dart';
 
-export '../../services/voting/voting_home_startup.dart' show votingHomeCacheKey;
+export '../../services/voting/voting_storage_keys.dart' show votingHomeCacheKey;
 
 /// Diagnostic events contain no wallet identifiers or RPC payloads.
 void votingHomeTrace(String message) {
@@ -165,19 +165,10 @@ class VotingHomeCacheNotifier extends Notifier<int> {
   Future<void>? _load;
   Future<void> _writes = Future.value();
 
+  // Home renders unknown as hidden. Its post-frame refresh calls ensureLoaded;
+  // neither provider construction nor app bootstrap waits for voting storage.
   @override
-  int build() {
-    final startup = ref.read(votingHomeStartupProvider);
-    if (startup != null) {
-      try {
-        _decode(startup.cacheJson);
-        _load = Future.value();
-      } catch (_) {
-        votingHomeTrace('cache.startup.invalid');
-      }
-    }
-    return 0;
-  }
+  int build() => 0;
 
   VotingHomeRoundList? list(String key) => _lists[key];
   VotingHomeFact fact(String key) => _facts[key] ?? const VotingHomeFact();

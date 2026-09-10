@@ -1,5 +1,4 @@
 import 'package:zcash_wallet/src/services/voting/voting_file_cache.dart';
-import 'package:zcash_wallet/src/services/voting/voting_home_startup.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_home_entry_provider.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -68,20 +67,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-    'Home restores confirmed decisions before sync and makes no participation request on restart',
+    'Home asynchronously restores decisions without waiting for sync or repeating participation',
     () async {
       for (final visible in [true, false]) {
         final store = MemoryVotingHomeCacheStore();
         final client = FakeVotingParticipationClient();
-        ProviderContainer make({VotingHomeStartup? startup}) =>
-            _sessionContainer(
-              homeCacheStore: store,
-              extraOverrides: [
-                votingHomeStartupProvider.overrideWithValue(startup),
-                votingParticipationClientProvider.overrideWithValue(client),
-                syncProvider.overrideWith(_PollEligibilitySyncNotifier.new),
-              ],
-            );
+        ProviderContainer make() => _sessionContainer(
+          homeCacheStore: store,
+          extraOverrides: [
+            votingParticipationClientProvider.overrideWithValue(client),
+            syncProvider.overrideWith(_PollEligibilitySyncNotifier.new),
+          ],
+        );
         var container = make();
         await container.read(accountProvider.future);
         final source = await container.read(votingConfigSourceProvider.future);
@@ -119,10 +116,11 @@ void main() {
           ),
         );
         container.dispose();
-        container = make(startup: VotingHomeStartup(cacheJson: store.value));
+        container = make();
         await container.read(accountProvider.future);
-        // The real source/preference providers hydrate synchronously from startup.
-        expect(container.read(votingConfigSourceProvider).hasValue, true);
+        expect(container.read(votingHomeEntryVisibleProvider), false);
+        await container.read(votingConfigSourceProvider.future);
+        await container.read(votingHomeCacheProvider.notifier).ensureLoaded();
         expect(container.read(votingHomeEntryVisibleProvider), visible);
         await container.read(syncProvider.future); // scannedHeight == 0
         await container.read(votingParticipationProvider).checkHomeCandidates();

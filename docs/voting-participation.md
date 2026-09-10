@@ -101,7 +101,10 @@ keys are queried. A token change during evaluation rejects the round summary
 while retaining verified note observations. This supports Zcash rescans/rewinds
 without assuming monotonically increasing displayed progress.
 
-Home summaries are also ordinary files and hydrate before the first frame.
+Home summaries are also ordinary files. Home renders before loading them
+asynchronously; a saved show decision restores independently of sync or RPC.
+App bootstrap does not wait for voting storage. Loaded summaries stay in memory
+across Home reentry.
 There is no old-cache migration. A changed round snapshot discards the old
 summary; closure, deadlines, completion and account/source/network scoping
 remain independent of sync. Explicit terminal round status deletes its note

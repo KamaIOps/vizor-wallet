@@ -16,7 +16,6 @@ import 'core/storage/wallet_paths.dart';
 import 'providers/account_models.dart';
 import 'rust/api/sync.dart' as rust_sync;
 import 'rust/api/wallet.dart' as rust_wallet;
-import 'services/voting/voting_home_startup.dart';
 
 const _accountsKey = 'zcash_accounts';
 const _activeAccountKey = 'zcash_active_account';
@@ -61,12 +60,10 @@ class AppBootstrapState {
     this.biometricUnlockEnabled = false,
     this.syncKeepAwakeEnabled = false,
     this.syncKeepAwakePromptSeen = false,
-    this.votingHomeStartup,
     this.failureKind,
     this.failureMessage,
   });
 
-  final VotingHomeStartup? votingHomeStartup;
   final String initialLocation;
   final AccountState initialAccountState;
   final AppSyncSnapshot initialSyncSnapshot;
@@ -348,9 +345,6 @@ Future<AppBootstrapState> loadAppBootstrap() async {
         activeAccountUuid: activeAccountUuid,
         activeAddress: activeAddress,
       ),
-      votingHomeStartup: hasWallet
-          ? await loadVotingHomeStartup(storage)
-          : null,
       initialSyncSnapshot: initialSyncSnapshot,
       network: network,
       rpcEndpointConfig: rpcEndpointConfig,
