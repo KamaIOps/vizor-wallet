@@ -1353,6 +1353,9 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
     ) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     });
+    ref.listen(rpcEndpointProvider.select((s) => s.networkName), (_, _) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    });
     ref.listen(syncProvider.select((s) => s.value?.scannedHeight), (
       previous,
       next,

@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:zcash_wallet/src/providers/rpc_endpoint_provider.dart';
+import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 
 import 'package:zcash_wallet/src/providers/voting/voting_share_tracking_registry_provider.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
@@ -109,18 +111,34 @@ class _Api extends VotingApiClient {
   }
 }
 
+class _Rpc extends RpcEndpointNotifier {
+  _Rpc(this.network);
+  final String network;
+  @override
+  RpcEndpointConfig build() => RpcEndpointConfig(
+    networkName: network,
+    lightwalletdUrl: 'https://rpc.example:443',
+  );
+  void select(String network) => state = state.copyWith(networkName: network);
+}
+
 class _Discovery extends VotingDiscoveryClient {
   _Discovery() : super(FakeVotingHttpClient());
   int calls = 0;
+  final scopes = <VotingDiscoveryScope>[];
+  final endpoints = <Uri>[];
   String revision = 'sha256:${'a' * 64}';
   bool fail = false;
   Completer<void>? gate;
   @override
   Future<VotingDiscoverySnapshot> fetch(
     Uri endpoint,
-    DateTime Function() now,
-  ) async {
+    DateTime Function() now, {
+    VotingDiscoveryScope scope = VotingDiscoveryScope.prod,
+  }) async {
     calls++;
+    scopes.add(scope);
+    endpoints.add(endpoint);
     await gate?.future;
     if (fail) throw StateError('discovery offline');
     return VotingDiscoverySnapshot(revision: revision, checkedAt: now());
@@ -135,7 +153,7 @@ void main() {
   late DateTime now;
   late _Discovery discovery;
   var endpoint = votingDiscoveryUrl;
-  void setup(List<String> ids, {bool prod = false}) {
+  void setup(List<String> ids, {bool prod = false, bool stage = false}) {
     now = DateTime.utc(2026, 9, 10);
     store = MemoryVotingHomeCacheStore();
     api = _Api();
@@ -145,8 +163,15 @@ void main() {
       overrides: [
         appBootstrapProvider.overrideWithValue(AppBootstrapState.empty),
         appSecurityProvider.overrideWith(_Security.new),
+        rpcEndpointProvider.overrideWith(() => _Rpc(stage ? 'test' : 'main')),
         votingConfigSourceProvider.overrideWith(
-          () => _Source(prod ? kProductionStaticVotingConfigSource : 'source'),
+          () => _Source(
+            stage
+                ? kStageStaticVotingConfigSource
+                : prod
+                ? kProductionStaticVotingConfigSource
+                : 'source',
+          ),
         ),
         votingDiscoveryClientProvider.overrideWithValue(discovery),
         votingDiscoveryEndpointProvider.overrideWith((ref) => endpoint),
@@ -472,6 +497,96 @@ void main() {
       container.invalidate(votingHomeCacheProvider);
       await container.read(votingHomeRefreshProvider).refresh();
       expect(api.calls, 1);
+    },
+  );
+  test(
+    'testnet stage probes its own endpoint and reuses its revision',
+    () async {
+      setup([roundId], stage: true);
+      final refresh = container.read(votingHomeRefreshProvider);
+      await refresh.refresh();
+      await refresh.refresh();
+      expect(discovery.scopes, [
+        VotingDiscoveryScope.stage,
+        VotingDiscoveryScope.stage,
+      ]);
+      expect(discovery.endpoints.toSet(), {Uri.parse(votingDiscoveryStageUrl)});
+      expect(api.calls, 1);
+      final cache = container.read(votingHomeCacheProvider.notifier);
+      expect(
+        cache
+            .list(votingHomeListKey('test', kStageStaticVotingConfigSource))
+            ?.discoveryRevision,
+        discovery.revision,
+      );
+      expect(
+        cache.list(
+          votingHomeListKey('main', kProductionStaticVotingConfigSource),
+        ),
+        null,
+      );
+    },
+  );
+
+  test(
+    'network and source switch during prod request only applies stage result',
+    () async {
+      setup([roundId], prod: true);
+      discovery.gate = Completer<void>();
+      final refresh = container.read(votingHomeRefreshProvider);
+      final first = refresh.refresh();
+      while (discovery.calls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      (container.read(rpcEndpointProvider.notifier) as _Rpc).select('test');
+      (container.read(votingConfigSourceProvider.notifier) as _Source).select(
+        kStageStaticVotingConfigSource,
+      );
+      final second = refresh.refresh();
+      discovery.gate!.complete();
+      await Future.wait([first, second]);
+      expect(discovery.scopes, [
+        VotingDiscoveryScope.prod,
+        VotingDiscoveryScope.stage,
+      ]);
+      expect(api.calls, 1);
+      expect(
+        container
+            .read(votingHomeCacheProvider.notifier)
+            .list(
+              votingHomeListKey('main', kProductionStaticVotingConfigSource),
+            ),
+        null,
+      );
+    },
+  );
+
+  test(
+    'mismatched network/source and custom configs never opt into discovery',
+    () {
+      expect(
+        votingDiscoveryScopeForSource('main', kStageStaticVotingConfigSource),
+        null,
+      );
+      expect(
+        votingDiscoveryScopeForSource(
+          'test',
+          kProductionStaticVotingConfigSource,
+        ),
+        null,
+      );
+      expect(votingDiscoveryScopeForSource('test', 'custom'), null);
+      expect(
+        votingDiscoveryScopeForSource(
+          'regtest',
+          kStageStaticVotingConfigSource,
+        ),
+        null,
+      );
+      expect(
+        votingDiscoveryScopeForSource('test', kStageStaticVotingConfigMirror),
+        VotingDiscoveryScope.stage,
+      );
     },
   );
 }

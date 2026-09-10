@@ -6,6 +6,14 @@ const votingDiscoveryUrl = String.fromEnvironment(
   defaultValue: 'https://functions.vizor.cash/v1/voting/discovery/prod',
 );
 
+const votingDiscoveryStageUrlEnvKey = 'VIZOR_VOTING_DISCOVERY_STAGE_URL';
+const votingDiscoveryStageUrl = String.fromEnvironment(
+  votingDiscoveryStageUrlEnvKey,
+  defaultValue: 'https://functions.vizor.cash/v1/voting/discovery/stage',
+);
+
+enum VotingDiscoveryScope { prod, stage }
+
 class VotingDiscoverySnapshot {
   const VotingDiscoverySnapshot({
     required this.revision,
@@ -22,8 +30,9 @@ class VotingDiscoveryClient {
 
   Future<VotingDiscoverySnapshot> fetch(
     Uri endpoint,
-    DateTime Function() now,
-  ) async {
+    DateTime Function() now, {
+    VotingDiscoveryScope scope = VotingDiscoveryScope.prod,
+  }) async {
     if (endpoint.host.isEmpty ||
         endpoint.userInfo.isNotEmpty ||
         endpoint.hasFragment ||
@@ -47,7 +56,7 @@ class VotingDiscoveryClient {
     final revision = json['revision'];
     final checkedAt = json['checkedAt'];
     if (json['schemaVersion'] != 1 ||
-        json['scope'] != 'prod' ||
+        json['scope'] != scope.name ||
         revision is! String ||
         !RegExp(r'^sha256:[0-9a-f]{64}$').hasMatch(revision) ||
         checkedAt is! String ||

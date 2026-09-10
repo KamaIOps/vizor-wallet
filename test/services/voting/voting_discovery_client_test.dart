@@ -68,4 +68,40 @@ void main() {
       ),
     );
   });
+  test(
+    'stage validates its response scope and rejects production hints',
+    () async {
+      final http = FakeVotingHttpClient(
+        responses: {
+          endpoint.toString(): {...snapshot(), 'scope': 'stage'},
+        },
+      );
+      await VotingDiscoveryClient(
+        http,
+      ).fetch(endpoint, () => now, scope: VotingDiscoveryScope.stage);
+      await expectLater(
+        VotingDiscoveryClient(http).fetch(endpoint, () => now),
+        throwsFormatException,
+      );
+      final prod = FakeVotingHttpClient(
+        responses: {endpoint.toString(): snapshot()},
+      );
+      await expectLater(
+        VotingDiscoveryClient(
+          prod,
+        ).fetch(endpoint, () => now, scope: VotingDiscoveryScope.stage),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test('stage build define is independent from production URL', () {
+    expect(
+      votingDiscoveryStageUrl,
+      const String.fromEnvironment(
+        'VIZOR_VOTING_DISCOVERY_STAGE_URL',
+        defaultValue: 'https://functions.vizor.cash/v1/voting/discovery/stage',
+      ),
+    );
+  });
 }

@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'package:zcash_wallet/src/providers/rpc_endpoint_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_home_entry_provider.dart';
 
 import 'package:flutter/material.dart';
@@ -185,6 +186,12 @@ AppBootstrapState _bootstrap() => AppBootstrapState(
   passwordRotationRecoveryFailed: false,
 );
 
+class _VotingRpcNotifier extends RpcEndpointNotifier {
+  @override
+  RpcEndpointConfig build() => defaultRpcEndpointConfig('main');
+  void useTestnet() => state = defaultRpcEndpointConfig('test');
+}
+
 Widget _app(
   SyncState syncState, {
   ZecMarketData? marketData = const ZecMarketData(
@@ -196,6 +203,7 @@ Widget _app(
   bool? swapEnabled,
   bool showVoting = true,
   Future<void> Function()? refreshVoting,
+  RpcEndpointNotifier? rpcNotifier,
   IronwoodHomeMigrationCtaState migrationCta =
       const IronwoodHomeMigrationCtaState.hidden(),
   IronwoodHomeMigrationCtaState? migrationPresentationCta,
@@ -281,6 +289,8 @@ Widget _app(
 
   return ProviderScope(
     overrides: [
+      if (rpcNotifier != null)
+        rpcEndpointProvider.overrideWith(() => rpcNotifier),
       votingHomeEntryVisibleProvider.overrideWithValue(showVoting),
       votingHomeRefreshActionProvider.overrideWithValue(
         refreshVoting ?? () async {},
@@ -585,6 +595,28 @@ void main() {
     );
     expect(find.byKey(const ValueKey('mobile_home_receive')), findsOneWidget);
   });
+
+  testWidgets(
+    'voting discovery refreshes when the wallet network changes on Home',
+    (tester) async {
+      final rpc = _VotingRpcNotifier();
+      var refreshes = 0;
+      await tester.pumpWidget(
+        _app(
+          _syncedState(ironwoodBalance: BigInt.from(100000000)),
+          rpcNotifier: rpc,
+          refreshVoting: () async {
+            refreshes++;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = refreshes;
+      rpc.useTestnet();
+      await tester.pumpAndSettle();
+      expect(refreshes, greaterThan(before));
+    },
+  );
 
   testWidgets('voting discovery pauses on other tabs and in background', (
     tester,

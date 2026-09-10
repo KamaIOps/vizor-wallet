@@ -50,6 +50,24 @@ final votingHomeEntryVisibleProvider = Provider<bool>((ref) {
 final votingDiscoveryEndpointProvider = Provider<String>(
   (ref) => votingDiscoveryUrl,
 );
+final votingDiscoveryStageEndpointProvider = Provider<String>(
+  (ref) => votingDiscoveryStageUrl,
+);
+
+VotingDiscoveryScope? votingDiscoveryScopeForSource(
+  String network,
+  String source,
+) {
+  if (network == 'main' &&
+      kProductionStaticVotingConfigMirrors.contains(source)) {
+    return VotingDiscoveryScope.prod;
+  }
+  if (network == 'test' && kStageStaticVotingConfigMirrors.contains(source)) {
+    return VotingDiscoveryScope.stage;
+  }
+  return null;
+}
+
 final votingDiscoveryClientProvider = Provider<VotingDiscoveryClient>((ref) {
   final http = DartIoVotingHttpClient();
   ref.onDispose(http.close);
@@ -69,10 +87,14 @@ class VotingHomeRefresh {
   final Map<String, DateTime> _failures = {};
   final Map<String, DateTime> _probeFailures = {};
 
+  String _endpoint() => ref.read(rpcEndpointProvider).networkName == 'test'
+      ? ref.read(votingDiscoveryStageEndpointProvider)
+      : ref.read(votingDiscoveryEndpointProvider);
+
   (String?, String, String) _context() => (
     ref.read(votingConfigSourceProvider).value?.sourceUrl,
     ref.read(rpcEndpointProvider).networkName,
-    ref.read(votingDiscoveryEndpointProvider),
+    _endpoint(),
   );
 
   Future<void> refresh() {
@@ -104,11 +126,7 @@ class VotingHomeRefresh {
       )).sourceUrl;
       if (!ref.mounted) return;
       final network = ref.read(rpcEndpointProvider).networkName;
-      _runningContext = (
-        source,
-        network,
-        ref.read(votingDiscoveryEndpointProvider),
-      );
+      _runningContext = (source, network, _endpoint());
       key = votingHomeListKey(network, source);
       final cache = ref.read(votingHomeCacheProvider.notifier);
       await cache.ensureLoaded();
@@ -127,14 +145,12 @@ class VotingHomeRefresh {
         );
       }
       final now = ref.read(votingHomeClockProvider)();
-      final endpoint = ref.read(votingDiscoveryEndpointProvider);
+      final endpoint = _endpoint();
       final cached = cache.list(key);
       final fresh = cached?.isFresh(now) ?? false;
       VotingDiscoverySnapshot? discovery;
-      final supported =
-          network == 'main' &&
-          kProductionStaticVotingConfigMirrors.contains(source);
-      if (supported) {
+      final scope = votingDiscoveryScopeForSource(network, source);
+      if (scope != null) {
         final probeKey = '$key/$endpoint';
         final failed = _probeFailures[probeKey];
         if (failed == null ||
@@ -143,7 +159,11 @@ class VotingHomeRefresh {
           try {
             discovery = await ref
                 .read(votingDiscoveryClientProvider)
-                .fetch(Uri.parse(endpoint), ref.read(votingHomeClockProvider));
+                .fetch(
+                  Uri.parse(endpoint),
+                  ref.read(votingHomeClockProvider),
+                  scope: scope,
+                );
             _probeFailures.remove(probeKey);
           } catch (error) {
             if (!ref.mounted) return;
@@ -156,7 +176,7 @@ class VotingHomeRefresh {
           ref.read(appSecurityProvider).requiresUnlock ||
           ref.read(votingConfigSourceProvider).value?.sourceUrl != source ||
           ref.read(rpcEndpointProvider).networkName != network ||
-          ref.read(votingDiscoveryEndpointProvider) != endpoint) {
+          _endpoint() != endpoint) {
         return;
       }
       if (fresh &&
@@ -195,7 +215,7 @@ class VotingHomeRefresh {
       if (!ref.mounted || ref.read(appSecurityProvider).requiresUnlock) return;
       if (ref.read(votingConfigSourceProvider).value?.sourceUrl != source ||
           ref.read(rpcEndpointProvider).networkName != network ||
-          ref.read(votingDiscoveryEndpointProvider) != endpoint ||
+          _endpoint() != endpoint ||
           !identical(ref.read(votingConfigProvider).value, config)) {
         return;
       }

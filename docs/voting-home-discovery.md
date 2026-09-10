@@ -1,15 +1,18 @@
 # Mobile Home voting discovery
 
 Home renders its local round list and account eligibility/completion hints first.
-On entry or foreground resume, production builds using the bundled production
-voting source query the public discovery endpoint once. Concurrent triggers share
+On entry or foreground resume, mainnet with the bundled prod voting source and
+testnet with the bundled stage voting source query their public discovery
+endpoint once. Network or selected source changes trigger the same check. Concurrent triggers share
 one request; a source/network/endpoint switch queues a refresh for the new context.
 The one-minute Home timer only reevaluates local deadlines and does not poll.
 
 ## Build configuration
 
 `VIZOR_VOTING_DISCOVERY_URL` replaces the **entire** discovery endpoint URL.
-The default is `https://functions.vizor.cash/v1/voting/discovery/prod`.
+Its default is `https://functions.vizor.cash/v1/voting/discovery/prod`.
+Testnet uses the independent `VIZOR_VOTING_DISCOVERY_STAGE_URL` define, defaulting
+to `https://functions.vizor.cash/v1/voting/discovery/stage`.
 
 ```sh
 fvm flutter run --dart-define=VIZOR_FORM_FACTOR=mobile \
@@ -19,12 +22,13 @@ fvm flutter run --dart-define=VIZOR_FORM_FACTOR=mobile \
 The endpoint must use HTTPS (HTTP loopback is accepted for development). This
 setting does not change voting config or vote-server URLs. The request uses the
 shared network transport's Tor/direct routing policy, with a five-second timeout.
-No account identifier or eligibility is sent. Stage/custom voting sources retain
-the existing direct discovery path; overriding this URL does not opt them in.
+No account identifier or eligibility is sent. Custom voting sources and mismatched
+network/source pairs retain direct discovery; an endpoint override does not opt
+them in. Prod and stage hints are scoped by both wallet network and config source.
 
 ## Refresh and failure behavior
 
-- A valid response has `schemaVersion: 1`, `scope: "prod"`, a SHA-256 revision,
+- A valid response has `schemaVersion: 1`, the requested `scope` (`prod` or `stage`), a SHA-256 revision,
   and a UTC `checkedAt`. Reject observations at least ten minutes old and those
   more than one minute ahead of the device clock.
 - An unchanged, previously applied revision reuses the list. A missing/changed
