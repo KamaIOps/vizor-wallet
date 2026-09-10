@@ -22,6 +22,8 @@ import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
 
 import '../../fakes/fake_sync_notifier.dart';
+import '../../fakes/fake_zec_market_data_cache.dart';
+import 'package:zcash_wallet/src/providers/zec_price_change_provider.dart';
 
 void main() {
   setUpAll(() async {
@@ -128,6 +130,10 @@ Future<void> _pumpMobilePaymentLinks(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        zecMarketDataSourceProvider.overrideWithValue(
+          _KeystoneTestMarketData(),
+        ),
+        zecMarketDataCacheProvider.overrideWithValue(FakeZecMarketDataCache()),
         appBootstrapProvider.overrideWithValue(_hardwareBootstrap),
         paymentLinkOperationsProvider.overrideWithValue(
           operations ?? _FakePaymentLinkOperations(),
@@ -181,6 +187,12 @@ Future<void> _pumpMobilePaymentLinks(
   await tester.pumpAndSettle();
 }
 
+class _KeystoneTestMarketData implements ZecMarketDataSource {
+  @override
+  Future<ZecMarketData?> fetchMarketData() async =>
+      const ZecMarketData(usdPrice: 100);
+}
+
 const _hardwareAccountState = AccountState(
   accounts: [
     AccountInfo(
@@ -222,13 +234,13 @@ class _FakePaymentLinkOperations implements PaymentLinkOperations {
   final List<BigInt> createdAmounts = [];
 
   @override
+  Future<void> setReceivedCardArchived(String address, bool archived) async {}
+
+  @override
   Future<void> retainPendingClaim(PaymentLinkClaimSession session) async {}
 
   @override
   Future<void> keepReceivedLink(VizorPaymentLink link) async {}
-
-  @override
-  Future<void> forgetReceivedLink(VizorPaymentLink link) async {}
 
   @override
   Future<PaymentLinkFundingQuote> quoteMaxFunding({
@@ -293,8 +305,9 @@ class _FakePaymentLinkOperations implements PaymentLinkOperations {
 
   @override
   Future<List<PaymentLinkReceivedRecord>> inspectReceivedLinkClaims(
-    List<PaymentLinkReceivedRecord> records,
-  ) async => const [];
+    List<PaymentLinkReceivedRecord> records, {
+    bool allowResubmit = true,
+  }) async => const [];
 
   @override
   Future<PaymentLinkClaimSession> prepareClaim(

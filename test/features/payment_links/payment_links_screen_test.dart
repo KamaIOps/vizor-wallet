@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:zcash_wallet/src/features/payment_links/widgets/payment_link_archive_header.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
@@ -30,6 +31,150 @@ import '../../fakes/fake_sync_notifier.dart';
 import '../../support/payment_links_screen_support.dart';
 
 void main() {
+  testWidgets(
+    'claimed elsewhere can be hidden and restored without another submission',
+    (tester) async {
+      final operations = FakePaymentLinkOperations(
+        receivedRecords: [
+          PaymentLinkReceivedRecord.fromLink(
+            incomingLink,
+          ).copyWith(availability: PaymentLinkAvailability.claimedElsewhere),
+        ],
+      );
+      await pumpPaymentLinksScreen(tester, operations: operations);
+      await tester.tap(find.text('Received'));
+      await tester.pumpAndSettle();
+      expect(find.text('Already claimed'), findsOneWidget);
+      await tester.tap(find.text('View card'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'This gift card was claimed elsewhere. There is no balance available to claim.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Hide card'));
+      await tester.pumpAndSettle();
+      expect(operations.receivedRecords.single.archived, isTrue);
+      expect(find.text('View card'), findsNothing);
+      final disclosure = find.byType(PaymentLinkArchiveHeader);
+      expect(tester.getSize(disclosure).height, greaterThanOrEqualTo(48));
+      expect(
+        tester.widget<PaymentLinkArchiveHeader>(disclosure).expanded,
+        isFalse,
+      );
+      await tester.tapAt(
+        tester.getRect(disclosure).centerRight - const Offset(8, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<PaymentLinkArchiveHeader>(disclosure).expanded,
+        isTrue,
+      );
+      await tester.tap(find.text('Archived (1)'));
+      await tester.pumpAndSettle();
+      expect(find.text('View card'), findsNothing);
+      await tester.tap(find.text('Archived (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('View card'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Restore card'));
+      await tester.pumpAndSettle();
+      expect(operations.receivedRecords.single.archived, isFalse);
+      expect(
+        operations.receivedRecords.single.claimLink!.toUri(),
+        incomingLink.toUri(),
+      );
+      expect(operations.claimedLinks, isEmpty);
+      expect(operations.preparedLinks, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'checking an uncertain claim explicitly disables retransmission',
+    (tester) async {
+      final operations = FakePaymentLinkOperations(
+        receivedRecords: [
+          PaymentLinkReceivedRecord.fromLink(incomingLink).copyWith(
+            status: PaymentLinkReceivedStatus.receiving,
+            availability: PaymentLinkAvailability.checking,
+            destinationAccountUuid: 'account-1',
+            claimTxids: 'pending',
+          ),
+        ],
+      );
+      await pumpPaymentLinksScreen(tester, operations: operations);
+      await tester.tap(find.text('Received'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Check status'));
+      await tester.pump(const Duration(milliseconds: 300));
+      operations.inspectResubmitModes.clear();
+      await tester.tap(find.text('Check status'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(operations.inspectResubmitModes, contains(false));
+      expect(operations.claimedLinks, isEmpty);
+      expect(find.text('Hide card'), findsNothing);
+    },
+  );
+
+  testWidgets('background receipt closes the obsolete checking outcome', (
+    tester,
+  ) async {
+    final operations = FakePaymentLinkOperations(
+      receivedRecords: [
+        PaymentLinkReceivedRecord.fromLink(incomingLink).copyWith(
+          status: PaymentLinkReceivedStatus.receiving,
+          availability: PaymentLinkAvailability.checking,
+          destinationAccountUuid: 'account-1',
+          claimTxids: 'pending',
+        ),
+      ],
+    );
+    await pumpPaymentLinksScreen(tester, operations: operations);
+    await tester.tap(find.text('Received'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Check status'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.text('Your claim result is not confirmed yet. Check again shortly.'),
+      findsOneWidget,
+    );
+    operations.receivedClaimStatuses[incomingLink.address] =
+        PaymentLinkReceivedStatus.received;
+    await tester.pump(const Duration(seconds: 11));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.text('Your claim result is not confirmed yet. Check again shortly.'),
+      findsNothing,
+    );
+    expect(find.text('Received'), findsWidgets);
+    expect(find.text('Check status'), findsNothing);
+  });
+
+  testWidgets('leaving an outcome resets the next redeem flow', (tester) async {
+    final operations = FakePaymentLinkOperations(
+      receivedRecords: [
+        PaymentLinkReceivedRecord.fromLink(
+          incomingLink,
+        ).copyWith(availability: PaymentLinkAvailability.claimedElsewhere),
+      ],
+    );
+    await pumpPaymentLinksScreen(tester, operations: operations);
+    await tester.tap(find.text('Received'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View card'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hide card'), findsOneWidget);
+    await tester.tap(find.text('My Cards'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Redeem a card'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hide card'), findsNothing);
+    expect(find.text('Check status'), findsNothing);
+    expect(find.text('Paste card link'), findsOneWidget);
+  });
+
   for (final settings in [
     (true, true, true),
     (true, true, false),
@@ -703,7 +848,10 @@ void main() {
     await tester.tap(find.text('Paste card link'));
     await tester.pumpAndSettle();
 
-    expect(find.text('This Card has no available balance.'), findsOneWidget);
+    expect(
+      find.text('There is currently no balance available to claim.'),
+      findsOneWidget,
+    );
     expect(find.text('The link doesn’t look legit.'), findsNothing);
   });
 
@@ -1933,7 +2081,7 @@ void main() {
       find.text('This gift card is already being received.'),
       findsOneWidget,
     );
-    expect(find.text('Receiving...'), findsOneWidget);
+    expect(find.text('Checking result'), findsOneWidget);
     expect(operations.discardedClaimAddresses, isEmpty);
   });
 
@@ -2136,8 +2284,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 250));
 
-    expect(find.text('Receiving...'), findsOneWidget);
-    expect(find.text('Gift claim submitted'), findsOneWidget);
+    expect(find.text('Checking result'), findsOneWidget);
+    expect(
+      find.text('Claim result is not confirmed. Check its status.'),
+      findsOneWidget,
+    );
     expect(find.text('Gift claimed'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -2291,7 +2442,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Receiving...'), findsNothing);
-    expect(find.text('Claim'), findsOneWidget);
+    expect(find.text('Check status'), findsOneWidget);
     expect(find.textContaining('Gift card claim failed.'), findsOneWidget);
   });
 
@@ -2483,7 +2634,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a Card that can no longer be claimed leaves Received', (
+  testWidgets('an unavailable saved Card remains recoverable and can retry', (
     tester,
   ) async {
     final operations = FakePaymentLinkOperations(
@@ -2508,10 +2659,65 @@ void main() {
     await tester.tap(find.text('Claim'));
     await tester.pumpAndSettle();
 
-    expect(row, findsNothing);
-    expect(operations.forgottenLinkAddresses, [incomingLink.address]);
-    expect(operations.receivedRecords, isEmpty);
+    expect(
+      find.text('There is currently no balance available to claim.'),
+      findsOneWidget,
+    );
+    expect(operations.discardedClaimAddresses, isEmpty);
+    expect(operations.retainedClaimAddresses, [incomingLink.address]);
+    expect(
+      operations.receivedRecords.single.claimLink?.toUri(),
+      incomingLink.toUri(),
+    );
+
+    // Reopen from the list without obtaining the original link again.
+    operations.claimable = true;
+    await tester.tap(find.widgetWithText(AppBackLink, 'My Cards'));
+    await tester.pumpAndSettle();
+    expect(row, findsOneWidget);
+    await tester.tap(find.text('Check status'));
+    await tester.pumpAndSettle();
+    expect(find.text('Claim the gift card'), findsOneWidget);
+    expect(operations.preparedLinks, hasLength(2));
   });
+
+  testWidgets(
+    'confirmation refresh keeps a saved Card when funding is absent',
+    (tester) async {
+      final operations = FakePaymentLinkOperations(
+        receivedRecords: [PaymentLinkReceivedRecord.fromLink(incomingLink)],
+        claimable: false,
+        waitingForFundingConfirmations: true,
+        fundingConfirmationCount: 2,
+      );
+      await pumpPaymentLinksScreen(tester, operations: operations);
+      await tester.tap(find.text('Received'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Claim'));
+      await tester.pumpAndSettle();
+      expect(find.text('Wait 5:00 to claim'), findsOneWidget);
+
+      operations.waitingForFundingConfirmations = false;
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('There is currently no balance available to claim.'),
+        findsOneWidget,
+      );
+      expect(operations.discardedClaimAddresses, isEmpty);
+      expect(
+        operations.receivedRecords.single.claimLink?.toUri(),
+        incomingLink.toUri(),
+      );
+
+      operations.claimable = true;
+      await tester.tap(find.widgetWithText(AppBackLink, 'My Cards'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Check status'));
+      await tester.pumpAndSettle();
+      expect(find.text('Claim the gift card'), findsOneWidget);
+    },
+  );
 
   testWidgets('shows an interrupted funding draft without reclaim controls', (
     tester,

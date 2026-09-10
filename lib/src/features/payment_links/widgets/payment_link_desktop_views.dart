@@ -39,7 +39,7 @@ enum PaymentLinkMessageVisualState { empty, filled }
 
 enum PaymentLinkReadyVisualState { waiting, ready }
 
-enum PaymentLinkRedeemVisualState { paste, loading, invalid, unavailable }
+enum PaymentLinkRedeemVisualState { paste, loading, invalid }
 
 /// Empty Gift Cards landing surface.
 class PaymentLinksHomeDesktopView extends StatelessWidget {
@@ -934,6 +934,7 @@ class PaymentLinkCardListRow extends StatelessWidget {
     required this.amountText,
     required this.dateText,
     this.statusText,
+    this.actionLabel,
     this.onAction,
     this.showCopyIcon = false,
     this.showLoader = false,
@@ -952,6 +953,7 @@ class PaymentLinkCardListRow extends StatelessWidget {
   final String amountText;
   final String dateText;
   final String? statusText;
+  final String? actionLabel;
   final VoidCallback? onAction;
   final bool showCopyIcon;
   final bool showLoader;
@@ -964,7 +966,7 @@ class PaymentLinkCardListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 60,
+      height: actionLabel == null ? 60 : 84,
       child: Row(
         children: [
           ClipRRect(
@@ -983,6 +985,15 @@ class PaymentLinkCardListRow extends StatelessWidget {
                     color: context.colors.text.primary,
                   ),
                 ),
+                if (actionLabel != null)
+                  Text(
+                    statusText!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: context.colors.text.secondary,
+                    ),
+                  ),
                 Text(
                   dateText,
                   style: AppTypography.bodyMedium.copyWith(
@@ -1021,7 +1032,7 @@ class PaymentLinkCardListRow extends StatelessWidget {
             )
           else if (statusText case final label?)
             PaymentLinkTextAction(
-              label: label,
+              label: actionLabel ?? label,
               onTap: onAction,
               enabled: onAction != null,
               trailing: showLoader
@@ -1237,12 +1248,13 @@ class _PaymentLinkCardsDesktopViewState
               const SizedBox(height: AppSpacing.base),
               for (final (index, section) in widget.sections.indexed) ...[
                 if (index > 0) const SizedBox(height: AppSpacing.sm),
-                Text(
-                  section.label,
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: context.colors.text.secondary,
-                  ),
-                ),
+                section.header ??
+                    Text(
+                      section.label,
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: context.colors.text.secondary,
+                      ),
+                    ),
                 const SizedBox(height: AppSpacing.xxs),
                 ...section.cards,
               ],
@@ -1267,8 +1279,6 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
     this.pasteLabel = kPaymentLinkPasteLabel,
     this.invalidTitle = kPaymentLinkInvalidTitle,
     this.invalidSubtitle = kPaymentLinkInvalidSubtitle,
-    this.unavailableTitle = 'This Card has no available balance.',
-    this.unavailableSubtitle = kPaymentLinkUnavailableSubtitle,
     this.clearLabel = kPaymentLinkClearClipboardLabel,
     super.key,
   });
@@ -1284,16 +1294,12 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
   final String pasteLabel;
   final String invalidTitle;
   final String invalidSubtitle;
-  final String unavailableTitle;
-  final String unavailableSubtitle;
   final String clearLabel;
 
   @override
   Widget build(BuildContext context) {
     final loading = state == PaymentLinkRedeemVisualState.loading;
     final invalid = state == PaymentLinkRedeemVisualState.invalid;
-    final unavailable = state == PaymentLinkRedeemVisualState.unavailable;
-    final showError = invalid || unavailable;
     return PaymentLinkPane(
       backLabel: backLabel,
       onBack: onBack,
@@ -1325,12 +1331,12 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
                 child: loading
                     ? loadingPlaceholder ?? const PaymentLinkLoadingCard()
                     : PaymentLinkDashedDropZone(
-                        child: showError
+                        child: invalid
                             ? Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    invalid ? invalidTitle : unavailableTitle,
+                                    invalidTitle,
                                     textAlign: TextAlign.center,
                                     style: AppTypography.bodyMediumStrong
                                         .copyWith(
@@ -1340,9 +1346,7 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
                                   ),
                                   const SizedBox(height: AppSpacing.xs),
                                   Text(
-                                    invalid
-                                        ? invalidSubtitle
-                                        : unavailableSubtitle,
+                                    invalidSubtitle,
                                     textAlign: TextAlign.center,
                                     style: AppTypography.bodyMedium.copyWith(
                                       color: context.colors.text.secondary,
@@ -1378,7 +1382,7 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
                   ),
                 ),
               ),
-              if (showError)
+              if (invalid)
                 Positioned(
                   top: 545,
                   left: 0,

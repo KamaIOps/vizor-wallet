@@ -23,6 +23,8 @@ use crate::wallet::{
 };
 
 mod broadcast;
+mod payment_link;
+pub(crate) use payment_link::{payment_link_resubmit_exclusions, payment_link_spend_evidence};
 mod migration;
 mod migration_wallet_ops;
 mod pczt;

@@ -4,6 +4,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../widgetbook/activity_use_cases.dart';
+import '../widgetbook/payment_link_claim_outcome_use_cases.dart';
 import '../widgetbook/home_use_cases.dart';
 import '../widgetbook/donation_use_cases.dart';
 import '../widgetbook/mobile_pay_use_cases.dart';
@@ -49,6 +50,60 @@ class FigmaCompareScenario {
 /// storage, network, wallet, and Rust state. Widgetbook fixtures are preferred
 /// because they are already used to review the same UI states.
 const figmaCompareScenarios = <FigmaCompareScenario>[
+  FigmaCompareScenario(
+    id: 'gift-card-claim-rejected',
+    description: 'gift-card-claim-rejected',
+    builder: buildClaimRejectedUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-claim-busy',
+    description: 'gift-card-claim-busy',
+    builder: buildClaimBusyUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-archived-outcome',
+    description: 'gift-card-archived-outcome',
+    builder: buildClaimArchivedUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-outcome-list',
+    description: 'gift-card-outcome-list',
+    builder: buildClaimOutcomeListUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-archive-closed',
+    description: 'gift-card-archive-closed',
+    builder: buildClaimArchiveClosedUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-archive-open',
+    description: 'gift-card-archive-open',
+    builder: buildClaimArchiveOpenUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-claimed-elsewhere',
+    description: 'Gift Card already claimed outcome',
+    builder: buildClaimedElsewhereUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-claim-failed',
+    description: 'Gift Card failed claim outcome',
+    builder: buildClaimFailedUseCase,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'gift-card-claim-checking',
+    description: 'Gift Card uncertain claim outcome',
+    builder: buildClaimCheckingUseCase,
+    mobile: true,
+  ),
   FigmaCompareScenario(
     id: 'mobile-unlock-face-id',
     description: 'Mobile unlock with face-id',
@@ -420,9 +475,10 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
     builder: buildPaymentLinkRedeemInvalidUseCase,
   ),
   FigmaCompareScenario(
-    id: 'payment-link-redeem-unavailable',
-    description: 'Desktop Gift Card redeem no-balance state',
-    builder: buildPaymentLinkRedeemUnavailableUseCase,
+    id: 'gift-card-no-balance',
+    description: 'Gift Card no-balance outcome',
+    builder: buildClaimNoBalanceUseCase,
+    mobile: true,
   ),
   FigmaCompareScenario(
     id: 'payment-link-received-waiting',

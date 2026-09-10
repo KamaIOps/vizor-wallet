@@ -65,7 +65,6 @@ enum PaymentLinkPreviewState {
   redeemLongSyncWarning,
   redeemLoading,
   redeemInvalid,
-  redeemUnavailable,
   receivedWaiting,
   received,
   receivedMessage,
@@ -192,11 +191,6 @@ Widget buildPaymentLinkRedeemLoadingUseCase(BuildContext context) =>
 Widget buildPaymentLinkRedeemInvalidUseCase(BuildContext context) =>
     const PaymentLinkDesktopPreview(
       state: PaymentLinkPreviewState.redeemInvalid,
-    );
-
-Widget buildPaymentLinkRedeemUnavailableUseCase(BuildContext context) =>
-    const PaymentLinkDesktopPreview(
-      state: PaymentLinkPreviewState.redeemUnavailable,
     );
 
 Widget buildPaymentLinkReceivedUseCase(BuildContext context) =>
@@ -512,12 +506,6 @@ class _PaymentLinkPreviewPane extends StatelessWidget {
         subtitle: 'Copy the card link you’ve received, and paste it below.',
         pasteLabel: 'Paste card link',
         clearLabel: 'Clear clipboard',
-      ),
-      PaymentLinkPreviewState.redeemUnavailable => PaymentLinkRedeemDesktopView(
-        state: PaymentLinkRedeemVisualState.unavailable,
-        onBack: _noop,
-        onPaste: _noop,
-        onClearClipboard: _noop,
       ),
       PaymentLinkPreviewState.received => const _PaymentLinkReceivedPreview(
         hasMessage: false,

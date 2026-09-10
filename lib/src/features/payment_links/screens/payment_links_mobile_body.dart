@@ -31,6 +31,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
   const PaymentLinksMobileBody({
     required this.page,
     required this.redeemState,
+    this.claimOutcome,
     required this.operationInProgress,
     required this.redeemActionLabel,
     required this.redeemFromQrCode,
@@ -90,6 +91,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
 
   final PaymentLinksLocalPage page;
   final PaymentLinkRedeemVisualState redeemState;
+  final Widget? claimOutcome;
   final bool operationInProgress;
   final String redeemActionLabel;
   final bool redeemFromQrCode;
@@ -172,15 +174,19 @@ class PaymentLinksMobileBody extends StatelessWidget {
       PaymentLinksLocalPage.review => _buildReview(),
       PaymentLinksLocalPage.ready => _buildReady(context),
       PaymentLinksLocalPage.shareQr => _buildHome(context),
-      PaymentLinksLocalPage.redeem => PaymentLinkRedeemMobileView(
-        state: PaymentLinkRedeemMobileState.values.byName(redeemState.name),
-        onBack: () => onShowPage(PaymentLinksLocalPage.home),
-        onPaste: operationInProgress ? null : onRunRedeemAction,
-        onScan: operationInProgress ? null : onScanCard,
-        fromQrCode: redeemFromQrCode,
-        onClearClipboard: operationInProgress ? null : onClearClipboard,
-        pasteLabel: redeemActionLabel,
-      ),
+      PaymentLinksLocalPage.redeem =>
+        claimOutcome ??
+            PaymentLinkRedeemMobileView(
+              state: PaymentLinkRedeemMobileState.values.byName(
+                redeemState.name,
+              ),
+              onBack: () => onShowPage(PaymentLinksLocalPage.home),
+              onPaste: operationInProgress ? null : onRunRedeemAction,
+              onScan: operationInProgress ? null : onScanCard,
+              fromQrCode: redeemFromQrCode,
+              onClearClipboard: operationInProgress ? null : onClearClipboard,
+              pasteLabel: redeemActionLabel,
+            ),
       PaymentLinksLocalPage.received => _buildReceived(context),
     };
 

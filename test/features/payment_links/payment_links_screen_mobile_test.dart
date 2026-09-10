@@ -71,6 +71,37 @@ void main() {
   }
 
   setUpAll(loadPaymentLinksTestFonts);
+
+  testWidgets(
+    'mobile keeps a saved unavailable Card during destination preparation',
+    (tester) async {
+      final accounts = SwitchablePaymentLinkAccountNotifier();
+      final operations = FakePaymentLinkOperations(
+        receivedRecords: [PaymentLinkReceivedRecord.fromLink(incomingLink)],
+        readClaimDestination: () => accounts.current,
+      );
+      await _openReceivedCard(tester, operations, accountNotifier: accounts);
+      await tester.tap(find.text('Claim the gift'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('payment_link_claim_account_account-2')),
+      );
+      operations.claimable = false;
+      await tester.tap(find.text('Claim gift'));
+      await tester.pumpAndSettle();
+      expect(operations.claimedLinks, isEmpty);
+      expect(operations.discardedClaimAddresses, isEmpty);
+      expect(operations.retainedClaimAddresses, [incomingLink.address]);
+      expect(
+        operations.receivedRecords.single.claimLink?.toUri(),
+        incomingLink.toUri(),
+      );
+      expect(
+        find.text('There is currently no balance available to claim.'),
+        findsOneWidget,
+      );
+    },
+  );
   for (final pricingEnabled in [true, false]) {
     testWidgets(
       'creation snapshots fiat only with pricing enabled: $pricingEnabled',
@@ -824,8 +855,11 @@ void main() {
           router.routerDelegate.currentConfiguration.uri.path,
           '/payment-links',
         );
-        expect(find.text('Receiving...'), findsOneWidget);
-        expect(find.text('Your gift is still being received.'), findsOneWidget);
+        expect(find.text('Checking result'), findsOneWidget);
+        expect(
+          find.text('Claim result is not confirmed. Check its status.'),
+          findsOneWidget,
+        );
         expect(find.text('Claim the gift'), findsNothing);
         expect(find.text('Try again'), findsNothing);
       },
