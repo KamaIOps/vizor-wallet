@@ -221,17 +221,10 @@ void main() {
   );
 
   test(
-    'Home consults the recovery plan before deciding for existing local voting records',
+    'Home restores local decisions with an empty cache without participation RPC',
     () async {
       for (final completed in [true, false]) {
-        final client = FakeVotingParticipationClient()
-          ..result = const VotingParticipationResult(
-            fingerprint: 'notes',
-            usedCount: 1,
-            noteCount: 1,
-            remainingEligible: false,
-            localState: true,
-          );
+        final client = FakeVotingParticipationClient(); // Fails if invoked.
         final recovery = FakeVotingRecoveryApi(
           state: recoveryState(),
           roundPlan: apiRoundPlan(
@@ -240,7 +233,7 @@ void main() {
             nextSteps: [],
             openProposals: Uint32List.fromList(completed ? [] : [1]),
             allDecided: completed,
-            completedForDisplay: completed,
+            completedForDisplay: true,
             needsDraftSetup: false,
           ),
         );
@@ -282,7 +275,25 @@ void main() {
         );
         expect(fact.needsRecheck, false);
         await checker.checkRound(kRoundId);
+        expect(client.calls, 0);
+        await checker.checkRound(kRoundId, force: true);
         expect(client.calls, 1);
+        final afterFailure = container
+            .read(votingHomeCacheProvider.notifier)
+            .fact(
+              votingHomeFactKey(
+                'main',
+                config.sourceFingerprint,
+                'account-1',
+                kRoundId,
+              ),
+            );
+        expect(
+          afterFailure.decision,
+          fact.decision,
+          reason:
+              'Forced RPC failure must preserve the restored local decision',
+        );
         container.dispose();
       }
     },
@@ -338,6 +349,65 @@ void main() {
         reason: 'Incomplete response must not replace last success',
       );
       expect(recovery.roundPlanProposalIds, isEmpty);
+    },
+  );
+
+  test(
+    'local recovery restores Home even during participation backoff',
+    () async {
+      final client = FakeVotingParticipationClient();
+      final recovery = FakeVotingRecoveryApi(state: recoveryState());
+      final http = FakeVotingHttpClient(
+        responses: votingHttpResponses(
+          roundStatus: roundStatusJson(roundId: kRoundId)
+            ..['proposals'] = [
+              {'id': 1, 'title': 'Question'},
+            ],
+        ),
+      );
+      final container = _sessionContainer(
+        http: http,
+        recoveryApi: recovery,
+        extraOverrides: [
+          votingParticipationClientProvider.overrideWithValue(client),
+          syncProvider.overrideWith(_PollEligibilitySyncNotifier.new),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(accountProvider.future);
+      await container.read(votingConfigSourceProvider.future);
+      final checker = container.read(votingParticipationProvider);
+      await checker.checkRound(kRoundId);
+      expect(client.calls, 1);
+      final requests = http.requests.length;
+      recovery.roundPlan = apiRoundPlan(
+        roundId: kRoundId,
+        pendingRecovery: true,
+        blockingRecovery: true,
+        nextSteps: [],
+        openProposals: Uint32List.fromList([1]),
+        allDecided: false,
+      );
+      await checker.checkRound(kRoundId);
+      final config = container.read(votingConfigProvider).requireValue;
+      final fact = container
+          .read(votingHomeCacheProvider.notifier)
+          .fact(
+            votingHomeFactKey(
+              'main',
+              config.sourceFingerprint,
+              'account-1',
+              kRoundId,
+            ),
+          );
+      expect(fact.decision, VotingHomeDecision.show);
+      expect(fact.progress, VotingHomeProgress.inProgress);
+      expect(client.calls, 1);
+      expect(
+        http.requests.length,
+        requests,
+        reason: 'Local recovery during backoff must reuse round metadata',
+      );
     },
   );
 

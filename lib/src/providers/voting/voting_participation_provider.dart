@@ -100,8 +100,9 @@ class VotingParticipationCoordinator {
     ({Future<void> future, bool Function() current, bool homeOnly})
   >
   _pending = {};
-  // Only retain details while waiting for the local snapshot to sync.
-  final Map<String, VotingRoundDetails> _syncWaitingDetails = {};
+  // Retain details while waiting for sync or participation retry, so local
+  // recovery can be restored during backoff without another status request.
+  final Map<String, VotingRoundDetails> _pendingDetails = {};
   // In-memory only: a fresh app session may check immediately.
   final Map<String, ({Duration delay, DateTime retryAt})> _failed = {};
 
@@ -213,12 +214,6 @@ class VotingParticipationCoordinator {
           if (!current()) return;
           final clock = ref.read(votingHomeClockProvider);
           final failed = _failed[key];
-          if (!force && failed != null && clock().isBefore(failed.retryAt)) {
-            votingHomeTrace(
-              'participation.skip.backoff retryAt=${failed.retryAt.toIso8601String()}',
-            );
-            return;
-          }
           final cache = ref.read(votingHomeCacheProvider.notifier);
           await cache.ensureLoaded();
           if (!current()) return;
@@ -273,10 +268,17 @@ class VotingParticipationCoordinator {
           }
           final detailsKey =
               '$network|${config.sourceFingerprint}|$account|$round';
-          if (force) _syncWaitingDetails.remove(detailsKey);
+          if (force) _pendingDetails.remove(detailsKey);
+          final backingOff =
+              !force && failed != null && clock().isBefore(failed.retryAt);
+          if (backingOff &&
+              knownRound == null &&
+              !_pendingDetails.containsKey(detailsKey)) {
+            return;
+          }
           final details =
               knownRound ??
-              _syncWaitingDetails[detailsKey] ??
+              _pendingDetails[detailsKey] ??
               VotingRoundDetails.fromStatus(
                 await ref
                     .read(votingApiClientProvider(config.apiServers))
@@ -284,6 +286,51 @@ class VotingParticipationCoordinator {
               );
           if (!current()) return;
           final dbPath = await ref.read(votingWalletDbPathProvider)();
+          final factKey = votingHomeFactKey(
+            network,
+            config.sourceFingerprint,
+            account,
+            round,
+          );
+          final localProposalIds = proposalsFromRound(
+            details,
+          ).map((p) => p.id).toList();
+          // Durable recovery is independent of note inspection and its RPCs.
+          // Empty proposal sets cannot establish that the round is completed.
+          if (localProposalIds.isNotEmpty) {
+            final localPlan = await ref
+                .read(votingRecoveryServiceProvider)
+                .loadRoundPlan(
+                  dbPath: dbPath,
+                  accountUuid: account,
+                  roundId: round,
+                  proposalIds: localProposalIds,
+                );
+            if (!current() ||
+                !identical(ref.read(votingConfigProvider).value, config)) {
+              return;
+            }
+            final actionable =
+                localPlan.blockingRecovery ||
+                (localPlan.pendingRecovery && !localPlan.completedForDisplay) ||
+                (!localPlan.needsDraftSetup &&
+                    localPlan.openProposals.isNotEmpty);
+            final completed =
+                localPlan.completedForDisplay &&
+                localPlan.openProposals.isEmpty &&
+                !localPlan.blockingRecovery;
+            if (actionable || completed) {
+              await cache.recordPlan(factKey, localPlan);
+              if (!current()) return;
+              if (!force) {
+                _failed.remove(key);
+                _pendingDetails.remove(detailsKey);
+                return;
+              }
+            }
+          }
+          if (backingOff) return;
+          _pendingDetails[detailsKey] = details;
           final scan = await ref
               .read(votingWalletSyncReadinessCheckerProvider)
               .check(
@@ -296,10 +343,9 @@ class VotingParticipationCoordinator {
             votingHomeTrace(
               'participation.wait-sync snapshot=${details.snapshotHeight}',
             );
-            _syncWaitingDetails[detailsKey] = details;
+            _pendingDetails[detailsKey] = details;
             return;
           }
-          _syncWaitingDetails.remove(detailsKey);
           final params = await ref
               .read(votingRustApiProvider)
               .trustedVotingRoundParamsFromConfig(
@@ -356,12 +402,6 @@ class VotingParticipationCoordinator {
               !identical(ref.read(votingConfigProvider).value, config)) {
             return;
           }
-          final factKey = votingHomeFactKey(
-            network,
-            config.sourceFingerprint,
-            account,
-            round,
-          );
           await cache.recordParticipation(
             factKey,
             details.snapshotHeight,
@@ -372,6 +412,7 @@ class VotingParticipationCoordinator {
             throw StateError('Some voting notes remain unverified');
           }
           _failed.remove(key);
+          _pendingDetails.remove(detailsKey);
         })
         .catchError((Object _) {
           // Raw RPC errors may contain a queried identifier. Never log them.

@@ -59,6 +59,15 @@ exact-set anchor. Failed checks preserve the last confirmed display decision.
 
 ## Persistence and recovery
 
+Before note inspection, the coordinator loads the durable local round plan
+using the authenticated round's complete proposal IDs. Actionable recovery or
+remaining local proposals restore Home visibility; full completion hides it.
+These decisions do not require the participation RPC, even when the Home
+summary is missing. Participation backoff does not block local recovery when
+round details are already available. New round details still require the
+existing config/status data path; this is not a fully offline discovery path.
+An explicit forced check still inspects notes after saving the local decision.
+
 Each verified note observation is stored in Dart app-private ordinary files beside
 its wallet DB (`<wallet-db>.voting-cache`), not secure storage. The scope is
 network / account UUID / round ID / snapshot / governance derivation version.
