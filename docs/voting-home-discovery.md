@@ -66,3 +66,15 @@ them in. Prod and stage hints are scoped by both wallet network and config sourc
 
 Settings keeps its permanent Coinholder voting entry. Actual voting still uses
 live config authentication and eligibility checks, irrespective of Home hints.
+
+## Mobile regtest coverage
+
+`scripts/e2e/flutter-ios-regtest-mobile-voting.sh` verifies a confirmed visible
+Home card before voting, mines 20 additional Zcash blocks, and drives the real
+sync engine. The test rejects any false visibility-provider transition and
+checks the rendered card on every pumped frame, including at least one syncing
+frame. It requires a newer scanned height and sync completion, and no additional
+participation RPCs. Screenshots are saved as `home-during-resync.png` and
+`home-after-resync.png` under `.regtest-voting/logs/screenshots/`.
+The same flow then completes voting and checks that Home hides the card; the
+reinstall runner also includes this pre-vote resync check.

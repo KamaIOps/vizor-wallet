@@ -4,6 +4,7 @@ import 'package:zcash_wallet/src/core/config/network_config.dart';
 import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_home_cache_provider.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_home_entry_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_config_source_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_participation_provider.dart';
 import 'package:zcash_wallet/src/features/voting/voting_poll_ordering.dart';
@@ -237,6 +238,119 @@ Future<int> participationRequestCount() async {
   }
 }
 
+/// Exercise the real sync engine without replacing its state or Home decision.
+/// Observe provider transitions too, so a brief hide between frames cannot pass.
+Future<void> expectVotingHomeVisibleDuringResync(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  final card = find.byKey(const ValueKey('mobile_home_coinholder_voting'));
+  await pumpUntil(
+    tester,
+    () => container.read(syncProvider).value?.isSyncing == false,
+    description: 'initial voting wallet sync finished',
+  );
+  expect(card, findsOneWidget);
+  expect(container.read(votingHomeEntryVisibleProvider), true);
+  final before = container.read(syncProvider).value!;
+  final requests = await participationRequestCount();
+  var hidden = false;
+  var syncingFrames = 0;
+  var captured = false;
+  final visibility = container.listen(votingHomeEntryVisibleProvider, (
+    _,
+    next,
+  ) {
+    if (!next) hidden = true;
+  });
+  try {
+    int? target;
+    Object? miningError;
+    final mining =
+        postDriver(
+          '/mine-for-home-sync',
+          const {},
+          baseUrl: const String.fromEnvironment('ZCASH_E2E_VOTING_GATEWAY_URL'),
+        ).then<void>(
+          (result) {
+            target = result['height'] as int;
+            // If tip polling already started the sync, the normal duplicate guard
+            // leaves that operation running. Otherwise explicitly start real sync.
+            container
+                .read(syncProvider.notifier)
+                .startSync(latestTipHeight: target);
+          },
+          onError: (Object error) {
+            miningError = error;
+          },
+        );
+    final deadline = DateTime.now().add(const Duration(minutes: 3));
+    while (DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 16));
+      if (miningError != null) throw miningError!;
+      expect(
+        hidden,
+        false,
+        reason: 'Confirmed Home visibility changed during resync',
+      );
+      expect(
+        card,
+        findsOneWidget,
+        reason: 'Voting card disappeared during resync',
+      );
+      final sync = container.read(syncProvider).value!;
+      if (sync.isSyncing) {
+        syncingFrames++;
+        if (!captured) {
+          captured = true;
+          // No extra pump here: capture the already-asserted syncing frame.
+          await postDriver(
+            '/screenshot',
+            {'name': 'home-during-resync'},
+            baseUrl: const String.fromEnvironment(
+              'ZCASH_E2E_VOTING_GATEWAY_URL',
+            ),
+          );
+        }
+      }
+      if (target != null &&
+          !sync.isSyncing &&
+          sync.scannedHeight >= target! &&
+          sync.lastSyncCompletedAt != before.lastSyncCompletedAt) {
+        break;
+      }
+    }
+    await mining;
+    expect(target, greaterThan(before.scannedHeight));
+    expect(
+      syncingFrames,
+      greaterThan(0),
+      reason: 'Must observe a rendered real sync frame',
+    );
+    final after = container.read(syncProvider).value!;
+    expect(after.isSyncing, false);
+    expect(after.scannedHeight, greaterThanOrEqualTo(target!));
+    expect(after.lastSyncCompletedAt, isNot(before.lastSyncCompletedAt));
+    await container.read(votingParticipationProvider).checkHomeCandidates();
+    await tester.pump();
+    expect(hidden, false);
+    expect(card, findsOneWidget);
+    expect(
+      await participationRequestCount(),
+      requests,
+      reason: 'Blocks above the voting snapshot must reuse participation',
+    );
+    await captureVotingRegtest(tester, 'home-after-resync');
+    logE2e(
+      'voting Home stayed visible across real resync: '
+      'from=${before.scannedHeight} to=${after.scannedHeight} '
+      'syncingFrames=$syncingFrames extraParticipationRequests=0',
+    );
+  } finally {
+    visibility.close();
+  }
+}
+
 Future<void> completeMobileRegtestVote(WidgetTester tester) async {
   tolerateRenderOverflows();
   if (_roundId.length != 64) {
@@ -269,6 +383,7 @@ Future<void> completeMobileRegtestVote(WidgetTester tester) async {
 
   await expectVotingNoteCachePersisted(tester, container, used: false);
   await expectVotingRecheckUsesDiskCache(container);
+  await expectVotingHomeVisibleDuringResync(tester, container);
   await captureVotingRegtest(tester, 'before-vote');
   await tapWidget(tester, const ValueKey('mobile_home_coinholder_voting'));
   await tapAppButton(

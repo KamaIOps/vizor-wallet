@@ -6,7 +6,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(initializeMobileVotingRegtestRuntime);
   testWidgets(
-    'completes a real mobile vote and hides the Home card',
+    'keeps the Home card during resync, then votes and hides it',
     completeMobileRegtestVote,
     timeout: const Timeout(Duration(minutes: 45)),
   );
