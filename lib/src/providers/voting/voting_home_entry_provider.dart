@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/voting/voting_poll_ordering.dart';
 
 import '../../services/voting/resolved_voting_config_extensions.dart';
 import '../../services/voting/voting_models.dart';
@@ -214,12 +215,7 @@ class VotingHomeRefresh {
         ),
       );
       for (final round in rounds) {
-        if (const [
-          '2',
-          '3',
-          'tallying',
-          'closed',
-        ].contains(round.status.toLowerCase())) {
+        if (votingPollListStatus(round.status) != VotingPollListStatus.active) {
           try {
             await ref
                 .read(votingFileCacheProvider)

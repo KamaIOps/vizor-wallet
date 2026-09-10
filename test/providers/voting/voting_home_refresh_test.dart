@@ -1,3 +1,4 @@
+import 'package:zcash_wallet/src/services/voting/voting_file_cache.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:zcash_wallet/src/providers/rpc_endpoint_provider.dart';
@@ -102,12 +103,15 @@ class _Api extends VotingApiClient {
         httpClient: FakeVotingHttpClient(responses: {}),
       );
   int calls = 0;
+  String status = '1';
   Completer<void>? gate;
   @override
   Future<List<VotingRoundSummary>> listRounds() async {
     calls++;
     await gate?.future;
-    return [round()];
+    return [
+      VotingRoundSummary.fromJson({...round().rawJson, 'status': status}),
+    ];
   }
 }
 
@@ -152,11 +156,13 @@ void main() {
   late _Config config;
   late DateTime now;
   late _Discovery discovery;
+  late _CleanupCache files;
   var endpoint = votingDiscoveryUrl;
   void setup(List<String> ids, {bool prod = false, bool stage = false}) {
     now = DateTime.utc(2026, 9, 10);
     store = MemoryVotingHomeCacheStore();
     api = _Api();
+    files = _CleanupCache();
     config = _Config(ids);
     discovery = _Discovery();
     container = ProviderContainer(
@@ -177,6 +183,7 @@ void main() {
         votingDiscoveryEndpointProvider.overrideWith((ref) => endpoint),
         votingConfigProvider.overrideWith(() => config),
         votingHomeCacheStoreProvider.overrideWithValue(store),
+        votingFileCacheProvider.overrideWithValue(files),
         votingHomeClockProvider.overrideWithValue(() => now),
         votingApiClientProvider.overrideWith((ref, servers) => api),
         // Any accidental Home eligibility or recovery dependency fails the test.
@@ -189,6 +196,31 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
+  }
+
+  for (final status in [
+    '2',
+    '3',
+    'tallying',
+    'closed',
+    'finalized',
+    'completed',
+    'ended',
+    'pending',
+    ' CLOSED ',
+    '1',
+    'active',
+    'unknown',
+  ]) {
+    test('round cleanup normalizes status $status', () async {
+      setup([roundId]);
+      api.status = status;
+      await container.read(votingHomeRefreshProvider).refresh();
+      expect(
+        files.removed,
+        ['1', 'active', 'unknown'].contains(status) ? [] : ['main|$roundId'],
+      );
+    });
   }
 
   test(
@@ -589,4 +621,12 @@ void main() {
       );
     },
   );
+}
+
+class _CleanupCache extends VotingFileCache {
+  final removed = <String>[];
+  @override
+  Future<void> removeRound(String network, String round) async {
+    removed.add('$network|$round');
+  }
 }
