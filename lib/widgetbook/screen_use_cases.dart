@@ -309,6 +309,19 @@ Widget buildMobileUnlockFingerprintUseCase(BuildContext context) {
   );
 }
 
+Widget buildMobileUnlockTouchIdUseCase(BuildContext context) {
+  return _buildMobileUnlockUseCase(
+    const BiometricUnlockState(
+      availability: BiometricAvailability(
+        supported: true,
+        enrolled: true,
+        kind: BiometricKind.touchId,
+      ),
+      enabled: true,
+    ),
+  );
+}
+
 Widget buildMobileCreatePasscodeUseCase(BuildContext context) {
   return _MobilePreviewFrame(
     child: IgnorePointer(
@@ -599,6 +612,19 @@ Widget buildMobileFingerprintOptInUseCase(BuildContext context) {
         supported: true,
         enrolled: true,
         kind: BiometricKind.fingerprint,
+      ),
+      enabled: false,
+    ),
+  );
+}
+
+Widget buildMobileTouchIdOptInUseCase(BuildContext context) {
+  return _buildMobileBiometricOptInUseCase(
+    const BiometricUnlockState(
+      availability: BiometricAvailability(
+        supported: true,
+        enrolled: true,
+        kind: BiometricKind.touchId,
       ),
       enabled: false,
     ),

@@ -146,6 +146,10 @@ class WidgetbookApp extends StatelessWidget {
                       builder: buildMobileUnlockBiometricBackdropUseCase,
                     ),
                     WidgetbookUseCase(
+                      name: 'Touch ID',
+                      builder: buildMobileUnlockTouchIdUseCase,
+                    ),
+                    WidgetbookUseCase(
                       name: 'Fingerprint',
                       builder: buildMobileUnlockFingerprintUseCase,
                     ),
@@ -230,6 +234,10 @@ class WidgetbookApp extends StatelessWidget {
                     WidgetbookUseCase(
                       name: 'Face ID opt-in',
                       builder: buildMobileFaceIdOptInUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Touch ID opt-in',
+                      builder: buildMobileTouchIdOptInUseCase,
                     ),
                     WidgetbookUseCase(
                       name: 'Fingerprint opt-in',

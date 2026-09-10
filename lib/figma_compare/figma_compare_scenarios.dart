@@ -104,6 +104,48 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
     builder: buildClaimCheckingUseCase,
     mobile: true,
   ),
+  FigmaCompareScenario(
+    id: 'mobile-unlock-face-id',
+    description: 'Mobile unlock with face-id',
+    builder: buildMobileUnlockFaceIdUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-biometrics-face-id',
+    description: 'Mobile biometrics with face-id',
+    builder: buildMobileFaceIdOptInUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-unlock-touch-id',
+    description: 'Mobile unlock with touch-id',
+    builder: buildMobileUnlockTouchIdUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-biometrics-touch-id',
+    description: 'Mobile biometrics with touch-id',
+    builder: buildMobileTouchIdOptInUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-unlock-fingerprint',
+    description: 'Mobile unlock with fingerprint',
+    builder: buildMobileUnlockFingerprintUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-biometrics-fingerprint',
+    description: 'Mobile biometrics with fingerprint',
+    builder: buildMobileFingerprintOptInUseCase,
+    desktop: false,
+    mobile: true,
+  ),
 
   FigmaCompareScenario(
     id: 'voting-share-status',
