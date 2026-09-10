@@ -17,7 +17,8 @@ use crate::wallet::sync::open_wallet_db_for_read;
 
 // Explicit consensus-key trust, independent of the server returning a proof.
 // Captured from the official production/stage RPCs on 2026-09-10. This narrow
-// reader does NOT follow validator-set changes: unsupported sets fail closed.
+// reader accepts changes only with >2/3 signatures under both the bundled
+// and current voting powers. It does not advance its trust anchor.
 // See docs/voting-participation.md before updating these trust anchors.
 const PROD_VALIDATORS: &str = "621A1E2C532170C3C0BC2E951D26C1CCA7A0EFB009AA15820D648D336C64F6BD";
 const STAGE_VALIDATORS: &str = "6E81F631CB63A527AB5A659529BA8942C46CCF78BA87D1B3AD4CF8AE5BDC2E8B";
@@ -156,23 +157,7 @@ struct Evidence {
     queries: Vec<Envelope<QueryResult>>,
 }
 
-fn verify_header(
-    commit: &CommitResult,
-    validators: &ValidatorsResult,
-    network: &str,
-    now: i64,
-) -> Result<(), String> {
-    let (chain, pin) = match network {
-        "main" => ("zvote-1", PROD_VALIDATORS),
-        "test" => ("svote-1", STAGE_VALIDATORS),
-        "regtest" => {
-            let (chain, pin) = REGTEST_TRUST.get().ok_or(INVALID)?;
-            (chain.as_str(), pin.as_str())
-        }
-        _ => return Err(INVALID.into()),
-    };
-    let s = &commit.signed_header;
-    let h = &s.header;
+fn checked_validator_set(validators: &ValidatorsResult) -> Result<validator::Set, String> {
     if validators.validators.is_empty() || validators.validators.len() > 100 {
         return Err(INVALID.into());
     }
@@ -181,7 +166,12 @@ fn verify_header(
         .iter()
         .try_fold(0u64, |sum, v| sum.checked_add(v.power.value()))
         .ok_or(INVALID)?;
-    if power > (i64::MAX as u64) / 8
+    if power == 0
+        || validators
+            .validators
+            .iter()
+            .any(|v| v.power.value() == 0 || v.address != tendermint::account::Id::from(v.pub_key))
+        || power > (i64::MAX as u64) / 8
         || validators
             .validators
             .iter()
@@ -192,10 +182,72 @@ fn verify_header(
     {
         return Err(INVALID.into());
     }
-    let set = validator::Set::without_proposer(validators.validators.clone());
+    Ok(validator::Set::without_proposer(
+        validators.validators.clone(),
+    ))
+}
+
+fn bundled_validators(network: &str) -> Result<&'static validator::Set, String> {
+    static MAIN: std::sync::OnceLock<Result<validator::Set, String>> = std::sync::OnceLock::new();
+    static TEST: std::sync::OnceLock<Result<validator::Set, String>> = std::sync::OnceLock::new();
+    let (slot, json, pin) = match network {
+        "main" => (
+            &MAIN,
+            include_str!("trust/main-validators.json"),
+            PROD_VALIDATORS,
+        ),
+        "test" => (
+            &TEST,
+            include_str!("trust/test-validators.json"),
+            STAGE_VALIDATORS,
+        ),
+        _ => return Err(INVALID.into()),
+    };
+    slot.get_or_init(|| {
+        let validators = serde_json::from_str(json).map_err(|_| INVALID)?;
+        let set = checked_validator_set(&ValidatorsResult { validators })?;
+        if set.hash().to_string() != pin {
+            return Err(INVALID.into());
+        }
+        Ok(set)
+    })
+    .as_ref()
+    .map_err(Clone::clone)
+}
+
+fn verify_header(
+    commit: &CommitResult,
+    validators: &ValidatorsResult,
+    network: &str,
+    now: i64,
+) -> Result<(), String> {
+    let set = checked_validator_set(validators)?;
+    let (chain, trusted) = match network {
+        "main" => ("zvote-1", bundled_validators("main")?),
+        "test" => ("svote-1", bundled_validators("test")?),
+        "regtest" => {
+            let (chain, pin) = REGTEST_TRUST.get().ok_or(INVALID)?;
+            if set.hash().to_string() != *pin {
+                return Err(INVALID.into());
+            }
+            (chain.as_str(), &set)
+        }
+        _ => return Err(INVALID.into()),
+    };
+    verify_header_with_trust(commit, &set, chain, trusted, now)
+}
+
+fn verify_header_with_trust(
+    commit: &CommitResult,
+    set: &validator::Set,
+    chain: &str,
+    trusted: &validator::Set,
+    now: i64,
+) -> Result<(), String> {
+    let s = &commit.signed_header;
+    let h = &s.header;
     let age = now.checked_sub(h.time.unix_timestamp()).ok_or(INVALID)?;
     if h.chain_id.as_str() != chain
-        || h.validators_hash.to_string() != pin
         || set.hash() != h.validators_hash
         || h.hash() != s.commit.block_id.hash
         || h.height != s.commit.height
@@ -203,12 +255,19 @@ fn verify_header(
     {
         return Err(INVALID.into());
     }
-    ProdCommitValidator.validate(s, &set).map_err(|_| INVALID)?;
+    ProdCommitValidator.validate(s, set).map_err(|_| INVALID)?;
     ProdCommitValidator
-        .validate_full(s, &set)
+        .validate_full(s, set)
         .map_err(|_| INVALID)?;
+    // Each quorum uses its own voting powers. New powers cannot inflate the
+    // contribution of a signer within the bundled trust anchor.
     ProdVotingPowerCalculator::default()
-        .check_signers_overlap(s, &set)
+        .check_enough_trust_and_signers(
+            s,
+            trusted,
+            tendermint::trust_threshold::TrustThresholdFraction::TWO_THIRDS,
+            set,
+        )
         .map_err(|_| INVALID)?;
     Ok(())
 }
@@ -536,6 +595,137 @@ mod tests {
         let now = header.header.time.unix_timestamp();
         (value, keys, now)
     }
+    fn test_validators(powers: &[(u8, u64)]) -> validator::Set {
+        let validators = powers
+            .iter()
+            .map(|(id, power)| {
+                let key = ed25519_consensus::SigningKey::from([*id; 32]);
+                validator::Info::new(
+                    tendermint::PublicKey::from_raw_ed25519(&key.verification_key().to_bytes())
+                        .unwrap(),
+                    (*power).try_into().unwrap(),
+                )
+            })
+            .collect();
+        checked_validator_set(&ValidatorsResult { validators }).unwrap()
+    }
+
+    fn signed_test_header(set: &validator::Set, signers: &[u8]) -> (CommitResult, i64) {
+        use tendermint::{
+            block::CommitSig,
+            vote::{Type, Vote},
+        };
+        let (value, _, now) = fixture("main");
+        let mut header: SignedHeader =
+            serde_json::from_value(value["commit"]["result"]["signed_header"].clone()).unwrap();
+        header.header.validators_hash = set.hash();
+        header.commit.block_id.hash = header.header.hash();
+        header.commit.signatures = set
+            .validators
+            .iter()
+            .enumerate()
+            .map(|(index, validator)| {
+                let key = signers
+                    .iter()
+                    .map(|id| ed25519_consensus::SigningKey::from([*id; 32]))
+                    .find(|key| {
+                        tendermint::PublicKey::from_raw_ed25519(&key.verification_key().to_bytes())
+                            .unwrap()
+                            == validator.pub_key
+                    });
+                let Some(key) = key else {
+                    return CommitSig::BlockIdFlagAbsent;
+                };
+                let vote = Vote {
+                    vote_type: Type::Precommit,
+                    height: header.commit.height,
+                    round: header.commit.round,
+                    block_id: Some(header.commit.block_id),
+                    timestamp: Some(header.header.time),
+                    validator_address: validator.address,
+                    validator_index: index.try_into().unwrap(),
+                    signature: None,
+                    extension: vec![],
+                    extension_signature: None,
+                };
+                let bytes = vote.into_signable_vec(header.header.chain_id.clone());
+                CommitSig::BlockIdFlagCommit {
+                    validator_address: validator.address,
+                    timestamp: header.header.time,
+                    signature: Some(
+                        tendermint::Signature::try_from(key.sign(&bytes).to_bytes().to_vec())
+                            .unwrap(),
+                    ),
+                }
+            })
+            .collect();
+        (
+            CommitResult {
+                signed_header: header,
+            },
+            now,
+        )
+    }
+
+    #[test]
+    fn validator_changes_require_both_quorums() {
+        let trusted = test_validators(&[(1, 1), (2, 1), (3, 1), (4, 1)]);
+        for current in [
+            test_validators(&[(1, 1), (2, 1), (3, 1), (4, 1)]),
+            test_validators(&[(1, 1), (2, 1), (3, 1), (5, 1)]),
+            test_validators(&[(1, 5), (2, 2), (3, 1), (5, 1)]),
+        ] {
+            let (commit, now) = signed_test_header(&current, &[1, 2, 3]);
+            verify_header_with_trust(&commit, &current, "zvote-1", &trusted, now).unwrap();
+            assert!(verify_header_with_trust(&commit, &current, "svote-1", &trusted, now).is_err());
+        }
+        // New validators alone, or inflated new powers for one old signer,
+        // cannot establish a quorum under the original powers.
+        for current in [
+            test_validators(&[(5, 1), (6, 1), (7, 1)]),
+            test_validators(&[(1, 100), (5, 1)]),
+        ] {
+            let (commit, now) = signed_test_header(&current, &[1, 5, 6, 7]);
+            assert!(verify_header_with_trust(&commit, &current, "zvote-1", &trusted, now).is_err());
+        }
+        // Enough original power is insufficient without >2/3 current power.
+        let current = test_validators(&[(1, 1), (2, 1), (3, 1), (5, 100)]);
+        let (commit, now) = signed_test_header(&current, &[1, 2, 3]);
+        assert!(verify_header_with_trust(&commit, &current, "zvote-1", &trusted, now).is_err());
+        // Exactly 2/3 is rejected independently for each set.
+        let old = test_validators(&[(1, 1), (2, 1), (3, 1)]);
+        let current = test_validators(&[(1, 1), (2, 1)]);
+        let (commit, now) = signed_test_header(&current, &[1, 2]);
+        assert!(verify_header_with_trust(&commit, &current, "zvote-1", &old, now).is_err());
+        let (commit, now) = signed_test_header(&old, &[1, 2]);
+        assert!(verify_header_with_trust(&commit, &old, "zvote-1", &current, now).is_err());
+    }
+
+    #[test]
+    fn rejects_forged_validator_addresses_duplicate_signers_and_signatures() {
+        let trusted = test_validators(&[(1, 1), (2, 1), (3, 1)]);
+        let mut forged = trusted.validators.clone();
+        forged[0].address = test_validators(&[(5, 1)]).validators[0].address;
+        assert!(checked_validator_set(&ValidatorsResult { validators: forged }).is_err());
+        let mut duplicated = trusted.validators.clone();
+        duplicated.push(duplicated[0].clone());
+        assert!(checked_validator_set(&ValidatorsResult {
+            validators: duplicated
+        })
+        .is_err());
+        let (mut commit, now) = signed_test_header(&trusted, &[1, 2, 3]);
+        commit.signed_header.commit.signatures[1] =
+            commit.signed_header.commit.signatures[0].clone();
+        assert!(verify_header_with_trust(&commit, &trusted, "zvote-1", &trusted, now).is_err());
+        let (mut commit, now) = signed_test_header(&trusted, &[1, 2, 3]);
+        if let tendermint::block::CommitSig::BlockIdFlagCommit { signature, .. } =
+            &mut commit.signed_header.commit.signatures[0]
+        {
+            *signature = Some(tendermint::Signature::try_from(vec![0; 64]).unwrap());
+        }
+        assert!(verify_header_with_trust(&commit, &trusted, "zvote-1", &trusted, now).is_err());
+    }
+
     #[test]
     fn empty_snapshot_requires_unchanged_local_candidates() {
         let empty = Candidates {

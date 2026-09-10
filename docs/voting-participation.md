@@ -28,19 +28,30 @@ header hash, time (at most ten minutes old or one minute ahead), validator-set
 hash and the Tendermint commit's signature quorum. Missing/pruned/invalid proofs
 remain unknown and never suppress a card or exclude notes.
 
-This is a pinned consensus committee reader, not a full rotating light client.
-Validator hashes were captured from the official RPCs on 2026-09-10:
+This is a reader anchored to a bundled consensus committee, not a full rotating
+light client. The bundled public keys and original voting powers live in
+`rust/src/wallet/voting/trust/`. Their hashes must match the original pins below,
+which were captured from the official RPCs on 2026-09-10:
 
 | Network | Chain | RPC | Validator-set hash |
 | --- | --- | --- | --- |
 | main | zvote-1 | https://vote-rpc-primary.valargroup.org | 621A1E2C532170C3C0BC2E951D26C1CCA7A0EFB009AA15820D648D336C64F6BD |
 | test | svote-1 | https://stage.vote-rpc-primary.valargroup.org | 6E81F631CB63A527AB5A659529BA8942C46CCF78BA87D1B3AD4CF8AE5BDC2E8B |
 
-The initial trust anchor relies on that official HTTPS bootstrap. Committee
-rotation requires a reviewed app update with newly authenticated anchors. Never
-accept a new committee merely because the current RPC supplies it. Custom voting
-config sources and other networks skip this check. These constraints deliberately
-produce unknown status rather than accepting unverifiable remote assertions.
+The initial trust anchor relies on that official HTTPS bootstrap. The current
+validator set must hash to the signed header, but need not hash to the bundled
+pin. The same commit must have strictly more than two-thirds signing power under
+both the bundled original powers and the current powers. Public-key/address
+consistency, duplicate validators/signers and voting-power bounds are checked.
+New powers cannot inflate a signer's contribution under the bundled anchor.
+
+This permits limited validator replacement and power changes without more RPCs.
+It does not advance the trust anchor or implement a time-bounded rotating light
+client. Cumulative changes that lose the bundled >2/3 quorum require a reviewed
+anchor update. The original committee remains a long-lived trust assumption;
+this does not provide automatic protection against compromise of its retired
+keys. Custom sources remain unsupported. Regtest retains its explicit disposable
+exact-set anchor. Failed checks remain unknown and never suppress a card.
 
 ## Persistence and recovery
 
@@ -78,7 +89,9 @@ The JSON fixtures in `rust/tests/fixtures/voting-participation` contain public
 mainnet/stage signed headers, validator sets, and actual membership/non-membership
 proofs. Tests use each fixture header's timestamp, so they remain deterministic.
 Corruption tests cover signatures, validator power, app hash, query key/height,
-proof bytes, value, wrong network and stale/future headers. No private wallet
+proof bytes, value, wrong network and stale/future headers. Deterministic signed
+headers also cover partial validator replacement, changed powers, both strict
+quorum boundaries, forged validator addresses and duplicate signers. No private wallet
 material is included.
 
 ## Mobile reinstall regtest E2E

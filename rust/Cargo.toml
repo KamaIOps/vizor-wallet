@@ -157,6 +157,8 @@ features = ["std"]
 security-framework = { version = "3.7", features = ["OSX_10_15"] }
 
 [dev-dependencies]
+# Deterministic signatures for validator-rotation verification tests.
+ed25519-consensus = "2.1"
 tempfile = "3"
 hex = "0.4"
 
