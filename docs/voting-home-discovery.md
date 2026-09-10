@@ -10,13 +10,18 @@ refresh loads the local summary; source and test-round preferences load through
 their asynchronous providers. The card stays hidden until the saved decision is
 available, then a confirmed show restores without waiting for sync or RPC.
 Loaded decisions stay in memory across Home reentry.
+The persisted round list contains only IDs, titles, statuses, snapshot heights
+and normalized vote deadlines, alongside source/discovery metadata. Full round
+payloads and proposal bodies are not serialized with Home decisions; voting
+details continue to use their existing live data path.
 On entry or foreground resume, mainnet with the bundled prod voting source and
 testnet with the bundled stage voting source query their public discovery
 endpoint once. Network or selected source changes trigger the same check. Concurrent triggers share
 one request; a source/network/endpoint switch queues a refresh for the new context.
-The one-minute Home timer reevaluates local deadlines without polling discovery.
-It also runs the participation candidate scheduler; already checked rounds are
-skipped, and unresolved checks respect the participation backoff.
+The one-minute Home timer only reevaluates in-memory deadlines. It does not read
+snapshot files, schedule participation checks or poll discovery. Participation
+checks use route, lifecycle, sync and relevant provider-change events; unresolved
+checks still respect the participation backoff.
 
 ## Build configuration
 

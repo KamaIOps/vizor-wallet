@@ -216,6 +216,7 @@ Widget _app(
   bool? swapEnabled,
   bool showVoting = true,
   VotingHomeCacheStore? deferredVotingStore,
+  DateTime Function()? votingNow,
   Future<void> Function()? refreshVoting,
   List<bool Function()>? participationGuards,
   RpcEndpointNotifier? rpcNotifier,
@@ -323,7 +324,7 @@ Widget _app(
                 network: 'main',
                 accountUuid: 'account',
                 showTestRounds: false,
-                now: DateTime.now(),
+                now: (votingNow ?? DateTime.now)(),
               );
         }),
       ],
@@ -638,11 +639,15 @@ void main() {
     (tester) async {
       final store = _DeferredVotingStore();
       final round = 'a' * 64;
+      var now = DateTime.utc(2026, 9, 10);
+      final end = now.add(const Duration(hours: 1));
+      final guards = <bool Function()>[];
       await tester.pumpWidget(
         _app(
           _syncedState().copyWith(isSyncing: true, scannedHeight: 0),
           deferredVotingStore: store,
-          participationGuards: [],
+          votingNow: () => now,
+          participationGuards: guards,
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
@@ -663,6 +668,7 @@ void main() {
                   'vote_round_id': round,
                   'title': 'Vote',
                   'status': '1',
+                  'vote_end_time': end.toIso8601String(),
                 }),
               ],
             ).toJson(),
@@ -691,6 +697,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 500));
       expect(card, findsOneWidget);
+      expect(store.reads, 1);
+      final checks = guards.length;
+      now = end;
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pump();
+      expect(card, findsNothing);
+      expect(guards, hasLength(checks));
       expect(store.reads, 1);
     },
   );
@@ -753,8 +766,11 @@ void main() {
     final router = GoRouter.of(tester.element(find.byType(MobileHomeScreen)));
     final initial = refreshes;
     expect(initial, greaterThan(0));
+    final initialChecks = guards.length;
+    expect(initialChecks, greaterThan(0));
     await tester.pump(const Duration(minutes: 2));
     expect(refreshes, initial); // The minute timer must stay local on Home too.
+    expect(guards, hasLength(initialChecks));
     final firstVisit = guards.last;
     expect(firstVisit(), isTrue);
     router.go('/shell-activity');
@@ -765,6 +781,7 @@ void main() {
     router.go('/home');
     await tester.pumpAndSettle();
     expect(refreshes, greaterThan(initial));
+    expect(guards.length, greaterThan(initialChecks));
     expect(firstVisit(), isFalse);
     final secondVisit = guards.last;
     expect(secondVisit(), isTrue);

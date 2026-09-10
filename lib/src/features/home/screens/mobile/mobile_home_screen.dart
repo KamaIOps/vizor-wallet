@@ -1281,7 +1281,8 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
 }
 
 /// Route/lifecycle triggers check for voting changes; the minute timer only
-/// reevaluates cached deadlines and retries unresolved participation checks.
+/// reevaluates cached deadlines. Participation retries require an event such
+/// as Home reentry, foregrounding, or sync completion.
 class _MobileVotingEntry extends ConsumerStatefulWidget {
   const _MobileVotingEntry();
 
@@ -1310,7 +1311,6 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
     _timer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted && _foreground && _homeCurrent) {
         ref.invalidate(votingHomeEntryVisibleProvider);
-        _checkParticipation();
       }
     });
   }

@@ -76,8 +76,10 @@ notes to used without an RPC, including confirmations recovered after restart.
 Merging is monotonic: a late unused result cannot overwrite used.
 
 Consecutive failures back off for 1, 2, 4, 8, 16, then at most 30 minutes, per
-network/source/account/round. Existing Home triggers retry once that deadline
-passes; no retry timer is added. Only remaining unknown notes are queried.
+network/source/account/round. Home reentry, foregrounding, sync completion and
+relevant provider changes can retry after that deadline; the deadline alone
+does not start a retry, and the Home minute timer never checks participation.
+Only remaining unknown notes are queried.
 Backoff lives in memory and resets after success. Cancelled work (lock, account
 or source change) and incomplete sync do not increase the delay.
 Detail's **Check again** refreshes round details and reevaluates candidates and
