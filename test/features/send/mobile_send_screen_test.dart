@@ -3346,9 +3346,14 @@ void main() {
       find.byKey(const ValueKey('mobile_address_verify_chunks')),
       findsOneWidget,
     );
-    expect(find.text('u1tes'), findsOneWidget);
-    expect(find.text('Cancel'), findsWidgets);
-    await tester.tap(find.text('Cancel').last);
+    expect(
+      find.text(
+        'u1testshieldedaddress00000000000000000000000000000000000000000000000',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Copy address'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Close').last);
     await tester.pumpAndSettle();
 
     // Memo round-trip through the sheet.

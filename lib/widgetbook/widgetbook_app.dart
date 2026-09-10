@@ -1613,6 +1613,14 @@ class WidgetbookApp extends StatelessWidget {
                       name: 'Known contact',
                       builder: buildVerifyAddressKnownContactUseCase,
                     ),
+                    WidgetbookUseCase(
+                      name: 'O / 0 showcase',
+                      builder: buildVerifyAddressActionFooterUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Mobile O / 0 showcase',
+                      builder: buildMobileVerifyAddressActionFooterUseCase,
+                    ),
                   ],
                 ),
                 WidgetbookComponent(
