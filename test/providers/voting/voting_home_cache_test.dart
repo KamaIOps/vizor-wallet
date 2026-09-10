@@ -1,5 +1,6 @@
 import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
 import 'dart:async';
+import 'dart:convert';
 import '../../fakes/memory_voting_home_cache_store.dart';
 import 'dart:typed_data';
 
@@ -74,6 +75,64 @@ void main() {
     noteCount: 1,
     remainingEligible: false,
     localState: false,
+  );
+
+  test(
+    'compact persistence preserves decisions, deadlines and snapshot hints',
+    () async {
+      final end = now.add(const Duration(hours: 1));
+      await seed([
+        VotingRoundSummary.fromJson({
+          'vote_round_id': roundId,
+          'title': 'Vote',
+          'status': '1',
+          'snapshot_height': '500',
+          'session': {'vote_end_time': end.millisecondsSinceEpoch ~/ 1000},
+          'proposals': [
+            {'description': List.filled(250000, 'x').join()},
+          ],
+        }),
+      ]);
+      await cache.recordParticipation(factKey, 500, unused);
+      expect(visible(), true);
+      expect(store.value!.length, lessThan(2000));
+      final saved = jsonDecode(store.value!) as Map<String, dynamic>;
+      final savedRound = saved['lists'][listKey]['rounds'][0] as Map;
+      expect(savedRound.containsKey('proposals'), false);
+      expect(savedRound.containsKey('session'), false);
+
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [votingHomeCacheStoreProvider.overrideWithValue(store)],
+      );
+      cache = container.read(votingHomeCacheProvider.notifier);
+      await cache.ensureLoaded();
+      expect(visible(), true);
+      final restored = cache.list(listKey)!.rounds.single;
+      expect(restored.roundId, roundId);
+      expect(restored.title, 'Vote');
+      expect(restored.status, '1');
+      expect(restored.rawJson['snapshot_height'], 500);
+      expect(
+        cache.shouldShow(
+          listKey: listKey,
+          network: 'main',
+          accountUuid: 'account-a',
+          showTestRounds: false,
+          now: end,
+        ),
+        false,
+      );
+      await cache.recordParticipation(factKey, 500, used);
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [votingHomeCacheStoreProvider.overrideWithValue(store)],
+      );
+      cache = container.read(votingHomeCacheProvider.notifier);
+      await cache.ensureLoaded();
+      expect(cache.fact(factKey).decision, VotingHomeDecision.hide);
+      expect(visible(), false);
+    },
   );
 
   test(

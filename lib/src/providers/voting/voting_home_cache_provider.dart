@@ -58,7 +58,22 @@ class VotingHomeRoundList {
     'fingerprint': fingerprint,
     if (discoveryRevision != null) 'discoveryRevision': discoveryRevision,
     if (discoveryEndpoint != null) 'discoveryEndpoint': discoveryEndpoint,
-    'rounds': [for (final round in rounds) round.rawJson],
+    // Home only consumes these hints. Keep proposal bodies and other detailed
+    // API payloads out of every startup read and participation-state write.
+    'rounds': [
+      for (final round in rounds)
+        {
+          'vote_round_id': round.roundId,
+          'title': round.title,
+          'status': round.status,
+          'snapshot_height': int.tryParse(
+            '${round.rawJson['snapshot_height']}',
+          ),
+          'vote_end_time': votingRoundEndDate(
+            round.rawJson,
+          )?.toUtc().toIso8601String(),
+        },
+    ],
   };
 
   factory VotingHomeRoundList.fromJson(Map<String, dynamic> json) =>
