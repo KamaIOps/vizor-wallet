@@ -87,7 +87,7 @@ Future<void> expectVotingHomeHidden(
         votingHomeFactKey('regtest', list.fingerprint, account, _roundId),
       );
       final observation =
-          'progress=${fact.progress.name} '
+          'decision=${fact.decision.name} progress=${fact.progress.name} '
           'scanned=${container.read(syncProvider).value?.scannedHeight} '
           'snapshot=${fact.snapshotHeight} used=${fact.participation?.usedCount} '
           'remaining=${fact.participation?.remainingEligible} local=${fact.participation?.localState} '
@@ -96,6 +96,7 @@ Future<void> expectVotingHomeHidden(
         logE2e('Home assertion: $observation');
         lastObservation = observation;
       }
+      if (fact.decision != VotingHomeDecision.hide) return false;
       if (restored) {
         if (fact.participation?.unavailable != true ||
             fact.participation!.usedCount == 0 ||
@@ -126,6 +127,90 @@ Future<void> expectVotingHomeHidden(
     find.byKey(const ValueKey('mobile_home_coinholder_voting')),
     findsNothing,
   );
+}
+
+Future<void> expectVotingRecheckUsesDiskCache(
+  ProviderContainer container,
+) async {
+  final requests = await participationRequestCount();
+  // Drop client memory; preserve the production file store and crypto bridge.
+  container.invalidate(votingParticipationClientProvider);
+  final beforeCheck = container.read(votingHomeCacheProvider);
+  await container
+      .read(votingParticipationProvider)
+      .checkRound(_roundId, force: true);
+  expect(
+    container.read(votingHomeCacheProvider),
+    greaterThan(beforeCheck),
+    reason: 'Forced reevaluation must succeed, not silently fail',
+  );
+  expect(
+    await participationRequestCount(),
+    requests,
+    reason: 'A new client must reuse persisted used/unused observations',
+  );
+}
+
+/// Read the production file store; never seed/modify observations in E2E.
+Future<void> expectVotingNoteCachePersisted(
+  WidgetTester tester,
+  ProviderContainer container, {
+  required bool used,
+}) async {
+  final account = container
+      .read(accountProvider)
+      .requireValue
+      .activeAccountUuid!;
+  final source = container
+      .read(votingConfigSourceProvider)
+      .requireValue
+      .sourceUrl;
+  final cache = container.read(votingHomeCacheProvider.notifier);
+  final list = cache.list(votingHomeListKey('regtest', source))!;
+  final factKey = votingHomeFactKey(
+    'regtest',
+    list.fingerprint,
+    account,
+    _roundId,
+  );
+  final fact = cache.fact(factKey);
+  expect(fact.snapshotHeight, isNotNull);
+  final files = container.read(votingFileCacheProvider);
+  final scope = jsonEncode([
+    'regtest',
+    _roundId,
+    '${fact.snapshotHeight}',
+    'governance-v1',
+  ]);
+  final notes = await files.readNotes(account, scope);
+  // Compare aggregates only: failure logs must not expose governance keys.
+  expect(
+    notes.isNotEmpty,
+    true,
+    reason: 'Verified note observations must persist',
+  );
+  final usedCount = notes.values
+      .where((note) => (note as Map)['used'] == true)
+      .length;
+  expect(
+    usedCount > 0,
+    used,
+    reason: used
+        ? 'Confirmed delegation must persist used notes'
+        : 'Fresh round notes must persist as unused',
+  );
+  // Visibility can update before its serialized write finishes. Wait for the
+  // saved decision too rather than mistaking the initial hidden UI for success.
+  final deadline = DateTime.now().add(const Duration(seconds: 15));
+  while (DateTime.now().isBefore(deadline)) {
+    final raw = await files.read(votingHomeCacheKey);
+    if (raw != null) {
+      final saved = (jsonDecode(raw) as Map)['facts'] as Map;
+      if ((saved[factKey] as Map?)?['decision'] == fact.decision.name) return;
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  fail('The confirmed Home decision was not persisted');
 }
 
 Future<void> captureVotingRegtest(WidgetTester tester, String name) async {
@@ -182,6 +267,8 @@ Future<void> completeMobileRegtestVote(WidgetTester tester) async {
     tester.element(find.byKey(const ValueKey('mobile_home_coinholder_voting'))),
   );
 
+  await expectVotingNoteCachePersisted(tester, container, used: false);
+  await expectVotingRecheckUsesDiskCache(container);
   await captureVotingRegtest(tester, 'before-vote');
   await tapWidget(tester, const ValueKey('mobile_home_coinholder_voting'));
   await tapAppButton(
@@ -313,6 +400,7 @@ Future<void> completeMobileRegtestVote(WidgetTester tester) async {
   expect(find.byKey(submittedTitleKey), findsOneWidget);
   await tapAppButton(tester, submittedHomeButtonKey);
   await expectVotingHomeHidden(tester, container, restored: false);
+  await expectVotingNoteCachePersisted(tester, container, used: true);
   await captureVotingRegtest(tester, 'completed-home');
 }
 

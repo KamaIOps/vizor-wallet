@@ -146,14 +146,18 @@ material is included.
 
 Run `scripts/e2e/flutter-ios-regtest-mobile-voting-reinstall.sh` with an explicit
 `SIMULATOR_UDID` when multiple simulators are booted. The existing mobile voting
-runner now also asserts that a fully completed vote removes its Home card.
+runner also asserts that a fully completed vote removes its Home card and
+persists the confirmed hidden decision. Before voting it checks unused note
+observations on disk; after delegation it checks that used observations persist.
 
 The reinstall runner keeps the same Zcash and vote chain alive between two
 Flutter integration invocations. Phase one imports, syncs and votes through the
 real mobile UI. The host verifies the app is uninstalled after Flutter test cleanup,
 explicitly uninstalling it if the Flutter runner leaves it installed. Phase two asserts the old DB/sidecar are absent, clears only
 the regtest app's surviving secure storage, and imports the same mnemonic from
-birthday 1. No database, voting hotkey, progress or participation cache is copied.
+birthday 1. The test checks that the ordinary voting-cache directory is absent
+before cleanup, rather than inspecting an obsolete secure-storage key. No
+database, voting hotkey, progress or participation cache is copied.
 
 Tests configure transport/source support and the newly created local chain's
 trust anchor. They do not override eligibility, participation, Home visibility,
@@ -164,7 +168,12 @@ proofs and records aggregate request counts without logging queried identifiers.
 The restored Home assertion requires an active round in the actual cached list,
 a synced snapshot, verified used notes, no remaining voting rights and no local
 recovery state. It then asserts the card is absent, checks Settings/detail access,
-and checks that Home reentry does not repeat participation RPCs. Screenshots are
+and checks that Home reentry does not repeat participation RPCs. Request counts
+are compared against the start of the restore phase so first-phase requests
+cannot satisfy the restored-check assertion. Both unused and used observations
+are reevaluated with a fresh client and a forced check, proving disk reuse without
+additional participation RPCs. Initial hidden UI alone never satisfies the test:
+it requires a confirmed hide decision. Screenshots are
 saved under `.regtest-voting/logs/screenshots/`.
 
 Home participation work stops at asynchronous boundaries when Home is left or
