@@ -253,9 +253,6 @@ void main() {
     final messageEditor = find.byKey(
       const ValueKey('mobile_payment_link_interactive_message_editor'),
     );
-    await tester.tap(
-      find.byKey(const ValueKey('payment_link_mobile_card_slot')),
-    );
     await tester.pump();
     expect(tester.widget<TextField>(messageEditor).focusNode?.hasFocus, isTrue);
     expect(

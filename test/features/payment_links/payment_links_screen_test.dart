@@ -906,7 +906,8 @@ void main() {
           .showBack,
       isTrue,
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
     expect(messageEditor, findsOneWidget);
     expect(tester.widget<TextField>(messageEditor).focusNode?.hasFocus, isTrue);
     expect(

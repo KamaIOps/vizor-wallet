@@ -628,6 +628,42 @@ void main() {
     expect(find.text('ZEC'), findsOneWidget);
   });
 
+  for (final reducedMotion in [false, true]) {
+    testWidgets(
+      'message focuses on reveal without a late focus reset ($reducedMotion)',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1080, 720));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await _pump(
+          tester,
+          const PaymentLinkInteractiveMessageDesktopPreview(),
+          disableAnimations: reducedMotion,
+        );
+        await tester.tap(find.text('Start typing...'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        await tester.pump();
+        final editor = find.byKey(
+          const ValueKey('payment_link_interactive_message_editor'),
+        );
+        expect(editor, findsOneWidget);
+        final focusNode = tester.widget<TextField>(editor).focusNode!;
+        expect(focusNode.hasFocus, isTrue);
+        // Type through the active input connection without tapping the editor.
+        tester.testTextInput.enterText('Ready to type');
+        await tester.pump();
+        expect(
+          tester.widget<TextField>(editor).controller!.text,
+          'Ready to type',
+        );
+        focusNode.unfocus();
+        await tester.pumpAndSettle();
+        expect(focusNode.hasFocus, isFalse);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'interactive Widgetbook message preview accepts and clears text',
     (tester) async {

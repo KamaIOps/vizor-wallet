@@ -1038,9 +1038,16 @@ void main() {
       find.byKey(const ValueKey('payment_link_mobile_message_continue_button')),
       findsOneWidget,
     );
+    final messageFocus = tester
+        .widget<TextField>(
+          find.byKey(const ValueKey('payment_link_message_editor')),
+        )
+        .focusNode!;
+    expect(messageFocus.hasFocus, isTrue);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
+    expect(messageFocus.hasFocus, isFalse);
 
     expect(
       find.byKey(const ValueKey('payment_links_mobile_screen')),

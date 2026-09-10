@@ -876,11 +876,6 @@ class _PaymentLinkInteractiveMessageDesktopPreviewState
     super.initState();
     _controller = TextEditingController(text: widget.initialMessage);
     _editorRevealed = widget.initialEditorRevealed;
-    if (_editorRevealed) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _focusNode.context != null) _focusNode.requestFocus();
-      });
-    }
   }
 
   @override
@@ -902,14 +897,10 @@ class _PaymentLinkInteractiveMessageDesktopPreviewState
       return;
     }
     setState(() => _editorRevealed = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_editorRevealed || _focusNode.context == null) return;
-      _focusNode.requestFocus();
-    });
   }
 
-  void _focusEditorAfterFlip() {
-    if (!mounted || !_editorRevealed) return;
+  void _focusVisibleEditor(bool showingBack) {
+    if (!showingBack || !mounted || !_editorRevealed) return;
     _focusNode.requestFocus();
   }
 
@@ -950,7 +941,7 @@ class _PaymentLinkInteractiveMessageDesktopPreviewState
                   onDeleteMessage: _hasMessage ? _clearMessage : null,
                   semanticLabel: 'Gift card message input',
                 ),
-                onAnimationEnd: _focusEditorAfterFlip,
+                onVisibleSideChanged: _focusVisibleEditor,
               ),
               onBack: _noop,
               onSkip: _clearMessage,

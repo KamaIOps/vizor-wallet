@@ -846,6 +846,13 @@ class _MobilePaymentLinkInteractivePreviewState
   void _showStep(_MobilePaymentLinkStep step) {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _step = step);
+    if (step == _MobilePaymentLinkStep.message) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _step == _MobilePaymentLinkStep.message) {
+          _messageFocusNode.requestFocus();
+        }
+      });
+    }
   }
 
   void _clearMessage() {

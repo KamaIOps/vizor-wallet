@@ -262,6 +262,14 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       _showHelp = false;
       _longSyncLink = null;
     });
+    if (page == PaymentLinksLocalPage.message &&
+        kAppFormFactor == AppFormFactor.mobile) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _page == PaymentLinksLocalPage.message) {
+          _messageFocusNode.requestFocus();
+        }
+      });
+    }
   }
 
   void _startCreate() {
@@ -1014,22 +1022,11 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       return;
     }
     setState(() => _messageEditorRevealed = true);
-    // Reduced-motion mode swaps the card face without running the flip, so
-    // focus the editor as soon as that face is mounted. In the animated path
-    // the editor is not mounted yet and onAnimationEnd handles the focus.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          !_messageEditorRevealed ||
-          _page != PaymentLinksLocalPage.message ||
-          _messageFocusNode.context == null) {
-        return;
-      }
-      _messageFocusNode.requestFocus();
-    });
   }
 
-  void _focusMessageEditorAfterFlip() {
-    if (!mounted ||
+  void _focusVisibleMessageEditor(bool showingBack) {
+    if (!showingBack ||
+        !mounted ||
         !_messageEditorRevealed ||
         _page != PaymentLinksLocalPage.message) {
       return;
@@ -2582,7 +2579,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         showBack: _messageEditorRevealed,
         front: staticMessageCard,
         back: messageEditorCard,
-        onAnimationEnd: _focusMessageEditorAfterFlip,
+        onVisibleSideChanged: _focusVisibleMessageEditor,
       ),
       onBack: () => _showPage(PaymentLinksLocalPage.home),
       onSkip: _skipMessage,
