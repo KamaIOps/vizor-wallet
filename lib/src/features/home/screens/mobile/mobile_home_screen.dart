@@ -1281,7 +1281,7 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
 }
 
 /// Route/lifecycle triggers check for voting changes; the minute timer only
-/// reevaluates cached deadlines without issuing network requests.
+/// reevaluates cached deadlines and retries unresolved participation checks.
 class _MobileVotingEntry extends ConsumerStatefulWidget {
   const _MobileVotingEntry();
 
@@ -1294,6 +1294,7 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
   Timer? _timer;
   bool _foreground = true;
   bool _homeCurrent = false;
+  int _participationEpoch = 0;
   GoRouter? _router;
 
   @override
@@ -1302,6 +1303,7 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
     _lifecycle = AppLifecycleListener(
       onStateChange: (state) {
         _foreground = state == AppLifecycleState.resumed;
+        if (!_foreground) _participationEpoch++;
         if (_foreground) _refresh();
       },
     );
@@ -1331,6 +1333,7 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
     if (current && !_homeCurrent) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
+    if (!current && _homeCurrent) _participationEpoch++;
     _homeCurrent = current;
   }
 
@@ -1346,7 +1349,16 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
 
   Future<void> _checkParticipation() async {
     if (!mounted || !_foreground || !_homeCurrent) return;
-    await ref.read(votingParticipationProvider).checkHomeCandidates();
+    final epoch = _participationEpoch;
+    await ref
+        .read(votingParticipationProvider)
+        .checkHomeCandidates(
+          isHomeCurrent: () =>
+              mounted &&
+              _foreground &&
+              _homeCurrent &&
+              epoch == _participationEpoch,
+        );
   }
 
   @override

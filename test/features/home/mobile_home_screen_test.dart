@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_participation_provider.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_received_store.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
@@ -192,6 +193,15 @@ class _VotingRpcNotifier extends RpcEndpointNotifier {
   void useTestnet() => state = defaultRpcEndpointConfig('test');
 }
 
+class _HomeParticipationRecorder extends VotingParticipationCoordinator {
+  _HomeParticipationRecorder(super.ref, this.guards);
+  final List<bool Function()> guards;
+  @override
+  Future<void> checkHomeCandidates({bool Function()? isHomeCurrent}) async {
+    guards.add(isHomeCurrent!);
+  }
+}
+
 Widget _app(
   SyncState syncState, {
   ZecMarketData? marketData = const ZecMarketData(
@@ -203,6 +213,7 @@ Widget _app(
   bool? swapEnabled,
   bool showVoting = true,
   Future<void> Function()? refreshVoting,
+  List<bool Function()>? participationGuards,
   RpcEndpointNotifier? rpcNotifier,
   IronwoodHomeMigrationCtaState migrationCta =
       const IronwoodHomeMigrationCtaState.hidden(),
@@ -289,6 +300,10 @@ Widget _app(
 
   return ProviderScope(
     overrides: [
+      if (participationGuards != null)
+        votingParticipationProvider.overrideWith(
+          (ref) => _HomeParticipationRecorder(ref, participationGuards),
+        ),
       if (rpcNotifier != null)
         rpcEndpointProvider.overrideWith(() => rpcNotifier),
       votingHomeEntryVisibleProvider.overrideWithValue(showVoting),
@@ -622,10 +637,12 @@ void main() {
     tester,
   ) async {
     var refreshes = 0;
+    final guards = <bool Function()>[];
     await tester.pumpWidget(
       _app(
         _syncedState(ironwoodBalance: BigInt.from(100000000)),
         useShellRouter: true,
+        participationGuards: guards,
         refreshVoting: () async {
           refreshes++;
         },
@@ -637,16 +654,23 @@ void main() {
     expect(initial, greaterThan(0));
     await tester.pump(const Duration(minutes: 2));
     expect(refreshes, initial); // The minute timer must stay local on Home too.
+    final firstVisit = guards.last;
+    expect(firstVisit(), isTrue);
     router.go('/shell-activity');
     await tester.pumpAndSettle();
     await tester.pump(const Duration(minutes: 1));
     expect(refreshes, initial);
+    expect(firstVisit(), isFalse);
     router.go('/home');
     await tester.pumpAndSettle();
     expect(refreshes, greaterThan(initial));
+    expect(firstVisit(), isFalse);
+    final secondVisit = guards.last;
+    expect(secondVisit(), isTrue);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    expect(secondVisit(), isFalse);
     final beforeBackground = refreshes;
     await tester.pump(const Duration(minutes: 1));
     expect(refreshes, beforeBackground);
@@ -655,6 +679,8 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(refreshes, greaterThan(beforeBackground));
+    expect(secondVisit(), isFalse);
+    expect(guards.last(), isTrue);
   });
 
   testWidgets('shows coinholder voting below actions and opens the flow', (

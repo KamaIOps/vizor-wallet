@@ -92,11 +92,18 @@ class VotingParticipationCoordinator {
   final Ref ref;
   int _epoch = 0;
   Future<void> _tail = Future.value();
-  final Map<String, Future<void>> _pending = {};
+  final Map<
+    String,
+    ({Future<void> future, bool Function() current, bool homeOnly})
+  >
+  _pending = {};
+  // Only retain details while waiting for the local snapshot to sync.
+  final Map<String, VotingRoundDetails> _syncWaitingDetails = {};
   // In-memory only: a fresh app session may check immediately.
   final Map<String, ({Duration delay, DateTime retryAt})> _failed = {};
 
-  Future<void> checkHomeCandidates() async {
+  Future<void> checkHomeCandidates({bool Function()? isHomeCurrent}) async {
+    if (isHomeCurrent?.call() == false) return;
     if (ref.read(appSecurityProvider).requiresUnlock) return;
     final source = ref.read(votingConfigSourceProvider).value?.sourceUrl;
     final network = ref.read(rpcEndpointProvider).networkName;
@@ -118,7 +125,7 @@ class VotingParticipationCoordinator {
     final showTest = ref.read(showTestVotingRoundsProvider).value ?? false;
     final scannedHeight = ref.read(syncProvider).value?.scannedHeight ?? 0;
     for (final round in list.rounds) {
-      if (epoch != _epoch) return;
+      if (epoch != _epoch || isHomeCurrent?.call() == false) return;
       if (!showTest && isHiddenTestVotingRoundTitle(round.title)) continue;
       final fact = cache.fact(
         votingHomeFactKey(network, list.fingerprint, account, round.roundId),
@@ -143,7 +150,7 @@ class VotingParticipationCoordinator {
       }
       final snapshot = int.tryParse('${round.rawJson['snapshot_height']}');
       if (snapshot != null && scannedHeight < snapshot) continue;
-      await checkRound(round.roundId);
+      await checkRound(round.roundId, isHomeCurrent: isHomeCurrent);
     }
   }
 
@@ -151,6 +158,7 @@ class VotingParticipationCoordinator {
     String round, {
     bool force = false,
     VotingRoundDetails? knownRound,
+    bool Function()? isHomeCurrent,
   }) {
     final account = ref.read(accountProvider).value?.activeAccountUuid;
     final network = ref.read(rpcEndpointProvider).networkName;
@@ -164,8 +172,27 @@ class VotingParticipationCoordinator {
         )) {
       return Future.value();
     }
+    final requestEpoch = _epoch;
     final key = '$network|$source|$account|$round';
-    if (_pending[key] case final pending?) return pending;
+    if (_pending[key] case final pending?) {
+      if (pending.current() && !(pending.homeOnly && isHomeCurrent == null)) {
+        return pending.future;
+      }
+      // A detail request or new Home visit must not inherit cancelled Home work.
+      return pending.future.then<void>((_) async {
+        if (!ref.mounted ||
+            requestEpoch != _epoch ||
+            isHomeCurrent?.call() == false) {
+          return;
+        }
+        await checkRound(
+          round,
+          force: force,
+          knownRound: knownRound,
+          isHomeCurrent: isHomeCurrent,
+        );
+      });
+    }
     final release = ref
         .read(votingShareTrackingRegistryProvider)
         .beginBackgroundWork(accountUuid: account);
@@ -174,6 +201,7 @@ class VotingParticipationCoordinator {
     bool current() =>
         ref.mounted &&
         epoch == _epoch &&
+        isHomeCurrent?.call() != false &&
         !ref.read(appSecurityProvider).requiresUnlock &&
         !ref.read(votingShareTrackingRegistryProvider).isQuiesced(account);
     final operation = _tail
@@ -216,8 +244,12 @@ class VotingParticipationCoordinator {
                   currentFact.progress == VotingHomeProgress.completed)) {
             return;
           }
+          final detailsKey =
+              '$network|${config.sourceFingerprint}|$account|$round';
+          if (force) _syncWaitingDetails.remove(detailsKey);
           final details =
               knownRound ??
+              _syncWaitingDetails[detailsKey] ??
               VotingRoundDetails.fromStatus(
                 await ref
                     .read(votingApiClientProvider(config.apiServers))
@@ -232,7 +264,12 @@ class VotingParticipationCoordinator {
                 network: network,
                 snapshotHeight: details.snapshotHeight,
               );
-          if (!current() || !scan.isReady) return;
+          if (!current()) return;
+          if (!scan.isReady) {
+            _syncWaitingDetails[detailsKey] = details;
+            return;
+          }
+          _syncWaitingDetails.remove(detailsKey);
           final params = await ref
               .read(votingRustApiProvider)
               .trustedVotingRoundParamsFromConfig(
@@ -294,7 +331,11 @@ class VotingParticipationCoordinator {
           _pending.remove(key);
         });
     _tail = operation;
-    _pending[key] = operation;
+    _pending[key] = (
+      future: operation,
+      current: current,
+      homeOnly: isHomeCurrent != null,
+    );
     return operation;
   }
 }

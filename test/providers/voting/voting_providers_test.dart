@@ -228,6 +228,129 @@ void main() {
     );
   });
 
+  test(
+    'participation reuses round details while snapshot sync is pending',
+    () async {
+      final http = FakeVotingHttpClient(responses: votingHttpResponses());
+      final readiness = FakeVotingWalletSyncReadinessChecker(
+        responses: [
+          const VotingWalletSyncReadiness(
+            scannedHeight: 0,
+            snapshotHeight: 100,
+            chainTipHeight: 100,
+          ),
+          const VotingWalletSyncReadiness(
+            scannedHeight: 0,
+            snapshotHeight: 100,
+            chainTipHeight: 100,
+          ),
+          const VotingWalletSyncReadiness(
+            scannedHeight: 100,
+            snapshotHeight: 100,
+            chainTipHeight: 100,
+          ),
+        ],
+      );
+      final client = FakeVotingParticipationClient();
+      final container = _sessionContainer(
+        http: http,
+        walletSyncReadinessChecker: readiness,
+        extraOverrides: [
+          votingParticipationClientProvider.overrideWithValue(client),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(accountProvider.future);
+      await container.read(votingConfigSourceProvider.future);
+      final checker = container.read(votingParticipationProvider);
+      int reads() => http.requests
+          .where((r) => r.uri.path.endsWith('/round/$kRoundId'))
+          .length;
+      await checker.checkRound(kRoundId);
+      expect(reads(), 1);
+      await checker.checkRound(kRoundId);
+      expect(reads(), 1);
+      expect(client.calls, 0);
+      await checker.checkRound(kRoundId);
+      expect(reads(), 1);
+      expect(client.calls, 1);
+      await checker.checkRound(kRoundId, force: true);
+      expect(reads(), 2, reason: 'Manual retry fetches fresh details');
+    },
+  );
+
+  test(
+    'participation detail request survives cancellation of pending Home work',
+    () async {
+      var homeCurrent = true;
+      final client = FakeVotingParticipationClient()..gate = Completer<void>();
+      final container = _sessionContainer(
+        extraOverrides: [
+          votingParticipationClientProvider.overrideWithValue(client),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(accountProvider.future);
+      await container.read(votingConfigSourceProvider.future);
+      final checker = container.read(votingParticipationProvider);
+      final home = checker.checkRound(
+        kRoundId,
+        isHomeCurrent: () => homeCurrent,
+      );
+      await Future.doWhile(() async {
+        await Future<void>.delayed(Duration.zero);
+        return client.calls == 0;
+      }).timeout(const Duration(seconds: 5));
+      final detail = checker.checkRound(kRoundId);
+      homeCurrent = false;
+      client.gate!.complete();
+      await Future.wait([home, detail]);
+      expect(
+        client.calls,
+        2,
+        reason: 'Detail must retry cancelled Home work without backoff',
+      );
+    },
+  );
+
+  test(
+    'participation queued detail does not restart across security context changes',
+    () async {
+      final security = _MutableVotingSecurityNotifier(
+        const AppSecurityState(isPasswordConfigured: true, isUnlocked: true),
+      );
+      var homeCurrent = true;
+      final client = FakeVotingParticipationClient()..gate = Completer<void>();
+      final container = _sessionContainer(
+        securityNotifier: security,
+        extraOverrides: [
+          votingParticipationClientProvider.overrideWithValue(client),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(accountProvider.future);
+      await container.read(votingConfigSourceProvider.future);
+      final checker = container.read(votingParticipationProvider);
+      final home = checker.checkRound(
+        kRoundId,
+        isHomeCurrent: () => homeCurrent,
+      );
+      await Future.doWhile(() async {
+        await Future<void>.delayed(Duration.zero);
+        return client.calls == 0;
+      }).timeout(const Duration(seconds: 5));
+      final detail = checker.checkRound(kRoundId);
+      homeCurrent = false;
+      security.setUnlocked(false);
+      await container.pump();
+      security.setUnlocked(true);
+      await container.pump();
+      client.gate!.complete();
+      await Future.wait([home, detail]);
+      expect(client.calls, 1);
+    },
+  );
+
   test('Home participation checks only visible synced candidates', () async {
     final container = _sessionContainer(
       extraOverrides: [
@@ -15355,6 +15478,7 @@ class _CandidateChecker extends VotingParticipationCoordinator {
     String round, {
     bool force = false,
     VotingRoundDetails? knownRound,
+    bool Function()? isHomeCurrent,
   }) async {
     checked.add(round);
   }

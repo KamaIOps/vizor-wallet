@@ -105,3 +105,11 @@ a synced snapshot, verified used notes, no remaining voting rights and no local
 recovery state. It then asserts the card is absent, checks Settings/detail access,
 and checks that Home reentry does not repeat participation RPCs. Screenshots are
 saved under `.regtest-voting/logs/screenshots/`.
+
+Home participation work stops at asynchronous boundaries when Home is left or
+the app backgrounds. An already dispatched request may finish; subsequent
+requests, evaluation and remaining rounds are skipped. A new Home visit gets a
+new scope, while explicit detail checks remain independent of Home visibility.
+Round details are retained in memory per network/config/account/round only while
+waiting for snapshot sync, avoiding repeated detail requests during that wait.
+Manual retries fetch fresh details.
