@@ -22,6 +22,9 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_icon.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../providers/account_provider.dart';
+import '../../../../providers/voting/voting_home_entry_provider.dart';
+import '../../../../providers/voting/voting_home_cache_provider.dart';
+import '../../../../providers/voting/voting_config_source_provider.dart';
 import '../../../../providers/migration_send_gate_provider.dart';
 import '../../../../providers/privacy_mode_provider.dart';
 import '../../../../providers/rpc_endpoint_provider.dart';
@@ -1220,8 +1223,7 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            const SizedBox(height: AppSpacing.s),
-            _MobileVotingEntryCard(onTap: () => context.push('/voting')),
+            const _MobileVotingEntry(),
             if (widget.ironwoodMigrationCta.visible) ...[
               const SizedBox(height: AppSpacing.s),
               MobileIronwoodMigrationBanner(
@@ -1272,6 +1274,104 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Route/lifecycle triggers check the durable TTL; the minute timer only
+/// reevaluates cached deadlines and never fetches a fresh six-hour snapshot.
+class _MobileVotingEntry extends ConsumerStatefulWidget {
+  const _MobileVotingEntry();
+
+  @override
+  ConsumerState<_MobileVotingEntry> createState() => _MobileVotingEntryState();
+}
+
+class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
+  late final AppLifecycleListener _lifecycle;
+  Timer? _timer;
+  bool _foreground = true;
+  bool _homeCurrent = false;
+  GoRouter? _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onStateChange: (state) {
+        _foreground = state == AppLifecycleState.resumed;
+        if (_foreground) _refresh();
+      },
+    );
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) => _refresh());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.of(context);
+    if (!identical(_router, router)) {
+      _router?.routerDelegate.removeListener(_routeChanged);
+      _router = router;
+      router.routerDelegate.addListener(_routeChanged);
+    }
+    _routeChanged();
+  }
+
+  void _routeChanged() {
+    final current =
+        _router?.routerDelegate.currentConfiguration.uri.path == '/home';
+    if (current && !_homeCurrent) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    }
+    _homeCurrent = current;
+  }
+
+  void _refresh() {
+    if (!mounted || !_foreground || !_homeCurrent) return;
+    ref.invalidate(votingHomeEntryVisibleProvider);
+    unawaited(ref.read(votingHomeRefreshActionProvider)());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _router?.routerDelegate.removeListener(_routeChanged);
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(votingConfigSourceProvider.select((s) => s.value?.sourceUrl), (
+      _,
+      _,
+    ) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    });
+    ref.listen(syncProvider.select((s) => s.value?.scannedHeight), (
+      previous,
+      next,
+    ) {
+      if (previous == null || next == null || next >= previous) return;
+      final account = ref.read(accountProvider).value?.activeAccountUuid;
+      if (account == null) return;
+      unawaited(
+        ref
+            .read(votingHomeCacheProvider.notifier)
+            .invalidateEligibilityAfterRewind(
+              network: ref.read(rpcEndpointProvider).networkName,
+              accountUuid: account,
+              scannedHeight: next,
+            ),
+      );
+    });
+    if (!ref.watch(votingHomeEntryVisibleProvider)) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.s),
+      child: _MobileVotingEntryCard(onTap: () => context.push('/voting')),
     );
   }
 }

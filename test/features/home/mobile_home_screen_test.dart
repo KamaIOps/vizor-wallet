@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'package:zcash_wallet/src/providers/voting/voting_home_entry_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
@@ -193,6 +194,8 @@ Widget _app(
   FakeSyncNotifier? syncNotifier,
   SyncKeepAwakeNotifier? syncKeepAwakeNotifier,
   bool? swapEnabled,
+  bool showVoting = true,
+  Future<void> Function()? refreshVoting,
   IronwoodHomeMigrationCtaState migrationCta =
       const IronwoodHomeMigrationCtaState.hidden(),
   IronwoodHomeMigrationCtaState? migrationPresentationCta,
@@ -278,6 +281,10 @@ Widget _app(
 
   return ProviderScope(
     overrides: [
+      votingHomeEntryVisibleProvider.overrideWithValue(showVoting),
+      votingHomeRefreshActionProvider.overrideWithValue(
+        refreshVoting ?? () async {},
+      ),
       appBootstrapProvider.overrideWithValue(_bootstrap()),
       if (migrationCompletion != null || migrationCompletionFuture != null)
         ironwoodMigrationCompletionProvider.overrideWith(
@@ -562,6 +569,60 @@ SwapIntentRecord _externalToZecActivityRecord({
 }
 
 void main() {
+  testWidgets('hides the voting card when no actionable rounds are cached', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        _syncedState(ironwoodBalance: BigInt.from(100000000)),
+        showVoting: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('mobile_home_coinholder_voting')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('mobile_home_receive')), findsOneWidget);
+  });
+
+  testWidgets('voting discovery pauses on other tabs and in background', (
+    tester,
+  ) async {
+    var refreshes = 0;
+    await tester.pumpWidget(
+      _app(
+        _syncedState(ironwoodBalance: BigInt.from(100000000)),
+        useShellRouter: true,
+        refreshVoting: () async {
+          refreshes++;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    final router = GoRouter.of(tester.element(find.byType(MobileHomeScreen)));
+    final initial = refreshes;
+    expect(initial, greaterThan(0));
+    router.go('/shell-activity');
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 1));
+    expect(refreshes, initial);
+    router.go('/home');
+    await tester.pumpAndSettle();
+    expect(refreshes, greaterThan(initial));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    final beforeBackground = refreshes;
+    await tester.pump(const Duration(minutes: 1));
+    expect(refreshes, beforeBackground);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(refreshes, greaterThan(beforeBackground));
+  });
+
   testWidgets('shows coinholder voting below actions and opens the flow', (
     tester,
   ) async {

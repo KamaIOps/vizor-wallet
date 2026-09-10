@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:zcash_wallet/src/providers/voting/voting_home_cache_provider.dart';
+import '../../fakes/memory_voting_home_cache_store.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override, ProviderListenable;
@@ -163,6 +166,24 @@ void main() {
             eligible
                 ? VotingPollEligibility.eligible
                 : VotingPollEligibility.ineligible,
+          );
+          await container.pump();
+          final config = await container.read(votingConfigProvider.future);
+          final cached = container
+              .read(votingHomeCacheProvider.notifier)
+              .fact(
+                votingHomeFactKey(
+                  'main',
+                  config.sourceFingerprint,
+                  'account-1',
+                  kRoundId,
+                ),
+              );
+          expect(
+            cached.eligibility,
+            eligible
+                ? VotingHomeEligibility.eligible
+                : VotingHomeEligibility.ineligible,
           );
           expect(rust.eligibilityAccountUuids, ['account-1']);
           expect(rust.trustedRoundParamsCalls, 1);
@@ -363,6 +384,15 @@ void main() {
     });
     final container = ProviderContainer(
       overrides: [
+        votingRpcEndpointConfigProvider.overrideWithValue(
+          const RpcEndpointConfig(
+            networkName: 'main',
+            lightwalletdUrl: 'https://lightwalletd.example:443',
+          ),
+        ),
+        votingHomeCacheStoreProvider.overrideWithValue(
+          MemoryVotingHomeCacheStore(),
+        ),
         votingConfigSourceStoreProvider.overrideWithValue(store),
         votingConfigLoaderProvider.overrideWith((ref) {
           final source =
@@ -412,6 +442,15 @@ void main() {
       });
       final container = ProviderContainer(
         overrides: [
+          votingRpcEndpointConfigProvider.overrideWithValue(
+            const RpcEndpointConfig(
+              networkName: 'main',
+              lightwalletdUrl: 'https://lightwalletd.example:443',
+            ),
+          ),
+          votingHomeCacheStoreProvider.overrideWithValue(
+            MemoryVotingHomeCacheStore(),
+          ),
           votingConfigSourceStoreProvider.overrideWithValue(store),
           votingConfigLoaderProvider.overrideWith((ref) {
             final source =
@@ -460,6 +499,15 @@ void main() {
       });
       final container = ProviderContainer(
         overrides: [
+          votingRpcEndpointConfigProvider.overrideWithValue(
+            const RpcEndpointConfig(
+              networkName: 'main',
+              lightwalletdUrl: 'https://lightwalletd.example:443',
+            ),
+          ),
+          votingHomeCacheStoreProvider.overrideWithValue(
+            MemoryVotingHomeCacheStore(),
+          ),
           votingConfigSourceStoreProvider.overrideWithValue(store),
           votingConfigLoaderProvider.overrideWith((ref) {
             final source =
@@ -509,6 +557,15 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
+        votingRpcEndpointConfigProvider.overrideWithValue(
+          const RpcEndpointConfig(
+            networkName: 'main',
+            lightwalletdUrl: 'https://lightwalletd.example:443',
+          ),
+        ),
+        votingHomeCacheStoreProvider.overrideWithValue(
+          MemoryVotingHomeCacheStore(),
+        ),
         votingConfigSourceStoreProvider.overrideWithValue(
           FakeVotingConfigSourceStore(),
         ),
@@ -601,6 +658,15 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
+        votingRpcEndpointConfigProvider.overrideWithValue(
+          const RpcEndpointConfig(
+            networkName: 'main',
+            lightwalletdUrl: 'https://lightwalletd.example:443',
+          ),
+        ),
+        votingHomeCacheStoreProvider.overrideWithValue(
+          MemoryVotingHomeCacheStore(),
+        ),
         votingConfigSourceStoreProvider.overrideWithValue(
           FakeVotingConfigSourceStore(),
         ),
@@ -672,6 +738,15 @@ void main() {
       final http = FakeVotingHttpClient(responses: responses);
       final container = ProviderContainer(
         overrides: [
+          votingRpcEndpointConfigProvider.overrideWithValue(
+            const RpcEndpointConfig(
+              networkName: 'main',
+              lightwalletdUrl: 'https://lightwalletd.example:443',
+            ),
+          ),
+          votingHomeCacheStoreProvider.overrideWithValue(
+            MemoryVotingHomeCacheStore(),
+          ),
           votingConfigSourceStoreProvider.overrideWithValue(
             FakeVotingConfigSourceStore(),
           ),
@@ -767,6 +842,15 @@ void main() {
       );
       final container = ProviderContainer(
         overrides: [
+          votingRpcEndpointConfigProvider.overrideWithValue(
+            const RpcEndpointConfig(
+              networkName: 'main',
+              lightwalletdUrl: 'https://lightwalletd.example:443',
+            ),
+          ),
+          votingHomeCacheStoreProvider.overrideWithValue(
+            MemoryVotingHomeCacheStore(),
+          ),
           votingConfigSourceStoreProvider.overrideWithValue(
             FakeVotingConfigSourceStore(sourceUrl: firstSource),
           ),
@@ -891,6 +975,15 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
+        votingRpcEndpointConfigProvider.overrideWithValue(
+          const RpcEndpointConfig(
+            networkName: 'main',
+            lightwalletdUrl: 'https://lightwalletd.example:443',
+          ),
+        ),
+        votingHomeCacheStoreProvider.overrideWithValue(
+          MemoryVotingHomeCacheStore(),
+        ),
         votingConfigSourceStoreProvider.overrideWithValue(
           FakeVotingConfigSourceStore(),
         ),
@@ -1031,6 +1124,15 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
+        votingRpcEndpointConfigProvider.overrideWithValue(
+          const RpcEndpointConfig(
+            networkName: 'main',
+            lightwalletdUrl: 'https://lightwalletd.example:443',
+          ),
+        ),
+        votingHomeCacheStoreProvider.overrideWithValue(
+          MemoryVotingHomeCacheStore(),
+        ),
         votingConfigSourceStoreProvider.overrideWithValue(
           FakeVotingConfigSourceStore(),
         ),
@@ -7218,6 +7320,15 @@ void main() {
     await persistence.save(key, const VotingDraftState(choices: {7: 1, 8: 0}));
     final container = ProviderContainer(
       overrides: [
+        votingRpcEndpointConfigProvider.overrideWithValue(
+          const RpcEndpointConfig(
+            networkName: 'main',
+            lightwalletdUrl: 'https://lightwalletd.example:443',
+          ),
+        ),
+        votingHomeCacheStoreProvider.overrideWithValue(
+          MemoryVotingHomeCacheStore(),
+        ),
         votingDraftPersistenceProvider.overrideWithValue(persistence),
       ],
     );
@@ -11085,6 +11196,15 @@ ProviderContainer _container({
 }) {
   return ProviderContainer(
     overrides: [
+      votingRpcEndpointConfigProvider.overrideWithValue(
+        const RpcEndpointConfig(
+          networkName: 'main',
+          lightwalletdUrl: 'https://lightwalletd.example:443',
+        ),
+      ),
+      votingHomeCacheStoreProvider.overrideWithValue(
+        MemoryVotingHomeCacheStore(),
+      ),
       votingConfigSourceStoreProvider.overrideWithValue(
         sourceStore ?? FakeVotingConfigSourceStore(),
       ),
@@ -11300,6 +11420,9 @@ ProviderContainer _sessionContainer({
   return ProviderContainer(
     observers: observers,
     overrides: [
+      votingHomeCacheStoreProvider.overrideWithValue(
+        MemoryVotingHomeCacheStore(),
+      ),
       appBootstrapProvider.overrideWithValue(AppBootstrapState.empty),
       if (securityNotifier != null)
         appSecurityProvider.overrideWith(() => securityNotifier),

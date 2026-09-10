@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart' show ThemeMode, MaterialApp, Material;
 import 'package:flutter/widgets.dart';
+import '../src/providers/voting/voting_home_entry_provider.dart';
 import '../src/features/payment_links/models/vizor_payment_link.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
@@ -2326,6 +2327,8 @@ Widget _buildMobileHomeUseCase({
   );
   return ProviderScope(
     overrides: [
+      votingHomeEntryVisibleProvider.overrideWithValue(true),
+      votingHomeRefreshActionProvider.overrideWithValue(() async {}),
       if (networkPrivacyState != null)
         networkPrivacyProvider.overrideWith(
           () => _PreviewNetworkPrivacyNotifier(networkPrivacyState),
