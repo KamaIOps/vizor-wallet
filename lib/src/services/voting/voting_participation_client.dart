@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../rust/api/voting.dart' as rust;
 import 'voting_http.dart';
+import 'voting_retry.dart';
 
 /// Consensus/storage verification is performed in Rust. Never log candidate
 /// keys, request URLs, evidence, or raw transport exceptions from this client.
@@ -54,7 +55,13 @@ class VotingParticipationResult {
 }
 
 class VotingParticipationClient {
-  VotingParticipationClient(this.http, this.bridge, {this.regtestEndpoint});
+  VotingParticipationClient(
+    this.http,
+    this.bridge, {
+    this.regtestEndpoint,
+    Future<void> Function(Duration)? delay,
+  }) : _delay = delay ?? Future<void>.delayed;
+  final Future<void> Function(Duration) _delay;
 
   /// Local integration transport; ignored for mainnet and testnet.
   final Uri? regtestEndpoint;
@@ -83,7 +90,7 @@ class VotingParticipationClient {
     };
     final deadline = clock().add(const Duration(minutes: 4));
     void guard() {
-      if (!isCurrent() || clock().isAfter(deadline)) {
+      if (!isCurrent() || !clock().isBefore(deadline)) {
         throw StateError('Voting participation check cancelled');
       }
     }
@@ -91,18 +98,50 @@ class VotingParticipationClient {
     Future<Map<String, dynamic>> get(
       String path, [
       Map<String, String>? query,
-    ]) async {
+    ]) => withVotingRetry(
+      policy: VotingRetryPolicy(
+        name: 'participation-read',
+        delays: const [Duration(milliseconds: 300)],
+        shouldRetry: (error) =>
+            error is _TransientParticipationResponse ||
+            isRetryableVotingError(error),
+      ),
+      delay: _delay,
+      isCancelled: () => !isCurrent() || !clock().isBefore(deadline),
+      operation: () async {
+        guard();
+        final remaining = deadline.difference(clock());
+        final response = await http.get(
+          endpoint.replace(path: path, queryParameters: query),
+          timeout: remaining < requestTimeout ? remaining : requestTimeout,
+        );
+        guard();
+        if (const [429, 500, 502, 503, 504].contains(response.statusCode)) {
+          throw const _TransientParticipationResponse();
+        }
+        if (response.statusCode != 200 ||
+            response.bodyBytes.length > 128 * 1024) {
+          throw StateError('Voting participation response unavailable');
+        }
+        return response.decodeJsonObject();
+      },
+    );
+
+    Future<VotingParticipationResult> evaluate(
+      String fingerprint,
+      String evidence,
+    ) async {
       guard();
-      final response = await http.get(
-        endpoint.replace(path: path, queryParameters: query),
-        timeout: requestTimeout,
+      final result = await bridge.evaluate(
+        context,
+        fingerprint,
+        evidence,
+        clock(),
       );
       guard();
-      if (response.statusCode != 200 ||
-          response.bodyBytes.length > 128 * 1024) {
-        throw StateError('Voting participation response unavailable');
-      }
-      return response.decodeJsonObject();
+      return VotingParticipationResult.fromJson(
+        jsonDecode(result) as Map<String, dynamic>,
+      );
     }
 
     guard();
@@ -112,6 +151,11 @@ class VotingParticipationClient {
     final keys = (candidates['keys'] as List).cast<String>();
     if (keys.length > 1024) {
       throw StateError('Voting participation note limit exceeded');
+    }
+    if (keys.isEmpty) {
+      // Rust rereads the snapshot and accepts absent evidence only for an
+      // unchanged empty note set. Dart does not manufacture a successful result.
+      return evaluate(candidates['fingerprint'] as String, '');
     }
     final commit = await get('/commit');
     final header =
@@ -145,15 +189,11 @@ class VotingParticipationClient {
       'validators': validators,
       'queries': queries,
     });
-    final result = await bridge.evaluate(
-      context,
-      candidates['fingerprint'] as String,
-      evidence,
-      clock(),
-    );
-    guard();
-    return VotingParticipationResult.fromJson(
-      jsonDecode(result) as Map<String, dynamic>,
-    );
+    return evaluate(candidates['fingerprint'] as String, evidence);
   }
+}
+
+// No queried identifiers or response bodies in retryable HTTP errors.
+class _TransientParticipationResponse implements Exception {
+  const _TransientParticipationResponse();
 }

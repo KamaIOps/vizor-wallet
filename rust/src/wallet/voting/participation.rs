@@ -313,6 +313,24 @@ pub fn verify(
         .collect()
 }
 
+// Call only with candidates freshly read from the wallet DB. Empty evidence is
+// meaningful only when that locally verified snapshot still contains no notes.
+fn verify_prepared_candidates(
+    candidates: &Candidates,
+    fingerprint: &str,
+    network: &str,
+    evidence: &str,
+    now: i64,
+) -> Result<Vec<bool>, String> {
+    if candidates.fingerprint != fingerprint {
+        return Err(INVALID.into());
+    }
+    if candidates.keys.is_empty() && evidence.is_empty() {
+        return Ok(Vec::new());
+    }
+    verify(&candidates.keys, network, evidence, now)
+}
+
 /// Re-read the note set after network I/O, rejecting a changed restore/snapshot.
 /// No remote result can mark a different account or note set as unavailable.
 pub fn evaluate(
@@ -327,10 +345,7 @@ pub fn evaluate(
     max_real_notes: Option<u32>,
 ) -> Result<String, String> {
     let (notes, candidates) = notes(db_path, account, network, round, snapshot)?;
-    if candidates.fingerprint != fingerprint {
-        return Err(INVALID.into());
-    }
-    let used = verify(&candidates.keys, network, evidence, now)?;
+    let used = verify_prepared_candidates(&candidates, fingerprint, network, evidence, now)?;
     let excluded: Vec<String> = notes
         .iter()
         .zip(&used)
@@ -521,6 +536,26 @@ mod tests {
         let now = header.header.time.unix_timestamp();
         (value, keys, now)
     }
+    #[test]
+    fn empty_snapshot_requires_unchanged_local_candidates() {
+        let empty = Candidates {
+            keys: vec![],
+            fingerprint: "empty".into(),
+        };
+        assert_eq!(
+            verify_prepared_candidates(&empty, "empty", "main", "", 0).unwrap(),
+            Vec::<bool>::new()
+        );
+        assert!(verify_prepared_candidates(&empty, "old", "main", "", 0).is_err());
+        let populated = Candidates {
+            keys: vec!["01".into()],
+            fingerprint: "new".into(),
+        };
+        assert!(verify_prepared_candidates(&populated, "new", "main", "", 0).is_err());
+        assert!(verify_prepared_candidates(&populated, "empty", "main", "", 0).is_err());
+        assert!(verify_prepared_candidates(&empty, "empty", "main", "invalid", 0).is_err());
+    }
+
     #[test]
     fn regtest_anchor_is_explicit_and_cannot_change_public_network_trust() {
         let (evidence, keys, now) = fixture("test");

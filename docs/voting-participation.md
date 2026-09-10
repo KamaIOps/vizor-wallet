@@ -113,3 +113,14 @@ new scope, while explicit detail checks remain independent of Home visibility.
 Round details are retained in memory per network/config/account/round only while
 waiting for snapshot sync, avoiding repeated detail requests during that wait.
 Manual retries fetch fresh details.
+
+Within one participation check, a transient HTTP failure retries only that request
+once after 300 ms. Successful responses and the selected proof height are retained.
+Permanent HTTP errors, malformed data and failed proof verification are not retried
+inside the operation. The four-minute budget and Home cancellation still apply;
+a final failure falls back to the coordinator's exponential backoff.
+
+When preparation finds zero snapshot notes, no participation RPC is sent. Rust
+rereads the wallet and accepts empty evidence only for the same empty candidate
+set. The existing local result/persistence path still runs; zero notes never
+means previously used voting rights and does not change Home visibility rules.

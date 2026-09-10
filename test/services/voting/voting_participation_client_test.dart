@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/rust/api/voting.dart' as rust;
 import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
@@ -13,15 +14,13 @@ class _Context implements rust.ApiVotingRoundContext {
 }
 
 class _Bridge extends VotingParticipationBridge {
+  List<String> keys = ['01', '02'];
   int evaluations = 0;
   String? evidence;
   bool reject = false;
   @override
   Future<String> prepare(rust.ApiVotingRoundContext context) async =>
-      jsonEncode({
-        'keys': ['01', '02'],
-        'fingerprint': 'notes',
-      });
+      jsonEncode({'keys': keys, 'fingerprint': 'notes'});
   @override
   Future<String> evaluate(
     rust.ApiVotingRoundContext context,
@@ -34,8 +33,8 @@ class _Bridge extends VotingParticipationBridge {
     if (reject) throw StateError('invalid proof');
     return jsonEncode({
       'fingerprint': fingerprint,
-      'usedCount': 2,
-      'noteCount': 2,
+      'usedCount': keys.length,
+      'noteCount': keys.length,
       'remainingEligible': false,
       'localState': false,
     });
@@ -145,6 +144,129 @@ void main() {
       );
     },
   );
+  test(
+    'empty candidates skip transport but still require Rust evaluation',
+    () async {
+      final transport = http();
+      final bridge = _Bridge()..keys = [];
+      final result = await VotingParticipationClient(
+        transport,
+        bridge,
+      ).check(_Context('main'), () => now, () => true);
+      expect(transport.requests, isEmpty);
+      expect(bridge.evaluations, 1);
+      expect(bridge.evidence, '');
+      expect(result.unavailable, isFalse);
+      bridge.reject = true;
+      await expectLater(
+        VotingParticipationClient(
+          transport,
+          bridge,
+        ).check(_Context('main'), () => now, () => true),
+        throwsStateError,
+      );
+      expect(transport.requests, isEmpty);
+    },
+  );
+
+  test('retries only the failed note request at the same height', () async {
+    final transport = http();
+    final failingUri = Uri.parse('https://vote-rpc-primary.valargroup.org')
+        .replace(
+          path: '/abci_query',
+          queryParameters: {
+            'path': '"/store/vote/key"',
+            'data': '0x02',
+            'height': '100',
+            'prove': 'true',
+          },
+        );
+    transport.responses[failingUri.toString()] = SequentialVotingHttpResponses([
+      jsonResponse({}, statusCode: 503),
+      {
+        'result': {'response': {}},
+      },
+    ]);
+    var waits = 0;
+    final bridge = _Bridge();
+    await VotingParticipationClient(
+      transport,
+      bridge,
+      delay: (_) async {
+        waits++;
+      },
+    ).check(_Context('main'), () => now, () => true);
+    expect(waits, 1);
+    expect(transport.requests.where((r) => r.uri.path == '/commit').length, 1);
+    expect(
+      transport.requests.where((r) => r.uri.path == '/validators').length,
+      1,
+    );
+    expect(
+      transport.requests
+          .where((r) => r.uri.queryParameters['data'] == '0x01')
+          .length,
+      1,
+    );
+    expect(transport.requests.where((r) => r.uri == failingUri).length, 2);
+    expect((jsonDecode(bridge.evidence!)['queries'] as List).length, 2);
+  });
+
+  test(
+    'transient reads retry once; permanent and malformed responses do not',
+    () async {
+      for (final (response, transient) in <(Object, bool)>[
+        (TimeoutException('timeout'), true),
+        (jsonResponse({}, statusCode: 503), true),
+        (jsonResponse({}, statusCode: 400), false),
+        (textResponse('bad json'), false),
+      ]) {
+        final transport = http();
+        transport.responses['/commit'] = response;
+        var waits = 0;
+        await expectLater(
+          VotingParticipationClient(
+            transport,
+            _Bridge(),
+            delay: (_) async {
+              waits++;
+            },
+          ).check(_Context('main'), () => now, () => true),
+          throwsA(isA<Object>()),
+        );
+        expect(transport.requests.length, transient ? 2 : 1);
+        expect(waits, transient ? 1 : 0);
+      }
+    },
+  );
+
+  test(
+    'cancellation or deadline during retry delay prevents another request',
+    () async {
+      for (final expire in [false, true]) {
+        var current = true;
+        var time = now;
+        final transport = http();
+        transport.responses['/commit'] = jsonResponse({}, statusCode: 503);
+        await expectLater(
+          VotingParticipationClient(
+            transport,
+            _Bridge(),
+            delay: (_) async {
+              if (expire) {
+                time = time.add(const Duration(minutes: 4));
+              } else {
+                current = false;
+              }
+            },
+          ).check(_Context('main'), () => time, () => current),
+          throwsA(isA<Object>()),
+        );
+        expect(transport.requests.length, 1);
+      }
+    },
+  );
+
   test('unsupported network never reaches transport', () async {
     final transport = http();
     await expectLater(
