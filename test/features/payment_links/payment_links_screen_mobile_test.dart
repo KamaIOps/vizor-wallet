@@ -141,6 +141,50 @@ void main() {
     );
   }
 
+  for (final outcome in [
+    (PaymentLinkAvailability.claimedElsewhere, 'Already claimed'),
+    (PaymentLinkAvailability.noBalance, 'No balance'),
+    (PaymentLinkAvailability.failed, 'Claim failed'),
+  ]) {
+    testWidgets('shows ${outcome.$2} inside the mobile redeem area', (
+      tester,
+    ) async {
+      final operations = FakePaymentLinkOperations(claimable: false)
+        ..claimAvailability = outcome.$1;
+      await pumpPaymentLinksScreen(
+        tester,
+        operations: operations,
+        clipboard: FakePaymentLinkClipboard(
+          text: incomingLink.toUri().toString(),
+        ),
+      );
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('payment_links_mobile_redeem_button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('payment_link_mobile_paste_button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Redeem the Card'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(
+            const ValueKey('payment_link_mobile_redeem_drop_zone'),
+          ),
+          matching: find.text(outcome.$2),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Check status'), findsOneWidget);
+      expect(operations.claimedLinks, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final settings in [
     (true, true, true),
     (true, true, false),

@@ -1336,6 +1336,8 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
     this.onPaste,
     this.onClearClipboard,
     this.loadingPlaceholder,
+    this.statusContent,
+    this.secondaryAction,
     this.backLabel = 'My Cards',
     this.title,
     this.subtitle = kPaymentLinkRedeemSubtitle,
@@ -1351,6 +1353,8 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
   final VoidCallback? onPaste;
   final VoidCallback? onClearClipboard;
   final Widget? loadingPlaceholder;
+  final Widget? statusContent;
+  final Widget? secondaryAction;
   final String backLabel;
   final String? title;
   final String subtitle;
@@ -1394,38 +1398,44 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
                 child: loading
                     ? loadingPlaceholder ?? const PaymentLinkLoadingCard()
                     : PaymentLinkDashedDropZone(
-                        child: invalid
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    invalidTitle,
-                                    textAlign: TextAlign.center,
-                                    style: AppTypography.bodyMediumStrong
-                                        .copyWith(
-                                          color:
-                                              context.colors.text.destructive,
-                                        ),
-                                  ),
-                                  const SizedBox(height: AppSpacing.xs),
-                                  Text(
-                                    invalidSubtitle,
-                                    textAlign: TextAlign.center,
-                                    style: AppTypography.bodyMedium.copyWith(
-                                      color: context.colors.text.secondary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: AppSpacing.sm),
-                                  PaymentLinkPasteButton(
+                        child:
+                            statusContent ??
+                            (invalid
+                                ? Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        invalidTitle,
+                                        textAlign: TextAlign.center,
+                                        style: AppTypography.bodyMediumStrong
+                                            .copyWith(
+                                              color: context
+                                                  .colors
+                                                  .text
+                                                  .destructive,
+                                            ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.xs),
+                                      Text(
+                                        invalidSubtitle,
+                                        textAlign: TextAlign.center,
+                                        style: AppTypography.bodyMedium
+                                            .copyWith(
+                                              color:
+                                                  context.colors.text.secondary,
+                                            ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.sm),
+                                      PaymentLinkPasteButton(
+                                        label: pasteLabel,
+                                        onPressed: onPaste,
+                                      ),
+                                    ],
+                                  )
+                                : PaymentLinkPasteButton(
                                     label: pasteLabel,
                                     onPressed: onPaste,
-                                  ),
-                                ],
-                              )
-                            : PaymentLinkPasteButton(
-                                label: pasteLabel,
-                                onPressed: onPaste,
-                              ),
+                                  )),
                       ),
               ),
               Positioned(
@@ -1445,17 +1455,21 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
                   ),
                 ),
               ),
-              if (invalid)
+              if (secondaryAction != null || invalid)
                 Positioned(
-                  top: 545,
+                  top: secondaryAction != null
+                      ? 179 + PaymentLinkGiftCard.height + AppSpacing.md
+                      : 545,
                   left: 0,
                   right: 0,
                   child: Center(
-                    child: PaymentLinkTextAction(
-                      label: clearLabel,
-                      onTap: onClearClipboard,
-                      leading: const AppIcon(AppIcons.trash),
-                    ),
+                    child:
+                        secondaryAction ??
+                        PaymentLinkTextAction(
+                          label: clearLabel,
+                          onTap: onClearClipboard,
+                          leading: const AppIcon(AppIcons.trash),
+                        ),
                   ),
                 ),
             ],

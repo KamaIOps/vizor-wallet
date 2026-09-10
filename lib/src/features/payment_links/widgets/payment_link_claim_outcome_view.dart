@@ -1,9 +1,11 @@
 import 'package:flutter/widgets.dart';
 
+import '../../../core/layout/app_form_factor.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
 import '../services/payment_link_received_store.dart';
+import 'mobile/payment_link_mobile_views.dart';
+import 'payment_link_desktop_views.dart';
 
 extension PaymentLinkAvailabilityCopy on PaymentLinkAvailability {
   String get label => switch (this) {
@@ -31,7 +33,7 @@ extension PaymentLinkAvailabilityCopy on PaymentLinkAvailability {
   };
 }
 
-/// Shared outcome content uses form-factor tokens and scrolls on small screens.
+/// Claim outcomes stay inside the existing redeem surface in both form factors.
 class PaymentLinkClaimOutcomeView extends StatelessWidget {
   const PaymentLinkClaimOutcomeView({
     required this.availability,
@@ -50,54 +52,68 @@ class PaymentLinkClaimOutcomeView extends StatelessWidget {
   final bool busy;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.md),
+  Widget build(BuildContext context) {
+    final isError = switch (availability) {
+      PaymentLinkAvailability.noBalance ||
+      PaymentLinkAvailability.claimedElsewhere ||
+      PaymentLinkAvailability.failed => true,
+      _ => false,
+    };
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        key: const ValueKey('payment_link_claim_outcome_content'),
+        mainAxisSize: MainAxisSize.min,
         children: [
-          AppBackLink(label: 'My Cards', onTap: onBack),
-          const SizedBox(height: AppSpacing.xl),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 396),
-              child: Column(
-                children: [
-                  Text(
-                    availability.label,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.headlineLarge.copyWith(
-                      color: context.colors.text.primary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.s),
-                  Text(
-                    availability.description,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: context.colors.text.secondary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  if (onCheck != null)
-                    AppButton(
-                      onPressed: busy ? null : onCheck,
-                      child: Text(busy ? 'Checking...' : 'Check status'),
-                    ),
-                  if (onArchive != null) ...[
-                    const SizedBox(height: AppSpacing.s),
-                    AppButton(
-                      onPressed: busy ? null : onArchive,
-                      variant: AppButtonVariant.secondary,
-                      child: Text(archived ? 'Restore card' : 'Hide card'),
-                    ),
-                  ],
-                ],
-              ),
+          Text(
+            availability.label,
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMediumStrong.copyWith(
+              color: isError
+                  ? context.colors.text.destructive
+                  : context.colors.text.primary,
             ),
           ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            availability.description,
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMedium.copyWith(
+              color: context.colors.text.secondary,
+            ),
+          ),
+          if (onCheck != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            AppButton(
+              onPressed: busy ? null : onCheck,
+              child: Text(busy ? 'Checking...' : 'Check status'),
+            ),
+          ],
         ],
       ),
-    ),
-  );
+    );
+    final archiveAction = onArchive == null
+        ? null
+        : AppButton(
+            onPressed: busy ? null : onArchive,
+            variant: AppButtonVariant.secondary,
+            child: Text(archived ? 'Restore card' : 'Hide card'),
+          );
+    if (kAppFormFactor == AppFormFactor.mobile) {
+      return PaymentLinkRedeemMobileView(
+        state: PaymentLinkRedeemMobileState.paste,
+        onBack: onBack,
+        subtitle: '',
+        statusContent: content,
+        secondaryAction: archiveAction,
+      );
+    }
+    return PaymentLinkRedeemDesktopView(
+      state: PaymentLinkRedeemVisualState.paste,
+      onBack: onBack,
+      subtitle: '',
+      statusContent: content,
+      secondaryAction: archiveAction,
+    );
+  }
 }

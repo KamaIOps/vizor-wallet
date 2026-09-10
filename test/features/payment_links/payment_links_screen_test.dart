@@ -142,6 +142,40 @@ void main() {
     );
   }
 
+  for (final outcome in [
+    (PaymentLinkAvailability.claimedElsewhere, 'Already claimed'),
+    (PaymentLinkAvailability.noBalance, 'No balance'),
+    (PaymentLinkAvailability.failed, 'Claim failed'),
+  ]) {
+    testWidgets('shows ${outcome.$2} inside the redeem area', (tester) async {
+      final operations = FakePaymentLinkOperations(claimable: false)
+        ..claimAvailability = outcome.$1;
+      await pumpPaymentLinksScreen(
+        tester,
+        operations: operations,
+        clipboard: FakePaymentLinkClipboard(
+          text: incomingLink.toUri().toString(),
+        ),
+      );
+      await tester.tap(find.text('Redeem a card'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Paste card link'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Redeem the Card'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('payment_link_redeem_drop_zone')),
+          matching: find.text(outcome.$2),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Check status'), findsOneWidget);
+      expect(operations.claimedLinks, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'claimed elsewhere can be hidden and restored without another submission',
     (tester) async {
