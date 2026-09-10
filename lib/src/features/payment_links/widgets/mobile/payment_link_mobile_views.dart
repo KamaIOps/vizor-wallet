@@ -1073,6 +1073,8 @@ class PaymentLinkRedeemMobileView extends StatelessWidget {
     this.onScan,
     this.fromQrCode = false,
     this.onClearClipboard,
+    this.statusContent,
+    this.secondaryAction,
     this.title = kPaymentLinkRedeemTheCardTitle,
     this.subtitle = 'Paste a card link or scan its QR code.',
     this.pasteLabel = kPaymentLinkPasteLabel,
@@ -1088,6 +1090,8 @@ class PaymentLinkRedeemMobileView extends StatelessWidget {
   final VoidCallback? onScan;
   final bool fromQrCode;
   final VoidCallback? onClearClipboard;
+  final Widget? statusContent;
+  final Widget? secondaryAction;
   final String title;
   final String subtitle;
   final String pasteLabel;
@@ -1102,7 +1106,7 @@ class PaymentLinkRedeemMobileView extends StatelessWidget {
 
     final cardContent = switch (state) {
       PaymentLinkRedeemMobileState.paste => _MobileRedeemDropZone(
-        child: _actions(),
+        child: statusContent ?? _actions(),
       ),
       PaymentLinkRedeemMobileState.invalid => _MobileRedeemDropZone(
         child: Column(
@@ -1174,22 +1178,24 @@ class PaymentLinkRedeemMobileView extends StatelessWidget {
                 ),
               ),
             ),
-          if (invalid && !fromQrCode)
+          if (secondaryAction != null || (invalid && !fromQrCode))
             Positioned(
               top: _redeemSurfaceTop + _cardHeight + AppSpacing.md,
               left: 0,
               right: 0,
               child: Center(
-                child: AppButton(
-                  key: const ValueKey(
-                    'payment_link_mobile_clear_clipboard_button',
-                  ),
-                  onPressed: onClearClipboard,
-                  variant: AppButtonVariant.ghost,
-                  size: AppButtonSize.mediumLarge,
-                  leading: const AppIcon(AppIcons.trash, size: 20),
-                  child: Text(clearLabel),
-                ),
+                child:
+                    secondaryAction ??
+                    AppButton(
+                      key: const ValueKey(
+                        'payment_link_mobile_clear_clipboard_button',
+                      ),
+                      onPressed: onClearClipboard,
+                      variant: AppButtonVariant.ghost,
+                      size: AppButtonSize.mediumLarge,
+                      leading: const AppIcon(AppIcons.trash, size: 20),
+                      child: Text(clearLabel),
+                    ),
               ),
             ),
         ],

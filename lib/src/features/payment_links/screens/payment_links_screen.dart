@@ -172,6 +172,9 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   bool _receivedShowsBack = false;
   bool _messageEditorRevealed = false;
   bool _operationInProgress = false;
+  final Set<String> _copyingLinkAddresses = {};
+  final Set<String> _savingQrAddresses = {};
+  final Set<String> _sharingQrAddresses = {};
   bool _choosingClaimAccount = false;
   bool _redeemFromQrCode = false;
   bool _receivedRefreshInProgress = false;
@@ -284,6 +287,14 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       _showHelp = false;
       _longSyncLink = null;
     });
+    if (page == PaymentLinksLocalPage.message &&
+        kAppFormFactor == AppFormFactor.mobile) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _page == PaymentLinksLocalPage.message) {
+          _messageFocusNode.requestFocus();
+        }
+      });
+    }
   }
 
   void _startCreate() {
@@ -376,8 +387,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
           .read(paymentLinkOperationsProvider)
           .loadCreatedLinkRecoveries();
       if (!mounted) return;
-      final visible = records.toList()
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      final visible = records.toList()..sort(compareCreatedPaymentLinks);
       setState(() => _recoveries = visible);
       unawaited(_refreshFundingProgress(records: visible));
     } catch (_) {
@@ -1048,22 +1058,11 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       return;
     }
     setState(() => _messageEditorRevealed = true);
-    // Reduced-motion mode swaps the card face without running the flip, so
-    // focus the editor as soon as that face is mounted. In the animated path
-    // the editor is not mounted yet and onAnimationEnd handles the focus.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          !_messageEditorRevealed ||
-          _page != PaymentLinksLocalPage.message ||
-          _messageFocusNode.context == null) {
-        return;
-      }
-      _messageFocusNode.requestFocus();
-    });
   }
 
-  void _focusMessageEditorAfterFlip() {
-    if (!mounted ||
+  void _focusVisibleMessageEditor(bool showingBack) {
+    if (!showingBack ||
+        !mounted ||
         !_messageEditorRevealed ||
         _page != PaymentLinksLocalPage.message) {
       return;
@@ -1330,8 +1329,10 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   }
 
   Future<void> _copyPaymentLink(VizorPaymentLink link) async {
-    if (_operationInProgress) return;
-    setState(() => _operationInProgress = true);
+    if (_operationInProgress || _copyingLinkAddresses.contains(link.address)) {
+      return;
+    }
+    setState(() => _copyingLinkAddresses.add(link.address));
     try {
       await ref
           .read(paymentLinkClipboardProvider)
@@ -1350,7 +1351,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     } catch (_) {
       if (mounted) _showError('Gift link could not be copied.');
     } finally {
-      if (mounted) setState(() => _operationInProgress = false);
+      if (mounted) setState(() => _copyingLinkAddresses.remove(link.address));
     }
   }
 
@@ -2031,31 +2032,35 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
 
     final pricingEnabled = ref.watch(swapFeatureEnabledProvider);
     final amount = parseZecAmount(_amountController.text);
-    // Retain the quote through Review so submission can capture it once.
+    // Keep the price subscription through amount edits and Review so clearing
+    // the input does not restart the lookup or flash its loading state.
     final marketData =
         pricingEnabled &&
-            amount != null &&
-            amount > BigInt.zero &&
             (_page == PaymentLinksLocalPage.amount ||
                 _page == PaymentLinksLocalPage.message ||
                 _page == PaymentLinksLocalPage.review)
         ? ref.watch(zecHomeMarketDataStateProvider)
         : null;
 
+    final amountFiatText = !pricingEnabled || amount == null
+        ? null
+        : amount == BigInt.zero
+        ? r'$0.00'
+        : fiatTextForZatoshi(
+            amount,
+            zecUsdUnitPrice: marketData?.displayData?.usdPrice,
+          );
+    final amountFiatLoading =
+        amount != null &&
+        amount > BigInt.zero &&
+        (marketData?.isLoading ?? false);
+    final amountFiatSupportingText =
+        amountFiatText ??
+        (pricingEnabled && amount != null && !amountFiatLoading
+            ? 'Fiat unavailable'
+            : null);
+
     if (kAppFormFactor == AppFormFactor.mobile) {
-      final amountFiatText = !pricingEnabled || amount == null
-          ? null
-          : amount == BigInt.zero
-          ? r'$0.00'
-          : fiatTextForZatoshi(
-              amount,
-              zecUsdUnitPrice: marketData?.displayData?.usdPrice,
-            );
-      final amountFiatLoading =
-          amount != null &&
-          amount > BigInt.zero &&
-          amountFiatText == null &&
-          (marketData?.isLoading ?? false);
       final mobileKeystoneRequest = _keystoneFundingRequest;
       return PaymentLinksMobileBody(
         page: _page,
@@ -2087,11 +2092,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         amountController: _amountController,
         amountFocusNode: _amountFocusNode,
         amountInputFormatters: [_amountFormatter],
-        amountFiatText:
-            amountFiatText ??
-            (pricingEnabled && amount != null && !amountFiatLoading
-                ? 'Fiat unavailable'
-                : null),
+        amountFiatText: amountFiatSupportingText,
         amountFiatLoading: amountFiatLoading,
         maxAmountText: _maxAmountText,
         canContinueAmount: _canContinueAmount,
@@ -2105,10 +2106,14 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         reviewShowsBack: _reviewShowsBack,
         hasPendingFundingMetadata: _pendingFundingMetadata != null,
         readyLink: _readyLink,
+        readyFiatText: _savedCardFiatText(_readyLink),
+        readyCopyInProgress: _copyingLinkAddresses.contains(
+          _readyLink?.address,
+        ),
         fundingProgressByAddress: _fundingProgressByAddress,
         readyShowsBack: _readyShowsBack,
         receivedLink: _receivedLink,
-        receivedFiatText: _receivedFiatText,
+        receivedFiatText: _savedCardFiatText(_receivedLink),
         receivedShowsBack: _receivedShowsBack,
         receivedClaimSession: _receivedClaimSession,
         linkWaitLabel: _estimatedLinkWaitLabel,
@@ -2143,7 +2148,10 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       );
     }
 
-    final currentPage = _buildCurrentPage();
+    final currentPage = _buildCurrentPage(
+      amountFiatText: amountFiatSupportingText,
+      amountFiatLoading: amountFiatLoading,
+    );
     final keystoneRequest = _keystoneFundingRequest;
     final longSyncLink = _longSyncLink;
     final pane = keystoneRequest != null
@@ -2187,12 +2195,21 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     );
   }
 
-  Widget _buildCurrentPage() {
+  Widget _buildCurrentPage({
+    required String? amountFiatText,
+    required bool amountFiatLoading,
+  }) {
     return switch (_page) {
       PaymentLinksLocalPage.home => _buildHome(),
-      PaymentLinksLocalPage.amount => _buildAmount(),
+      PaymentLinksLocalPage.amount => _buildAmount(
+        fiatText: amountFiatText,
+        fiatLoading: amountFiatLoading,
+      ),
       PaymentLinksLocalPage.message => _buildMessage(),
-      PaymentLinksLocalPage.review => _buildReview(),
+      PaymentLinksLocalPage.review => _buildReview(
+        fiatText: amountFiatText,
+        fiatLoading: amountFiatLoading,
+      ),
       PaymentLinksLocalPage.ready => _buildReady(),
       PaymentLinksLocalPage.shareQr => _buildShareQr(),
       PaymentLinksLocalPage.redeem =>
@@ -2371,7 +2388,9 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
 
   Widget _buildRecoveryRow(PaymentLinkRecoveryRecord record) {
     final state = _recoveryRowState(record);
-    final copyEnabled = state.canUseLink && !_operationInProgress;
+    final actionsEnabled = state.canUseLink && !_operationInProgress;
+    final copyEnabled =
+        actionsEnabled && !_copyingLinkAddresses.contains(record.link.address);
     return PaymentLinkCardListRow(
       key: ValueKey('payment_link_recovery_${record.link.address}'),
       thumbnail: _cardThumbnail(record.link.presentation?.artworkId),
@@ -2381,14 +2400,16 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       onAction: null,
       showLinkActions: state.canUseLink,
       onCopyLink: copyEnabled ? () => _copyPaymentLink(record.link) : null,
-      onShowQr: copyEnabled ? () => _openShareQr(record) : null,
+      onShowQr: actionsEnabled ? () => _openShareQr(record) : null,
       showLoader: state.showLoader,
     );
   }
 
   Widget _buildMobileRecoveryRow(PaymentLinkRecoveryRecord record) {
     final state = _recoveryRowState(record);
-    final copyEnabled = state.canUseLink && !_operationInProgress;
+    final actionsEnabled = state.canUseLink && !_operationInProgress;
+    final copyEnabled =
+        actionsEnabled && !_copyingLinkAddresses.contains(record.link.address);
     return PaymentLinkCardListMobileRow(
       key: ValueKey('payment_link_mobile_recovery_${record.link.address}'),
       thumbnail: _cardThumbnail(record.link.presentation?.artworkId),
@@ -2397,7 +2418,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       statusText: state.canUseLink ? null : state.statusText,
       showLinkActions: state.canUseLink,
       onCopyLink: copyEnabled ? () => _copyPaymentLink(record.link) : null,
-      onShowQr: copyEnabled ? () => _openShareQr(record) : null,
+      onShowQr: actionsEnabled ? () => _openShareQr(record) : null,
       showLoader: state.showLoader,
     );
   }
@@ -2448,6 +2469,8 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   Widget _buildShareQr() {
     final record = _shareQrRecord;
     if (record == null) return _buildHome();
+    final saving = _savingQrAddresses.contains(record.link.address);
+    final copying = _copyingLinkAddresses.contains(record.link.address);
     return PaymentLinkShareQrDesktopView(
       shareCardKey: _shareQrCardKey,
       artwork: PaymentLinkCardArtwork.fromProtocolId(
@@ -2455,19 +2478,24 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       ),
       qrData: record.link.toUri().toString(),
       onBack: () => _showPage(PaymentLinksLocalPage.home),
-      onSaveQr: _operationInProgress ? null : () => _savePaymentLinkQr(record),
-      onCopyLink: _operationInProgress
+      onSaveQr: _operationInProgress || saving
+          ? null
+          : () => _savePaymentLinkQr(record),
+      onCopyLink: _operationInProgress || copying
           ? null
           : () => _copyPaymentLink(record.link),
-      saveLabel: _operationInProgress ? 'Saving...' : 'Save QR code',
-      copyLabel: _operationInProgress ? 'Copying...' : 'Copy link',
+      saveLabel: saving ? 'Saving...' : 'Save QR code',
+      copyLabel: copying ? 'Copying...' : 'Copy link',
     );
   }
 
   Future<void> _savePaymentLinkQr(PaymentLinkRecoveryRecord record) async {
-    if (_operationInProgress) return;
+    if (_operationInProgress ||
+        _savingQrAddresses.contains(record.link.address)) {
+      return;
+    }
     final pixelRatio = max(3.0, View.of(context).devicePixelRatio);
-    setState(() => _operationInProgress = true);
+    setState(() => _savingQrAddresses.add(record.link.address));
     try {
       final png = await capturePaymentLinkQr(
         _shareQrCardKey,
@@ -2493,7 +2521,9 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     } catch (_) {
       if (mounted) _showError('Gift card QR could not be saved.');
     } finally {
-      if (mounted) setState(() => _operationInProgress = false);
+      if (mounted) {
+        setState(() => _savingQrAddresses.remove(record.link.address));
+      }
     }
   }
 
@@ -2502,9 +2532,12 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     Uint8List png,
     Rect origin,
   ) async {
-    if (!mounted || _operationInProgress) return;
+    if (!mounted ||
+        _operationInProgress ||
+        !_sharingQrAddresses.add(link.address)) {
+      return;
+    }
     final share = ref.read(paymentLinkQrShareHandlerProvider);
-    setState(() => _operationInProgress = true);
     try {
       final shared = await share(png: png, sharePositionOrigin: origin);
       if (!shared) return;
@@ -2517,7 +2550,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         }
       }
     } finally {
-      if (mounted) setState(() => _operationInProgress = false);
+      _sharingQrAddresses.remove(link.address);
     }
   }
 
@@ -2587,7 +2620,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     );
   }
 
-  Widget _buildAmount() {
+  Widget _buildAmount({required String? fiatText, required bool fiatLoading}) {
     final maxAmountText = _maxAmountText;
     return PaymentLinkAmountDesktopView(
       state: _amountVisualState,
@@ -2598,6 +2631,8 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         amountEditorKey: const ValueKey('payment_link_amount_editor'),
         amountInputFormatters: [_amountFormatter],
         onAmountChanged: _handleAmountChanged,
+        supportingText: fiatText,
+        supportingLoading: fiatLoading,
         maxAmountText: maxAmountText,
         onUseMax: maxAmountText == null ? null : _useMaxAmount,
         showMaxButton: true,
@@ -2651,7 +2686,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         showBack: _messageEditorRevealed,
         front: staticMessageCard,
         back: messageEditorCard,
-        onAnimationEnd: _focusMessageEditorAfterFlip,
+        onVisibleSideChanged: _focusVisibleMessageEditor,
       ),
       onBack: () => _showPage(PaymentLinksLocalPage.home),
       onSkip: _skipMessage,
@@ -2665,11 +2700,13 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     );
   }
 
-  Widget _buildReview() {
+  Widget _buildReview({required String? fiatText, required bool fiatLoading}) {
     final message = _messageController.text.trim();
     final front = PaymentLinkGiftCard(
       artwork: _selectedArtwork,
       amountText: _amountController.text,
+      supportingText: fiatText,
+      supportingLoading: fiatLoading,
       showCaret: false,
       onTap: message.isEmpty
           ? null
@@ -2726,25 +2763,24 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         _fundingProgressByAddress[link.address] ??
         const PaymentLinkFundingProgress(confirmationCount: 0);
     final readyToShare = fundingProgress.isReady;
+    final copying = _copyingLinkAddresses.contains(link.address);
+    final front = PaymentLinkGiftCard(
+      artwork: artwork,
+      amountText: amountText,
+      supportingText: _savedCardFiatText(link),
+      showCaret: false,
+    );
     final card = hasMessage
         ? PaymentLinkCardFlip(
             showBack: _readyShowsBack,
-            front: PaymentLinkGiftCard(
-              artwork: artwork,
-              amountText: amountText,
-              showCaret: false,
-            ),
+            front: front,
             back: PaymentLinkGiftCard(
               artwork: artwork,
               showBack: true,
               message: message,
             ),
           )
-        : PaymentLinkGiftCard(
-            artwork: artwork,
-            amountText: amountText,
-            showCaret: false,
-          );
+        : front;
     return PaymentLinkReadyDesktopView(
       state: !readyToShare
           ? PaymentLinkReadyVisualState.waiting
@@ -2752,7 +2788,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       card: card,
       decoration: const PaymentLinkConfetti(),
       onBack: () => _showPage(PaymentLinksLocalPage.home),
-      onCopy: !readyToShare || _operationInProgress
+      onCopy: !readyToShare || _operationInProgress || copying
           ? null
           : () => _copyPaymentLink(link),
       onCardTap: readyToShare && hasMessage
@@ -2760,12 +2796,12 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
           : null,
       onReturnHome: () => _showPage(PaymentLinksLocalPage.home),
       waitingStatusLabel: _estimatedLinkWaitLabel(fundingProgress),
-      copyLabel: _operationInProgress ? 'Copying...' : 'Copy link',
+      copyLabel: copying ? 'Copying...' : 'Copy link',
     );
   }
 
-  String? get _receivedFiatText {
-    final snapshot = _receivedLink?.presentation?.fiatSnapshot;
+  String? _savedCardFiatText(VizorPaymentLink? link) {
+    final snapshot = link?.presentation?.fiatSnapshot;
     if (snapshot == null ||
         !ref.watch(swapFeatureEnabledProvider) ||
         ref.watch(privacyModeProvider)) {
@@ -2785,7 +2821,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     final front = PaymentLinkGiftCard(
       artwork: artwork,
       amountText: formatZecAmount(link.amountZatoshi),
-      supportingText: _receivedFiatText,
+      supportingText: _savedCardFiatText(link),
       showCaret: false,
     );
     final card = hasMessage

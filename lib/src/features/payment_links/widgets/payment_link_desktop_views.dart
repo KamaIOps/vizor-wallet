@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -439,67 +441,132 @@ class PaymentLinkReviewDesktopView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PaymentLinkWizardPane(
-      title: title,
-      subtitle: subtitle,
-      currentStep: 2,
-      backLabel: backLabel,
-      onBack: onBack,
-      onStepSelected: onStepSelected,
-      childSpacing: _wizardCardTopSpacing,
-      action: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            key: const ValueKey('payment_link_review_summary'),
-            width: 320,
-            height: 136,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
-              child: Column(
-                children: [
-                  SizedBox(
-                    height: AppSpacing.base,
-                    child: _ReviewAmountRow(
-                      label: 'Card amount',
-                      value: cardAmountText,
+    // Preserve the standard window's geometry while letting scaled text grow
+    // the content. The card and summary must never compete for the same space.
+    return LayoutBuilder(
+      builder: (context, constraints) => PaymentLinkPane(
+        backLabel: backLabel,
+        onBack: onBack,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: 420,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: math.max(640, constraints.maxHeight - 64),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.s,
+                  0,
+                  AppSpacing.s,
+                  AppSpacing.sm,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodyLarge.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: context.colors.text.accent,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          subtitle,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: context.colors.text.secondary,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        PaymentLinkWizardStepper(
+                          currentStep: 2,
+                          onStepSelected: onStepSelected,
+                        ),
+                        const SizedBox(height: AppSpacing.md + 53),
+                        card,
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
                     ),
-                  ),
-                  SizedBox(
-                    height: AppSpacing.base,
-                    child: _ReviewAmountRow(
-                      label: kPaymentLinkCardFeeLabel,
-                      value: cardFeeText,
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          key: const ValueKey('payment_link_review_summary'),
+                          width: 320,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.s,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: AppSpacing.base,
+                                  ),
+                                  child: _ReviewAmountRow(
+                                    label: 'Card amount',
+                                    value: cardAmountText,
+                                  ),
+                                ),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: AppSpacing.base,
+                                  ),
+                                  child: _ReviewAmountRow(
+                                    label: kPaymentLinkCardFeeLabel,
+                                    value: cardFeeText,
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: AppSpacing.base,
+                                  ),
+                                  child: _ReviewAmountRow(
+                                    label: kPaymentLinkTotalDeductedLabel,
+                                    value: totalAmountText,
+                                    emphasized: true,
+                                    showHelp: true,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        AppButton(
+                          key: const ValueKey(
+                            'payment_link_confirm_create_button',
+                          ),
+                          onPressed: onConfirm,
+                          minWidth: 196,
+                          size: AppButtonSize.large,
+                          leading: const Center(
+                            child: AppIcon(
+                              AppIcons.giftCard,
+                              size: AppIconSize.medium,
+                            ),
+                          ),
+                          child: Text(confirmLabel),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  SizedBox(
-                    height: AppSpacing.base,
-                    child: _ReviewAmountRow(
-                      label: kPaymentLinkTotalDeductedLabel,
-                      value: totalAmountText,
-                      emphasized: true,
-                      showHelp: true,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          AppButton(
-            key: const ValueKey('payment_link_confirm_create_button'),
-            onPressed: onConfirm,
-            minWidth: 196,
-            size: AppButtonSize.large,
-            leading: const Center(
-              child: AppIcon(AppIcons.giftCard, size: AppIconSize.medium),
-            ),
-            child: Text(confirmLabel),
-          ),
-        ],
+        ),
       ),
-      child: card,
     );
   }
 }
@@ -1273,6 +1340,8 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
     this.onPaste,
     this.onClearClipboard,
     this.loadingPlaceholder,
+    this.statusContent,
+    this.secondaryAction,
     this.backLabel = 'My Cards',
     this.title,
     this.subtitle = kPaymentLinkRedeemSubtitle,
@@ -1288,6 +1357,8 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
   final VoidCallback? onPaste;
   final VoidCallback? onClearClipboard;
   final Widget? loadingPlaceholder;
+  final Widget? statusContent;
+  final Widget? secondaryAction;
   final String backLabel;
   final String? title;
   final String subtitle;
@@ -1307,94 +1378,115 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
         alignment: Alignment.topCenter,
         child: SizedBox(
           width: 396,
-          height: 624,
-          child: Stack(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Positioned(
-                top: 94,
-                left: 0,
-                right: 0,
-                child: Text(
-                  title ??
-                      (loading
-                          ? kPaymentLinkCheckingLabel
-                          : kPaymentLinkRedeemTheCardTitle),
-                  textAlign: TextAlign.center,
-                  style: AppTypography.headlineLarge.copyWith(
-                    color: context.colors.text.accent,
-                  ),
+              const SizedBox(height: 94),
+              Text(
+                title ??
+                    (loading
+                        ? kPaymentLinkCheckingLabel
+                        : kPaymentLinkRedeemTheCardTitle),
+                textAlign: TextAlign.center,
+                style: AppTypography.headlineLarge.copyWith(
+                  color: context.colors.text.accent,
                 ),
               ),
-              Positioned(
-                top: 179,
-                left: 18,
-                child: loading
-                    ? loadingPlaceholder ?? const PaymentLinkLoadingCard()
-                    : PaymentLinkDashedDropZone(
-                        child: invalid
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    invalidTitle,
-                                    textAlign: TextAlign.center,
-                                    style: AppTypography.bodyMediumStrong
-                                        .copyWith(
-                                          color:
-                                              context.colors.text.destructive,
-                                        ),
-                                  ),
-                                  const SizedBox(height: AppSpacing.xs),
-                                  Text(
-                                    invalidSubtitle,
-                                    textAlign: TextAlign.center,
-                                    style: AppTypography.bodyMedium.copyWith(
-                                      color: context.colors.text.secondary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: AppSpacing.sm),
-                                  PaymentLinkPasteButton(
-                                    label: pasteLabel,
-                                    onPressed: onPaste,
-                                  ),
-                                ],
-                              )
-                            : PaymentLinkPasteButton(
-                                label: pasteLabel,
-                                onPressed: onPaste,
+              const SizedBox(height: 52),
+              SizedBox(
+                height: 445,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 0,
+                      left: 18,
+                      child: loading
+                          ? loadingPlaceholder ?? const PaymentLinkLoadingCard()
+                          : PaymentLinkDashedDropZone(
+                              child:
+                                  statusContent ??
+                                  (invalid
+                                      ? Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              invalidTitle,
+                                              textAlign: TextAlign.center,
+                                              style: AppTypography
+                                                  .bodyMediumStrong
+                                                  .copyWith(
+                                                    color: context
+                                                        .colors
+                                                        .text
+                                                        .destructive,
+                                                  ),
+                                            ),
+                                            const SizedBox(
+                                              height: AppSpacing.xs,
+                                            ),
+                                            Text(
+                                              invalidSubtitle,
+                                              textAlign: TextAlign.center,
+                                              style: AppTypography.bodyMedium
+                                                  .copyWith(
+                                                    color: context
+                                                        .colors
+                                                        .text
+                                                        .secondary,
+                                                  ),
+                                            ),
+                                            const SizedBox(
+                                              height: AppSpacing.sm,
+                                            ),
+                                            PaymentLinkPasteButton(
+                                              label: pasteLabel,
+                                              onPressed: onPaste,
+                                            ),
+                                          ],
+                                        )
+                                      : PaymentLinkPasteButton(
+                                          label: pasteLabel,
+                                          onPressed: onPaste,
+                                        )),
+                            ),
+                    ),
+                    Positioned(
+                      top: 283,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 260),
+                          child: Text(
+                            subtitle,
+                            textAlign: TextAlign.center,
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: context.colors.text.secondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (secondaryAction != null || invalid)
+                      Positioned(
+                        top: secondaryAction != null
+                            ? PaymentLinkGiftCard.height + AppSpacing.md
+                            : 366,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child:
+                              secondaryAction ??
+                              PaymentLinkTextAction(
+                                label: clearLabel,
+                                onTap: onClearClipboard,
+                                leading: const AppIcon(AppIcons.trash),
                               ),
+                        ),
                       ),
-              ),
-              Positioned(
-                top: 462,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 260),
-                    child: Text(
-                      subtitle,
-                      textAlign: TextAlign.center,
-                      style: AppTypography.bodyMedium.copyWith(
-                        color: context.colors.text.secondary,
-                      ),
-                    ),
-                  ),
+                  ],
                 ),
               ),
-              if (invalid)
-                Positioned(
-                  top: 545,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: PaymentLinkTextAction(
-                      label: clearLabel,
-                      onTap: onClearClipboard,
-                      leading: const AppIcon(AppIcons.trash),
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

@@ -808,10 +808,11 @@ const broadcastedClaimResult = PaymentLinkClaimResult(
 );
 
 class FakePaymentLinkClipboard implements PaymentLinkClipboard {
-  FakePaymentLinkClipboard({this.text, this.readCompleter});
+  FakePaymentLinkClipboard({this.text, this.readCompleter, this.copyCompleter});
 
   String? text;
   final Completer<String?>? readCompleter;
+  final Completer<void>? copyCompleter;
   final List<String> copiedSecrets = [];
   int clearCalls = 0;
 
@@ -824,6 +825,7 @@ class FakePaymentLinkClipboard implements PaymentLinkClipboard {
   @override
   Future<void> copySecret(String text) async {
     copiedSecrets.add(text);
+    await copyCompleter?.future;
     this.text = text;
   }
 
@@ -832,12 +834,15 @@ class FakePaymentLinkClipboard implements PaymentLinkClipboard {
 }
 
 class FakePaymentLinkQrImageSaver implements PaymentLinkQrImageSaver {
+  FakePaymentLinkQrImageSaver({this.saveCompleter});
+
+  final Completer<bool>? saveCompleter;
   final List<Uint8List> savedImages = [];
 
   @override
   Future<bool> savePng(Uint8List pngBytes) async {
     savedImages.add(Uint8List.fromList(pngBytes));
-    return true;
+    return await saveCompleter?.future ?? true;
   }
 }
 

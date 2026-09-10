@@ -60,6 +60,8 @@ class PaymentLinksMobileBody extends StatelessWidget {
     required this.reviewShowsBack,
     required this.hasPendingFundingMetadata,
     required this.readyLink,
+    required this.readyFiatText,
+    required this.readyCopyInProgress,
     required this.fundingProgressByAddress,
     required this.readyShowsBack,
     required this.receivedLink,
@@ -138,6 +140,8 @@ class PaymentLinksMobileBody extends StatelessWidget {
   final bool hasPendingFundingMetadata;
 
   final VizorPaymentLink? readyLink;
+  final String? readyFiatText;
+  final bool readyCopyInProgress;
   final Map<String, PaymentLinkFundingProgress> fundingProgressByAddress;
   final bool readyShowsBack;
 
@@ -327,6 +331,8 @@ class PaymentLinksMobileBody extends StatelessWidget {
       cardWidth: kPaymentLinkMobileCardWidth,
       cardHeight: kPaymentLinkMobileCardHeight,
       amountText: amountController.text,
+      supportingText: amountFiatText,
+      supportingLoading: amountFiatLoading,
       showCaret: false,
       onTap: message.isEmpty ? null : () => onReviewShowsBackChanged(true),
       semanticLabel: message.isEmpty ? null : 'Reveal gift card message',
@@ -388,6 +394,7 @@ class PaymentLinksMobileBody extends StatelessWidget {
       cardWidth: kPaymentLinkMobileCardWidth,
       cardHeight: kPaymentLinkMobileCardHeight,
       amountText: formatZecAmount(link.amountZatoshi),
+      supportingText: readyFiatText,
       showCaret: false,
     );
     final card = message.isEmpty
@@ -414,10 +421,12 @@ class PaymentLinksMobileBody extends StatelessWidget {
           ? const PaymentLinkConfetti()
           : null,
       onHome: () => onShowPage(PaymentLinksLocalPage.home),
-      onCopy: ready && !operationInProgress ? () => onCopyLink(link) : null,
+      onCopy: ready && !operationInProgress && !readyCopyInProgress
+          ? () => onCopyLink(link)
+          : null,
       onCardTap: ready && message.isNotEmpty ? onToggleReadyBack : null,
       waitingStatusLabel: linkWaitLabel(progress),
-      copyLabel: operationInProgress ? 'Copying...' : 'Copy link',
+      copyLabel: readyCopyInProgress ? 'Copying...' : 'Copy link',
     );
   }
 
