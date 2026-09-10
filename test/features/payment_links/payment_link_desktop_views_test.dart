@@ -1255,13 +1255,24 @@ void main() {
     );
     expect(
       tester.getTopLeft(find.byType(PaymentLinkGiftCard)),
-      const Offset(492, 251),
+      const Offset(492, 250),
     );
     final reviewSummary = find.byKey(
       const ValueKey('payment_link_review_summary'),
     );
     expect(tester.getTopLeft(reviewSummary), const Offset(512, 492));
     expect(tester.getSize(reviewSummary), const Size(320, 136));
+    expect(
+      tester.getTopLeft(
+        find.byKey(const ValueKey('payment_link_confirm_create_button')),
+      ),
+      const Offset(574, 652),
+    );
+    await tester.pumpAndSettle();
+    final reviewScroll = tester.widget<SingleChildScrollView>(
+      find.byKey(const ValueKey('app_pane_scroll_view')),
+    );
+    expect(reviewScroll.controller!.position.maxScrollExtent, 0);
 
     await _pump(
       tester,

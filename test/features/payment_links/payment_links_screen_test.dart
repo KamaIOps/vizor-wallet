@@ -417,6 +417,10 @@ void main() {
     expect(loading, findsNothing);
     expect(source.requests, hasLength(1));
     await tester.pumpAndSettle();
+    final scroll = tester.widget<SingleChildScrollView>(
+      find.byKey(const ValueKey('app_pane_scroll_view')),
+    );
+    expect(scroll.controller!.position.maxScrollExtent, 0);
 
     await tester.pump(zecMarketDataRefreshInterval);
     await tester.pump();
