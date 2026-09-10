@@ -1927,31 +1927,35 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
 
     final pricingEnabled = ref.watch(swapFeatureEnabledProvider);
     final amount = parseZecAmount(_amountController.text);
-    // Retain the quote through Review so submission can capture it once.
+    // Keep the price subscription through amount edits and Review so clearing
+    // the input does not restart the lookup or flash its loading state.
     final marketData =
         pricingEnabled &&
-            amount != null &&
-            amount > BigInt.zero &&
             (_page == PaymentLinksLocalPage.amount ||
                 _page == PaymentLinksLocalPage.message ||
                 _page == PaymentLinksLocalPage.review)
         ? ref.watch(zecHomeMarketDataStateProvider)
         : null;
 
+    final amountFiatText = !pricingEnabled || amount == null
+        ? null
+        : amount == BigInt.zero
+        ? r'$0.00'
+        : fiatTextForZatoshi(
+            amount,
+            zecUsdUnitPrice: marketData?.displayData?.usdPrice,
+          );
+    final amountFiatLoading =
+        amount != null &&
+        amount > BigInt.zero &&
+        (marketData?.isLoading ?? false);
+    final amountFiatSupportingText =
+        amountFiatText ??
+        (pricingEnabled && amount != null && !amountFiatLoading
+            ? 'Fiat unavailable'
+            : null);
+
     if (kAppFormFactor == AppFormFactor.mobile) {
-      final amountFiatText = !pricingEnabled || amount == null
-          ? null
-          : amount == BigInt.zero
-          ? r'$0.00'
-          : fiatTextForZatoshi(
-              amount,
-              zecUsdUnitPrice: marketData?.displayData?.usdPrice,
-            );
-      final amountFiatLoading =
-          amount != null &&
-          amount > BigInt.zero &&
-          amountFiatText == null &&
-          (marketData?.isLoading ?? false);
       final mobileKeystoneRequest = _keystoneFundingRequest;
       return PaymentLinksMobileBody(
         page: _page,
@@ -1980,11 +1984,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         amountController: _amountController,
         amountFocusNode: _amountFocusNode,
         amountInputFormatters: [_amountFormatter],
-        amountFiatText:
-            amountFiatText ??
-            (pricingEnabled && amount != null && !amountFiatLoading
-                ? 'Fiat unavailable'
-                : null),
+        amountFiatText: amountFiatSupportingText,
         amountFiatLoading: amountFiatLoading,
         maxAmountText: _maxAmountText,
         canContinueAmount: _canContinueAmount,
@@ -1998,10 +1998,11 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         reviewShowsBack: _reviewShowsBack,
         hasPendingFundingMetadata: _pendingFundingMetadata != null,
         readyLink: _readyLink,
+        readyFiatText: _savedCardFiatText(_readyLink),
         fundingProgressByAddress: _fundingProgressByAddress,
         readyShowsBack: _readyShowsBack,
         receivedLink: _receivedLink,
-        receivedFiatText: _receivedFiatText,
+        receivedFiatText: _savedCardFiatText(_receivedLink),
         receivedShowsBack: _receivedShowsBack,
         receivedClaimSession: _receivedClaimSession,
         linkWaitLabel: _estimatedLinkWaitLabel,
@@ -2035,7 +2036,10 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       );
     }
 
-    final currentPage = _buildCurrentPage();
+    final currentPage = _buildCurrentPage(
+      amountFiatText: amountFiatSupportingText,
+      amountFiatLoading: amountFiatLoading,
+    );
     final keystoneRequest = _keystoneFundingRequest;
     final longSyncLink = _longSyncLink;
     final pane = keystoneRequest != null
@@ -2079,12 +2083,21 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     );
   }
 
-  Widget _buildCurrentPage() {
+  Widget _buildCurrentPage({
+    required String? amountFiatText,
+    required bool amountFiatLoading,
+  }) {
     return switch (_page) {
       PaymentLinksLocalPage.home => _buildHome(),
-      PaymentLinksLocalPage.amount => _buildAmount(),
+      PaymentLinksLocalPage.amount => _buildAmount(
+        fiatText: amountFiatText,
+        fiatLoading: amountFiatLoading,
+      ),
       PaymentLinksLocalPage.message => _buildMessage(),
-      PaymentLinksLocalPage.review => _buildReview(),
+      PaymentLinksLocalPage.review => _buildReview(
+        fiatText: amountFiatText,
+        fiatLoading: amountFiatLoading,
+      ),
       PaymentLinksLocalPage.ready => _buildReady(),
       PaymentLinksLocalPage.shareQr => _buildShareQr(),
       PaymentLinksLocalPage.redeem =>
@@ -2479,7 +2492,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     );
   }
 
-  Widget _buildAmount() {
+  Widget _buildAmount({required String? fiatText, required bool fiatLoading}) {
     final maxAmountText = _maxAmountText;
     return PaymentLinkAmountDesktopView(
       state: _amountVisualState,
@@ -2490,6 +2503,8 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         amountEditorKey: const ValueKey('payment_link_amount_editor'),
         amountInputFormatters: [_amountFormatter],
         onAmountChanged: _handleAmountChanged,
+        supportingText: fiatText,
+        supportingLoading: fiatLoading,
         maxAmountText: maxAmountText,
         onUseMax: maxAmountText == null ? null : _useMaxAmount,
         showMaxButton: true,
@@ -2557,11 +2572,13 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     );
   }
 
-  Widget _buildReview() {
+  Widget _buildReview({required String? fiatText, required bool fiatLoading}) {
     final message = _messageController.text.trim();
     final front = PaymentLinkGiftCard(
       artwork: _selectedArtwork,
       amountText: _amountController.text,
+      supportingText: fiatText,
+      supportingLoading: fiatLoading,
       showCaret: false,
       onTap: message.isEmpty
           ? null
@@ -2618,25 +2635,23 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         _fundingProgressByAddress[link.address] ??
         const PaymentLinkFundingProgress(confirmationCount: 0);
     final readyToShare = fundingProgress.isReady;
+    final front = PaymentLinkGiftCard(
+      artwork: artwork,
+      amountText: amountText,
+      supportingText: _savedCardFiatText(link),
+      showCaret: false,
+    );
     final card = hasMessage
         ? PaymentLinkCardFlip(
             showBack: _readyShowsBack,
-            front: PaymentLinkGiftCard(
-              artwork: artwork,
-              amountText: amountText,
-              showCaret: false,
-            ),
+            front: front,
             back: PaymentLinkGiftCard(
               artwork: artwork,
               showBack: true,
               message: message,
             ),
           )
-        : PaymentLinkGiftCard(
-            artwork: artwork,
-            amountText: amountText,
-            showCaret: false,
-          );
+        : front;
     return PaymentLinkReadyDesktopView(
       state: !readyToShare
           ? PaymentLinkReadyVisualState.waiting
@@ -2656,8 +2671,8 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     );
   }
 
-  String? get _receivedFiatText {
-    final snapshot = _receivedLink?.presentation?.fiatSnapshot;
+  String? _savedCardFiatText(VizorPaymentLink? link) {
+    final snapshot = link?.presentation?.fiatSnapshot;
     if (snapshot == null ||
         !ref.watch(swapFeatureEnabledProvider) ||
         ref.watch(privacyModeProvider)) {
@@ -2677,7 +2692,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     final front = PaymentLinkGiftCard(
       artwork: artwork,
       amountText: formatZecAmount(link.amountZatoshi),
-      supportingText: _receivedFiatText,
+      supportingText: _savedCardFiatText(link),
       showCaret: false,
     );
     final card = hasMessage

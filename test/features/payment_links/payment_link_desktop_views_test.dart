@@ -569,6 +569,18 @@ void main() {
       await tester.pump();
 
       expect(find.text(r'$680.00'), findsOneWidget);
+      for (final amount in ['3', '0', '2.5', '', '2.5']) {
+        await tester.enterText(
+          find.byKey(const ValueKey('payment_link_interactive_amount_editor')),
+          amount,
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('payment_link_fiat_loading_placeholder')),
+          findsNothing,
+        );
+        if (amount == '2.5') expect(find.text(r'$680.00'), findsOneWidget);
+      }
       expect(
         find.byKey(const ValueKey('payment_link_fiat_loading_placeholder')),
         findsNothing,

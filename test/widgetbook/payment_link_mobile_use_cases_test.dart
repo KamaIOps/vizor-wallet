@@ -231,6 +231,17 @@ void main() {
     await tester.pump(kMobilePaymentLinkPreviewFiatDelay);
     expect(find.text(r'$1,210.40'), findsOneWidget);
 
+    for (final amount in ['0', '2', '', '4.45']) {
+      await tester.enterText(amountEditor, amount);
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('payment_link_fiat_loading_placeholder')),
+        findsNothing,
+      );
+      if (amount == '2') expect(find.text(r'$544.00'), findsOneWidget);
+    }
+    expect(find.text(r'$1,210.40'), findsOneWidget);
+
     final amountContinue = find.byKey(
       const ValueKey('payment_link_mobile_amount_continue_button'),
     );
@@ -262,6 +273,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('Review a Card'), findsOneWidget);
+    expect(find.text(r'$1,210.40'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('payment_link_fiat_loading_placeholder')),
+      findsNothing,
+    );
     expect(find.text('Card amount'), findsOneWidget);
     expect(find.text('4.49 ZEC'), findsOneWidget);
     expect(tester.takeException(), isNull);

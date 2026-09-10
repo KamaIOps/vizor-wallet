@@ -26,11 +26,122 @@ import 'package:zcash_wallet/src/features/keystone/widgets/keystone_signing_moda
 import 'package:zcash_wallet/src/features/payment_links/widgets/payment_link_gift_card.dart';
 import 'package:zcash_wallet/src/features/payment_links/widgets/payment_link_confetti.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
+import 'package:zcash_wallet/src/providers/zec_price_change_provider.dart';
 
 import '../../fakes/fake_sync_notifier.dart';
 import '../../support/payment_links_screen_support.dart';
 
 void main() {
+  for (final settings in [
+    (true, true, 100.0),
+    (true, false, 100.0),
+    (false, false, 100.0),
+    (true, false, null),
+  ]) {
+    testWidgets(
+      'completed card keeps saved fiat through waiting and sharing $settings',
+      (tester) async {
+        final source = _PendingCardPrice();
+        source.result.complete(
+          settings.$3 == null ? null : ZecMarketData(usdPrice: settings.$3!),
+        );
+        final operations = FakePaymentLinkOperations(
+          fundingBroadcastAcceptedOnCreate: false,
+          fundingConfirmationCount: 0,
+        );
+        final clipboard = FakePaymentLinkClipboard();
+        await pumpPaymentLinksScreen(
+          tester,
+          operations: operations,
+          clipboard: clipboard,
+          marketDataSource: source,
+          pricingEnabled: settings.$1,
+        );
+        await tester.tap(find.text('Create new card'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('payment_link_amount_editor')),
+          '1.25',
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('payment_link_amount_continue_button')),
+        );
+        await tester.pumpAndSettle();
+        if (settings.$2) {
+          await tester.tap(
+            find.bySemanticsLabel('Start writing gift card message'),
+          );
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('payment_link_message_editor')),
+            'For you',
+          );
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(
+          find.text(settings.$2 ? 'Confirm & review' : 'Skip message'),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Create card'));
+        await tester.pumpAndSettle();
+
+        final hasFiat = settings.$1 && settings.$3 != null;
+        void expectSavedFiat() {
+          expect(
+            find.text(r'$125.00'),
+            hasFiat ? findsOneWidget : findsNothing,
+          );
+          expect(find.text('Fiat unavailable'), findsNothing);
+          expect(
+            find.byKey(const ValueKey('payment_link_fiat_loading_placeholder')),
+            findsNothing,
+          );
+        }
+
+        expectSavedFiat();
+        expect(find.text('Copy link'), findsNothing);
+        operations.fundingConfirmationCount = 1;
+        await tester.pump(const Duration(seconds: 10));
+        await tester.pumpAndSettle();
+        expectSavedFiat();
+        expect(find.text('Copy link'), findsOneWidget);
+        if (settings.$2) {
+          await tester.tap(find.bySemanticsLabel('Flip gift card'));
+          await tester.pumpAndSettle();
+          expect(find.text('For you'), findsOneWidget);
+          await tester.tap(find.bySemanticsLabel('Flip gift card'));
+          await tester.pumpAndSettle();
+          expectSavedFiat();
+        }
+        await tester.pump(zecMarketDataRefreshInterval);
+        await tester.pumpAndSettle();
+        expectSavedFiat();
+        expect(source.fetchCount, settings.$1 ? 1 : 0);
+        await tester.tap(find.text('Copy link'));
+        await tester.pumpAndSettle();
+        expect(
+          VizorPaymentLink.parse(
+            clipboard.copiedSecrets.single,
+          ).presentation?.fiatSnapshot?.amount,
+          hasFiat ? 125 : null,
+        );
+        await tester.tap(find.text('Return home'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.bySemanticsLabel('Show gift card QR code'));
+        await tester.pumpAndSettle();
+        final qr = tester.widget<PaymentLinkQrShareCard>(
+          find.byType(PaymentLinkQrShareCard),
+        );
+        expect(
+          VizorPaymentLink.parse(qr.qrData).presentation?.fiatSnapshot?.amount,
+          hasFiat ? 125 : null,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'claimed elsewhere can be hidden and restored without another submission',
     (tester) async {
@@ -225,6 +336,212 @@ void main() {
   }
 
   setUpAll(loadPaymentLinksTestFonts);
+
+  testWidgets(
+    'amount screen shows fiat loading and the latest converted value',
+    (tester) async {
+      final source = _PendingCardPrice();
+      await pumpPaymentLinksScreen(tester, marketDataSource: source);
+      await tester.tap(find.text('Create new card'));
+      await tester.pumpAndSettle();
+      final editor = find.byKey(const ValueKey('payment_link_amount_editor'));
+      final loading = find.byKey(
+        const ValueKey('payment_link_fiat_loading_placeholder'),
+      );
+      expect(loading, findsNothing);
+
+      await tester.enterText(editor, '4.45');
+      await tester.pump();
+      expect(loading, findsOneWidget);
+      await tester.enterText(editor, '2');
+      await tester.pump();
+      source.result.complete(const ZecMarketData(usdPrice: 100));
+      await tester.pumpAndSettle();
+      final fiat = find.text(r'$200.00');
+      expect(fiat, findsOneWidget);
+      expect(find.text(r'$445.00'), findsNothing);
+      expect(loading, findsNothing);
+      expect(
+        tester.getBottomLeft(fiat).dy,
+        lessThan(tester.getTopLeft(editor).dy),
+      );
+
+      await tester.enterText(editor, '3');
+      await tester.pumpAndSettle();
+      expect(find.text(r'$300.00'), findsOneWidget);
+      expect(fiat, findsNothing);
+
+      await tester.enterText(editor, '');
+      await tester.pumpAndSettle();
+      expect(find.text(r'$300.00'), findsNothing);
+      expect(find.text('Fiat unavailable'), findsNothing);
+      expect(loading, findsNothing);
+
+      await tester.enterText(editor, '0');
+      await tester.pumpAndSettle();
+      expect(find.text(r'$0.00'), findsOneWidget);
+      for (final amount in ['2', '', '2', '0', '2']) {
+        await tester.enterText(editor, amount);
+        await tester.pump();
+        expect(loading, findsNothing);
+        if (amount == '2') expect(find.text(r'$200.00'), findsOneWidget);
+        expect(source.fetchCount, 1);
+      }
+    },
+  );
+
+  testWidgets('review retains fiat and only shimmers on a price refresh', (
+    tester,
+  ) async {
+    final source = _RefreshingCardPrice();
+    await pumpPaymentLinksScreen(tester, marketDataSource: source);
+    await tester.tap(find.text('Create new card'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('payment_link_amount_editor')),
+      '2',
+    );
+    await tester.pump();
+    source.requests.single.complete(const ZecMarketData(usdPrice: 100));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('payment_link_amount_continue_button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Skip message'));
+    await tester.pump();
+    final loading = find.byKey(
+      const ValueKey('payment_link_fiat_loading_placeholder'),
+    );
+    expect(find.text(r'$200.00'), findsOneWidget);
+    expect(loading, findsNothing);
+    expect(source.requests, hasLength(1));
+    await tester.pumpAndSettle();
+
+    await tester.pump(zecMarketDataRefreshInterval);
+    await tester.pump();
+    expect(source.requests, hasLength(2));
+    expect(loading, findsOneWidget);
+    source.requests.last.complete(const ZecMarketData(usdPrice: 120));
+    await tester.pumpAndSettle();
+    expect(find.text(r'$240.00'), findsOneWidget);
+    expect(loading, findsNothing);
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('payment_link_amount_editor')),
+      '3',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('payment_link_amount_continue_button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Skip message'));
+    await tester.pump();
+    expect(find.text(r'$360.00'), findsOneWidget);
+    expect(loading, findsNothing);
+    expect(source.requests, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('fiat fetch failure keeps the amount screen usable', (
+    tester,
+  ) async {
+    final source = _PendingCardPrice();
+    await pumpPaymentLinksScreen(tester, marketDataSource: source);
+    await tester.tap(find.text('Create new card'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('payment_link_amount_editor')),
+      '2',
+    );
+    await tester.pump();
+    source.result.complete(null);
+    await tester.pumpAndSettle();
+    expect(find.text('Fiat unavailable'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('payment_link_fiat_loading_placeholder')),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<AppButton>(
+            find.byKey(const ValueKey('payment_link_amount_continue_button')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('only a price refresh restarts the amount skeleton', (
+    tester,
+  ) async {
+    final source = _RefreshingCardPrice();
+    await pumpPaymentLinksScreen(tester, marketDataSource: source);
+    await tester.tap(find.text('Create new card'));
+    await tester.pumpAndSettle();
+    final editor = find.byKey(const ValueKey('payment_link_amount_editor'));
+    final loading = find.byKey(
+      const ValueKey('payment_link_fiat_loading_placeholder'),
+    );
+    await tester.enterText(editor, '2');
+    await tester.pump();
+    source.requests.single.complete(const ZecMarketData(usdPrice: 100));
+    await tester.pumpAndSettle();
+    expect(find.text(r'$200.00'), findsOneWidget);
+    expect(loading, findsNothing);
+
+    await tester.pump(zecMarketDataRefreshInterval);
+    await tester.pump();
+    expect(source.requests, hasLength(2));
+    expect(loading, findsOneWidget);
+    expect(find.text(r'$200.00'), findsNothing);
+    await tester.enterText(editor, '3');
+    await tester.pump();
+    expect(source.requests, hasLength(2));
+    source.requests.last.complete(const ZecMarketData(usdPrice: 120));
+    await tester.pumpAndSettle();
+    expect(find.text(r'$360.00'), findsOneWidget);
+    expect(loading, findsNothing);
+
+    await tester.pump(zecMarketDataRefreshInterval);
+    await tester.pump();
+    expect(source.requests, hasLength(3));
+    expect(loading, findsOneWidget);
+    source.requests.last.complete(null);
+    await tester.pumpAndSettle();
+    expect(find.text(r'$360.00'), findsOneWidget);
+    expect(loading, findsNothing);
+  });
+
+  testWidgets('disabled pricing hides fiat and skips the price request', (
+    tester,
+  ) async {
+    final source = _PendingCardPrice();
+    await pumpPaymentLinksScreen(
+      tester,
+      marketDataSource: source,
+      pricingEnabled: false,
+    );
+    await tester.tap(find.text('Create new card'));
+    await tester.pumpAndSettle();
+    for (final amount in ['0', '2']) {
+      await tester.enterText(
+        find.byKey(const ValueKey('payment_link_amount_editor')),
+        amount,
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining(r'$'), findsNothing);
+      expect(find.text('Fiat unavailable'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('payment_link_fiat_loading_placeholder')),
+        findsNothing,
+      );
+    }
+    expect(source.fetchCount, 0);
+  });
 
   testWidgets('shows the truthful landing and help copy', (tester) async {
     await pumpPaymentLinksScreen(tester);
@@ -512,6 +829,7 @@ void main() {
     expect(find.text('Card amount'), findsOneWidget);
     expect(find.text('Card fee (deposit + redeem)'), findsOneWidget);
     expect(find.text('1.2502 ZEC'), findsOneWidget);
+    expect(find.text(r'$125.00'), findsOneWidget);
     expect(
       tester
           .widget<PaymentLinkCardFlip>(find.byType(PaymentLinkCardFlip))
@@ -538,6 +856,8 @@ void main() {
           .showBack,
       isFalse,
     );
+
+    expect(find.text(r'$125.00'), findsOneWidget);
 
     await tester.tap(find.text('Add Message'));
     await tester.pumpAndSettle();
@@ -2729,4 +3049,26 @@ void main() {
     expect(find.text('Copy link'), findsNothing);
     expect(find.text('Reclaim'), findsNothing);
   });
+}
+
+class _PendingCardPrice implements ZecMarketDataSource {
+  final result = Completer<ZecMarketData?>();
+  int fetchCount = 0;
+
+  @override
+  Future<ZecMarketData?> fetchMarketData() {
+    fetchCount++;
+    return result.future;
+  }
+}
+
+class _RefreshingCardPrice implements ZecMarketDataSource {
+  final requests = <Completer<ZecMarketData?>>[];
+
+  @override
+  Future<ZecMarketData?> fetchMarketData() {
+    final request = Completer<ZecMarketData?>();
+    requests.add(request);
+    return request.future;
+  }
 }
