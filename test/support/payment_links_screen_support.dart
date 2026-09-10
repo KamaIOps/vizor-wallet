@@ -53,8 +53,10 @@ Future<void> pumpPaymentLinksScreen(
   FakeSyncNotifier? syncNotifier,
   ZecMarketDataSource? marketDataSource,
   bool? pricingEnabled,
+  Size logicalSize = const Size(1080, 720),
+  GlobalKey? captureBoundaryKey,
 }) async {
-  await tester.binding.setSurfaceSize(const Size(1080, 720));
+  await tester.binding.setSurfaceSize(logicalSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final paymentLinkOperations = operations ?? FakePaymentLinkOperations();
   final paymentLinkClipboard = clipboard ?? FakePaymentLinkClipboard();
@@ -119,7 +121,12 @@ Future<void> pumpPaymentLinksScreen(
           FakeMigrationCoordinator.new,
         ),
       ],
-      child: const ZcashWalletApp(),
+      child: captureBoundaryKey == null
+          ? const ZcashWalletApp()
+          : RepaintBoundary(
+              key: captureBoundaryKey,
+              child: const ZcashWalletApp(),
+            ),
     ),
   );
   await tester.pump();

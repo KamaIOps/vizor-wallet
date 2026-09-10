@@ -4,6 +4,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../widgetbook/activity_use_cases.dart';
+import '../widgetbook/keystone_use_cases.dart';
 import '../widgetbook/payment_link_claim_outcome_use_cases.dart';
 import '../widgetbook/home_use_cases.dart';
 import '../widgetbook/donation_use_cases.dart';
@@ -51,6 +52,27 @@ class FigmaCompareScenario {
 /// storage, network, wallet, and Rust state. Widgetbook fixtures are preferred
 /// because they are already used to review the same UI states.
 const figmaCompareScenarios = <FigmaCompareScenario>[
+  FigmaCompareScenario(
+    id: 'mobile-gift-card-keystone-loading',
+    description: 'Shared Keystone signing loading',
+    builder: buildMobileKeystoneSigningLoadingUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-gift-card-keystone-ready',
+    description: 'Shared Keystone signing ready',
+    builder: buildMobileKeystoneSigningReadyUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-gift-card-keystone-scanner',
+    description: 'Shared Keystone signing scanner',
+    builder: buildMobileKeystoneSigningScannerUseCase,
+    desktop: false,
+    mobile: true,
+  ),
   FigmaCompareScenario(
     id: 'gift-card-claim-rejected',
     description: 'gift-card-claim-rejected',
