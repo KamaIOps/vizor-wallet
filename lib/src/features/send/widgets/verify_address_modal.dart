@@ -24,7 +24,7 @@ enum VerifyAddressModalAddressKind { shielded, transparent, external }
 /// send review screen (and later the received receipt).
 ///
 /// Renders the full address as a continuous Geist Mono string that wraps
-/// naturally, with Copy address as the primary action.
+/// naturally, with Copy as the primary action.
 ///
 /// Static only — no provider wiring. The caller hosts this card inside an
 /// `AppPaneModalOverlay` and supplies the callbacks.
@@ -66,14 +66,6 @@ class VerifyAddressModal extends StatelessWidget {
   /// count.
   final int? previousTransactionCount;
 
-  /// Title-row height pinned by the Figma `Title` node. (Its 12px-radius
-  /// hover fill equals the card background in the spec, so no fill is
-  /// painted here.)
-  static const _titleRowHeight = 44.0;
-
-  /// Figma min-width for the ghost Close button.
-  static const _closeMinWidth = 196.0;
-
   bool get _hasPreviousTransactions => (previousTransactionCount ?? 0) > 0;
 
   String get _previousTransactionsLabel => previousTransactionCount == 1
@@ -87,20 +79,35 @@ class VerifyAddressModal extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(height: _titleRowHeight, child: _header(context)),
-          const SizedBox(height: AppSpacing.md),
+          _header(context),
+          const SizedBox(height: AppSpacing.sm),
           FullAddressText(address: address),
           const SizedBox(height: AppSpacing.md),
-          FullAddressCopyButton(address: address, expand: true),
-          const SizedBox(height: AppSpacing.xs),
-          Center(
-            child: AppButton(
-              key: const ValueKey('verify_address_close_button'),
-              onPressed: onClose,
-              variant: AppButtonVariant.ghost,
-              minWidth: _closeMinWidth,
-              child: const Text('Close'),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: AppButton(
+                  key: const ValueKey('verify_address_close_button'),
+                  onPressed: onClose,
+                  variant: AppButtonVariant.ghost,
+                  size: AppButtonSize.mediumLarge,
+                  expand: true,
+                  constrainContent: true,
+                  child: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Close', maxLines: 1),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              Expanded(
+                child: FullAddressCopyButton(
+                  address: address,
+                  expand: true,
+                  label: 'Copy',
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -109,7 +116,7 @@ class VerifyAddressModal extends StatelessWidget {
 
   Widget _header(BuildContext context) {
     final colors = context.colors;
-    final titleStyle = AppTypography.labelLarge.copyWith(
+    final titleStyle = AppTypography.bodyLarge.copyWith(
       color: colors.text.accent,
       fontWeight: FontWeight.w600,
     );
@@ -137,7 +144,7 @@ class VerifyAddressModal extends StatelessWidget {
             Flexible(
               child: Text(
                 title,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: titleStyle,
               ),
@@ -156,12 +163,13 @@ class VerifyAddressModal extends StatelessWidget {
             const SizedBox(width: AppSpacing.xs),
             Flexible(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     contactName!,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: titleStyle,
                   ),

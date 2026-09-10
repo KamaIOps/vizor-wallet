@@ -1624,8 +1624,20 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
   FigmaCompareScenario(
     id: 'verify-address-action-footer',
     description:
-        'Desktop full-address viewer: wrapping address with Copy address CTA',
+        'Desktop full-address viewer: wrapping address with Copy action',
     builder: buildVerifyAddressActionFooterUseCase,
+  ),
+  FigmaCompareScenario(
+    id: 'verify-address-transparent',
+    description:
+        'Desktop full-address viewer with a wrapping transparent header',
+    builder: buildVerifyAddressUnknownTransparentUseCase,
+  ),
+  FigmaCompareScenario(
+    id: 'verify-address-contact',
+    description:
+        'Desktop full-address viewer with contact and transaction history',
+    builder: buildVerifyAddressKnownContactUseCase,
   ),
   FigmaCompareScenario(
     id: 'mobile-verify-address-action-footer',

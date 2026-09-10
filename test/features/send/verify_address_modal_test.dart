@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show MaterialApp;
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
@@ -8,6 +9,8 @@ import 'package:zcash_wallet/src/core/widgets/app_profile_picture.dart';
 import 'package:zcash_wallet/src/core/widgets/review_info_row.dart';
 import 'package:zcash_wallet/src/features/accounts/widgets/account_modal_card.dart';
 import 'package:zcash_wallet/src/features/send/widgets/verify_address_modal.dart';
+
+import '../../figma_compare/figma_compare_font_loader.dart';
 
 const _address =
     'u1950915183f0fed838d6d2dd92d6f4111ed3c6dd4e3eb19a3702b'
@@ -31,9 +34,9 @@ void main() {
       expect(find.text('Unknown shielded address'), findsOneWidget);
       expect(find.byType(ReviewInfoIconCircle), findsOneWidget);
       expect(find.text(_address), findsOneWidget);
-      expect(find.text('Copy address'), findsOneWidget);
+      expect(find.text('Copy'), findsOneWidget);
 
-      // The add-to-contacts flow is deferred: Copy address plus Close.
+      // The add-to-contacts flow is deferred: Copy plus Close.
       expect(find.text('Add to contacts'), findsNothing);
       expect(find.byType(AppButton), findsNWidgets(2));
 
@@ -75,7 +78,7 @@ void main() {
       expect(find.text('Unknown shielded address'), findsNothing);
     });
 
-    testWidgets('copies the exact address from Copy address', (tester) async {
+    testWidgets('copies the exact address from Copy', (tester) async {
       final copied = <String>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -109,7 +112,7 @@ void main() {
       expect(copied, [_address]);
     });
 
-    testWidgets('uses Copy address as the primary action', (tester) async {
+    testWidgets('uses Copy as the primary action', (tester) async {
       await _pump(
         tester,
         VerifyAddressModal(
@@ -119,7 +122,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Copy address'), findsOneWidget);
+      expect(find.text('Copy'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
       expect(find.text(_address), findsOneWidget);
       final addressText = tester.widget<Text>(
@@ -129,8 +132,47 @@ void main() {
     });
   });
 
+  testWidgets(
+    'wrapped contact header clears the address and horizontal actions',
+    (tester) async {
+      await loadFigmaCompareFonts();
+      const name = 'Treasury operating account';
+      await _pump(
+        tester,
+        VerifyAddressModal(
+          address: _address,
+          variant: VerifyAddressModalVariant.knownContact,
+          contactName: name,
+          contactProfilePictureId: 'pfp-02',
+          previousTransactionCount: 12,
+          onClose: () {},
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final titleParagraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: find.text(name), matching: find.byType(RichText)),
+      );
+      expect(titleParagraph.didExceedMaxLines, isFalse);
+      final title = tester.getRect(find.text(name));
+      final subtitle = tester.getRect(find.text('12 previous transactions'));
+      final address = tester.getRect(find.text(_address));
+      expect(title.bottom, lessThanOrEqualTo(subtitle.top));
+      expect(subtitle.bottom, lessThan(address.top));
+      final close = tester.getRect(
+        find.byKey(const ValueKey('verify_address_close_button')),
+      );
+      final copy = tester.getRect(
+        find.byKey(const ValueKey('full_address_copy_button')),
+      );
+      expect(close.top, moreOrLessEquals(copy.top));
+      expect(close.height, moreOrLessEquals(copy.height));
+      expect(close.right, lessThan(copy.left));
+      expect(find.text('Copy').hitTestable(), findsOneWidget);
+    },
+  );
+
   group('VerifyAddressModal knownContact variant', () {
-    testWidgets('shows the contact identity and Close only', (tester) async {
+    testWidgets('shows the contact identity and actions', (tester) async {
       var closed = 0;
       await _pump(
         tester,
@@ -149,7 +191,7 @@ void main() {
       expect(find.text('12 previous transactions'), findsOneWidget);
       expect(find.text('Unknown shielded address'), findsNothing);
       expect(find.text('Add to contacts'), findsNothing);
-      expect(find.text('Copy address'), findsOneWidget);
+      expect(find.text('Copy'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
 
       await tester.tap(find.text('Close'));
