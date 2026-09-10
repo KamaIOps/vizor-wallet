@@ -62,9 +62,13 @@ class FullAddressCopyButton extends StatelessWidget {
       variant: AppButtonVariant.primary,
       size: size,
       expand: expand,
+      constrainContent: expand,
       minWidth: kFullAddressCopyActionMinWidth,
       leading: const AppIcon(AppIcons.copy),
-      child: const Text('Copy address'),
+      child: const FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text('Copy address', maxLines: 1),
+      ),
     );
   }
 }

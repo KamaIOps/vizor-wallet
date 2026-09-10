@@ -141,12 +141,12 @@ class _MobileAddressVerifyFrame extends StatelessWidget {
           color: colors.background.neutralScrim,
           child: SafeArea(
             bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Spacer(),
-                MobileModalCard(child: child),
-              ],
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                width: double.infinity,
+                child: MobileModalCard(child: child),
+              ),
             ),
           ),
         ),

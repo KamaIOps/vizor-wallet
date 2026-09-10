@@ -54,14 +54,20 @@ class MobileAddressVerifySheet extends StatelessWidget {
       ),
       bodyGap: AppSpacing.sm,
       bottomPadding: AppSpacing.md,
+      constrainBody: true,
       onClose: onClose,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            key: const ValueKey('mobile_address_verify_chunks'),
-            child: FullAddressText(address: address),
+          Flexible(
+            child: SingleChildScrollView(
+              key: const ValueKey('mobile_address_verify_chunks'),
+              child: SizedBox(
+                width: double.infinity,
+                child: FullAddressText(address: address),
+              ),
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
           FullAddressCopyButton(
