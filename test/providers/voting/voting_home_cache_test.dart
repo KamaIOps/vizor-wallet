@@ -1,3 +1,4 @@
+import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
 import 'dart:async';
 import '../../fakes/memory_voting_home_cache_store.dart';
 import 'dart:typed_data';
@@ -63,6 +64,31 @@ void main() {
     now: now,
     scannedHeight: scanned,
   );
+
+  test('verified prior usage hides only its account and yields to recovery', () async {
+    await seed([round()]);
+    const result = VotingParticipationResult(fingerprint: 'notes', usedCount: 2,
+      noteCount: 2, remainingEligible: false, localState: false);
+    await cache.recordParticipation(factKey, 500, result);
+    expect(visible(), false);
+    expect(visible(account: 'account-b'), true);
+    expect(visible(scanned: 499), true);
+    await cache.recordEligibility(factKey, true, 500);
+    expect(visible(), false);
+    await cache.invalidateEligibilityAfterRewind(network: 'main', accountUuid: 'account-a', scannedHeight: 499);
+    expect(visible(), true);
+    expect(cache.fact(factKey).participation, isNull);
+  });
+  test('partial usage and local recovery do not hide a candidate', () async {
+    await seed([round()]);
+    for (final result in [
+      const VotingParticipationResult(fingerprint: 'notes', usedCount: 1, noteCount: 2, remainingEligible: true, localState: false),
+      const VotingParticipationResult(fingerprint: 'notes', usedCount: 2, noteCount: 2, remainingEligible: false, localState: true),
+    ]) {
+      await cache.recordParticipation(factKey, 500, result);
+      expect(visible(), true);
+    }
+  });
 
   test(
     'unknown round is discoverable; empty, test-only and closed lists hide',

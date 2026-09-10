@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:zcash_wallet/src/providers/voting/voting_participation_provider.dart';
+import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
+import '../../fakes/fake_voting_participation_client.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_home_cache_provider.dart';
 import '../../fakes/memory_voting_home_cache_store.dart';
 
@@ -60,6 +63,119 @@ import '../../services/voting/fake_voting_http.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'participation deduplicates and persists only successful checks',
+    () async {
+      final client = FakeVotingParticipationClient();
+      final container = _sessionContainer(
+        extraOverrides: [
+          votingParticipationClientProvider.overrideWithValue(client),
+          syncProvider.overrideWith(_PollEligibilitySyncNotifier.new),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(accountProvider.future);
+      final source = await container.read(votingConfigSourceProvider.future);
+      final config = await container.read(votingConfigProvider.future);
+      final cache = container.read(votingHomeCacheProvider.notifier);
+      await cache.recordList(
+        votingHomeListKey('main', source.sourceUrl),
+        VotingHomeRoundList(
+          checkedAt: DateTime.now(),
+          fingerprint: config.sourceFingerprint,
+          rounds: const [],
+        ),
+      );
+      final checker = container.read(votingParticipationProvider);
+      await checker.checkRound(kRoundId);
+      expect(client.calls, 1);
+      final key = votingHomeFactKey(
+        'main',
+        config.sourceFingerprint,
+        'account-1',
+        kRoundId,
+      );
+      expect(cache.fact(key).participation, isNull);
+      client.result = const VotingParticipationResult(
+        fingerprint: 'notes',
+        usedCount: 1,
+        noteCount: 1,
+        remainingEligible: false,
+        localState: false,
+      );
+      client.gate = Completer<void>();
+      final first = checker.checkRound(kRoundId, force: true);
+      final second = checker.checkRound(kRoundId, force: true);
+      expect(identical(first, second), isTrue);
+      client.gate!.complete();
+      await first;
+      expect(client.calls, 2);
+      expect(cache.fact(key).participation?.unavailable, isTrue);
+      await checker.checkRound(kRoundId);
+      expect(client.calls, 2);
+      client.gate = Completer<void>();
+      final pending = checker.checkRound(kRoundId, force: true);
+      var drained = false;
+      final registry = container.read(votingShareTrackingRegistryProvider);
+      final drain = registry
+          .quiesceAndDrain(accountUuid: 'account-1')
+          .then((_) => drained = true);
+      expect(drained, isFalse);
+      client.gate!.complete();
+      await Future.wait([pending, drain]);
+      expect(drained, isTrue);
+      registry.resume(accountUuid: 'account-1');
+    },
+  );
+
+  test('Home participation checks only visible synced candidates', () async {
+    final container = _sessionContainer(
+      extraOverrides: [
+        votingParticipationProvider.overrideWith(
+          (ref) => _CandidateChecker(ref),
+        ),
+        syncProvider.overrideWith(_PollEligibilitySyncNotifier.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(accountProvider.future);
+    final source = await container.read(votingConfigSourceProvider.future);
+    await container.read(showTestVotingRoundsProvider.future);
+    await container.read(syncProvider.future);
+    final cache = container.read(votingHomeCacheProvider.notifier);
+    await cache.recordList(
+      votingHomeListKey('main', source.sourceUrl),
+      VotingHomeRoundList(
+        checkedAt: DateTime.now(),
+        fingerprint: 'source',
+        rounds: [
+          for (final entry in [
+            ('a' * 64, 'Vote', '1', 0),
+            ('b' * 64, '[TEST] Vote', '1', 0),
+            ('c' * 64, 'Vote', '3', 0),
+            ('d' * 64, 'Vote', '1', 0),
+            ('e' * 64, 'Vote', '1', 100),
+          ])
+            VotingRoundSummary.fromJson({
+              'vote_round_id': entry.$1,
+              'title': entry.$2,
+              'status': entry.$3,
+              'snapshot_height': entry.$4,
+            }),
+        ],
+      ),
+    );
+    await cache.recordEligibility(
+      votingHomeFactKey('main', 'source', 'account-1', 'd' * 64),
+      false,
+      0,
+    );
+    final checker =
+        container.read(votingParticipationProvider) as _CandidateChecker;
+    await checker.checkHomeCandidates();
+    expect(checker.checked, ['a' * 64]);
+  });
 
   group('poll eligibility', () {
     test('lock discards pending results and unlock rechecks', () async {
@@ -15130,4 +15246,17 @@ rust_frb_types.RoundRecoveryStateView _withUnconfirmedShares(
     shareDelegations: state.shareDelegations,
     unconfirmedShareDelegations: unconfirmed,
   );
+}
+
+class _CandidateChecker extends VotingParticipationCoordinator {
+  _CandidateChecker(super.ref);
+  final checked = <String>[];
+  @override
+  Future<void> checkRound(
+    String round, {
+    bool force = false,
+    VotingRoundDetails? knownRound,
+  }) async {
+    checked.add(round);
+  }
 }

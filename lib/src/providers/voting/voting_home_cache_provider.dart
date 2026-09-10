@@ -8,6 +8,7 @@ import '../../core/storage/app_secure_store.dart';
 import '../../features/voting/voting_poll_ordering.dart';
 import '../../rust/third_party/zcash_voting/wire.dart' as wire;
 import '../../services/voting/voting_models.dart';
+import '../../services/voting/voting_participation_client.dart';
 import 'voting_round_visibility_provider.dart';
 import 'voting_share_tracking_registry_provider.dart';
 
@@ -67,16 +68,19 @@ class VotingHomeFact {
     this.eligibility = VotingHomeEligibility.unknown,
     this.progress = VotingHomeProgress.unknown,
     this.snapshotHeight,
+    this.participation,
   });
 
   final VotingHomeEligibility eligibility;
   final VotingHomeProgress progress;
   final int? snapshotHeight;
+  final VotingParticipationResult? participation;
 
   Map<String, Object?> toJson() => {
     'eligibility': eligibility.name,
     'progress': progress.name,
     'snapshotHeight': snapshotHeight,
+    if (participation != null) 'participation': participation!.toJson(),
   };
 
   factory VotingHomeFact.fromJson(Map<String, dynamic> json) => VotingHomeFact(
@@ -85,6 +89,11 @@ class VotingHomeFact {
     ),
     progress: VotingHomeProgress.values.byName(json['progress'] as String),
     snapshotHeight: json['snapshotHeight'] as int?,
+    participation: json['participation'] == null
+        ? null
+        : VotingParticipationResult.fromJson(
+            json['participation'] as Map<String, dynamic>,
+          ),
   );
 }
 
@@ -196,7 +205,25 @@ class VotingHomeCacheNotifier extends Notifier<int> {
           ? VotingHomeEligibility.eligible
           : VotingHomeEligibility.ineligible,
       progress: old.progress,
+      participation: old.snapshotHeight == snapshotHeight
+          ? old.participation
+          : null,
       snapshotHeight: snapshotHeight,
+    );
+    return true;
+  });
+
+  Future<void> recordParticipation(
+    String key,
+    int snapshotHeight,
+    VotingParticipationResult result,
+  ) => _update(() {
+    final old = fact(key);
+    _facts[key] = VotingHomeFact(
+      eligibility: old.eligibility,
+      progress: old.progress,
+      snapshotHeight: snapshotHeight,
+      participation: result,
     );
     return true;
   });
@@ -219,6 +246,7 @@ class VotingHomeCacheNotifier extends Notifier<int> {
       eligibility: old.eligibility,
       progress: progress,
       snapshotHeight: old.snapshotHeight,
+      participation: old.participation,
     );
     return true;
   });
@@ -234,7 +262,8 @@ class VotingHomeCacheNotifier extends Notifier<int> {
       final fact = entry.value;
       if (key[0] != network ||
           key[2] != accountUuid ||
-          fact.eligibility == VotingHomeEligibility.unknown ||
+          (fact.eligibility == VotingHomeEligibility.unknown &&
+              fact.participation == null) ||
           fact.snapshotHeight == null ||
           scannedHeight >= fact.snapshotHeight!) {
         continue;
@@ -327,6 +356,7 @@ class VotingHomeCacheNotifier extends Notifier<int> {
           scannedHeight < local.snapshotHeight!) {
         return true;
       }
+      if (local.participation?.unavailable ?? false) return false;
       return local.eligibility != VotingHomeEligibility.ineligible;
     });
   }

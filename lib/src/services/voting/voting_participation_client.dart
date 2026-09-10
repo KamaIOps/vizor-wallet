@@ -1,0 +1,147 @@
+import 'dart:convert';
+
+import '../../rust/api/voting.dart' as rust;
+import 'voting_http.dart';
+
+/// Consensus/storage verification is performed in Rust. Never log candidate
+/// keys, request URLs, evidence, or raw transport exceptions from this client.
+class VotingParticipationBridge {
+  const VotingParticipationBridge();
+  Future<String> prepare(rust.ApiVotingRoundContext context) =>
+      rust.prepareVotingParticipation(ctx: context);
+  Future<String> evaluate(
+    rust.ApiVotingRoundContext context,
+    String fingerprint,
+    String evidence,
+    DateTime now,
+  ) => rust.evaluateVotingParticipation(
+    ctx: context,
+    fingerprint: fingerprint,
+    evidence: evidence,
+    nowSeconds: now.millisecondsSinceEpoch ~/ 1000,
+  );
+}
+
+class VotingParticipationResult {
+  const VotingParticipationResult({
+    required this.fingerprint,
+    required this.usedCount,
+    required this.noteCount,
+    required this.remainingEligible,
+    required this.localState,
+  });
+  final String fingerprint;
+  final int usedCount;
+  final int noteCount;
+  final bool remainingEligible;
+  final bool localState;
+  bool get unavailable => usedCount > 0 && !remainingEligible && !localState;
+  Map<String, dynamic> toJson() => {
+    'fingerprint': fingerprint,
+    'usedCount': usedCount,
+    'noteCount': noteCount,
+    'remainingEligible': remainingEligible,
+    'localState': localState,
+  };
+  factory VotingParticipationResult.fromJson(Map<String, dynamic> j) =>
+      VotingParticipationResult(
+        fingerprint: j['fingerprint'] as String,
+        usedCount: j['usedCount'] as int,
+        noteCount: j['noteCount'] as int,
+        remainingEligible: j['remainingEligible'] as bool,
+        localState: j['localState'] as bool,
+      );
+}
+
+class VotingParticipationClient {
+  VotingParticipationClient(this.http, this.bridge);
+  final VotingHttpClient http;
+  final VotingParticipationBridge bridge;
+  static const requestTimeout = Duration(seconds: 10);
+
+  Future<VotingParticipationResult> check(
+    rust.ApiVotingRoundContext context,
+    DateTime Function() clock,
+    bool Function() isCurrent,
+  ) async {
+    final endpoint = switch (context.network) {
+      'main' => Uri.parse('https://vote-rpc-primary.valargroup.org'),
+      'test' => Uri.parse('https://stage.vote-rpc-primary.valargroup.org'),
+      _ => throw StateError('Unsupported voting participation network'),
+    };
+    final deadline = clock().add(const Duration(minutes: 4));
+    void guard() {
+      if (!isCurrent() || clock().isAfter(deadline)) {
+        throw StateError('Voting participation check cancelled');
+      }
+    }
+
+    Future<Map<String, dynamic>> get(
+      String path, [
+      Map<String, String>? query,
+    ]) async {
+      guard();
+      final response = await http.get(
+        endpoint.replace(path: path, queryParameters: query),
+        timeout: requestTimeout,
+      );
+      guard();
+      if (response.statusCode != 200 ||
+          response.bodyBytes.length > 128 * 1024) {
+        throw StateError('Voting participation response unavailable');
+      }
+      return response.decodeJsonObject();
+    }
+
+    guard();
+    final candidates =
+        jsonDecode(await bridge.prepare(context)) as Map<String, dynamic>;
+    guard();
+    final keys = (candidates['keys'] as List).cast<String>();
+    if (keys.length > 1024) {
+      throw StateError('Voting participation note limit exceeded');
+    }
+    final commit = await get('/commit');
+    final header =
+        ((commit['result'] as Map)['signed_header'] as Map)['header'] as Map;
+    final height = int.parse(header['height'] as String);
+    if (height <= 1) throw StateError('Voting chain is not ready');
+    final validators = await get('/validators', {
+      'height': '$height',
+      'per_page': '100',
+    });
+    final queries = <Map<String, dynamic>>[];
+    // Bound concurrent reads and stop between small groups on context changes.
+    for (var start = 0; start < keys.length; start += 4) {
+      final group = keys.skip(start).take(4);
+      queries.addAll(
+        await Future.wait(
+          group.map(
+            (key) => get('/abci_query', {
+              'path': '"/store/vote/key"',
+              'data': '0x$key',
+              'height': '${height - 1}',
+              'prove': 'true',
+            }),
+          ),
+        ),
+      );
+    }
+    guard();
+    final evidence = jsonEncode({
+      'commit': commit,
+      'validators': validators,
+      'queries': queries,
+    });
+    final result = await bridge.evaluate(
+      context,
+      candidates['fingerprint'] as String,
+      evidence,
+      clock(),
+    );
+    guard();
+    return VotingParticipationResult.fromJson(
+      jsonDecode(result) as Map<String, dynamic>,
+    );
+  }
+}

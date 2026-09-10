@@ -2,6 +2,7 @@
 
 import 'dart:typed_data';
 
+import 'package:zcash_wallet/src/providers/voting/voting_participation_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -111,6 +112,9 @@ Widget _buildVotingShareStatusUseCase(
 Widget buildMobileVotingPollsUseCase(BuildContext context) {
   return ProviderScope(
     overrides: [
+      votingParticipationUnavailableProvider.overrideWith(
+        (ref, roundId) => false,
+      ),
       votingPollEligibilityProvider.overrideWith(
         (ref, roundId) async => VotingPollEligibility.eligible,
       ),
@@ -146,6 +150,9 @@ Widget buildMobileVotingPollsEligibilityUseCase(
         showTestVotingRoundsProvider.overrideWith(
           _PreviewShowTestVotingRoundsNotifier.new,
         ),
+        votingParticipationUnavailableProvider.overrideWith(
+          (ref, roundId) => false,
+        ),
         votingPollEligibilityProvider.overrideWith(
           (ref, roundId) async => loadEligibility != null
               ? loadEligibility(roundId)
@@ -172,6 +179,9 @@ Widget _buildMobileVotingConfigPreview(
 }) {
   return ProviderScope(
     overrides: [
+      votingParticipationUnavailableProvider.overrideWith(
+        (ref, roundId) => false,
+      ),
       votingPollEligibilityProvider.overrideWith(
         (ref, roundId) async => VotingPollEligibility.eligible,
       ),

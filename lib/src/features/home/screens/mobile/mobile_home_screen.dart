@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../../../../providers/app_security_provider.dart';
+import '../../../../providers/voting/voting_participation_provider.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -1306,6 +1308,7 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
     _timer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted && _foreground && _homeCurrent) {
         ref.invalidate(votingHomeEntryVisibleProvider);
+        _checkParticipation();
       }
     });
   }
@@ -1334,7 +1337,16 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
   void _refresh() {
     if (!mounted || !_foreground || !_homeCurrent) return;
     ref.invalidate(votingHomeEntryVisibleProvider);
-    unawaited(ref.read(votingHomeRefreshActionProvider)());
+    unawaited(
+      ref
+          .read(votingHomeRefreshActionProvider)()
+          .then((_) => _checkParticipation()),
+    );
+  }
+
+  Future<void> _checkParticipation() async {
+    if (!mounted || !_foreground || !_homeCurrent) return;
+    await ref.read(votingParticipationProvider).checkHomeCandidates();
   }
 
   @override
@@ -1373,6 +1385,24 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
             ),
       );
     });
+    void schedule() => WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _checkParticipation(),
+    );
+    ref.listen(votingHomeCacheProvider, (_, _) => schedule());
+    ref.listen(
+      accountProvider.select((s) => s.value?.activeAccountUuid),
+      (_, _) => schedule(),
+    );
+    ref.listen(
+      appSecurityProvider.select((s) => s.requiresUnlock),
+      (_, _) => schedule(),
+    );
+    ref.listen(
+      syncProvider.select(
+        (s) => (s.value?.isSyncing, s.value?.lastSyncCompletedAt),
+      ),
+      (_, _) => schedule(),
+    );
     if (!ref.watch(votingHomeEntryVisibleProvider)) {
       return const SizedBox.shrink();
     }
