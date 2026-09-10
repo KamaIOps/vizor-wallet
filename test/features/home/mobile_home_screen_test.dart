@@ -603,6 +603,8 @@ void main() {
     final router = GoRouter.of(tester.element(find.byType(MobileHomeScreen)));
     final initial = refreshes;
     expect(initial, greaterThan(0));
+    await tester.pump(const Duration(minutes: 2));
+    expect(refreshes, initial); // The minute timer must stay local on Home too.
     router.go('/shell-activity');
     await tester.pumpAndSettle();
     await tester.pump(const Duration(minutes: 1));

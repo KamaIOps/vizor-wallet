@@ -24,11 +24,15 @@ class VotingHomeRoundList {
     required this.checkedAt,
     required this.fingerprint,
     required this.rounds,
+    this.discoveryRevision,
+    this.discoveryEndpoint,
   });
 
   final DateTime checkedAt;
   final String fingerprint;
   final List<VotingRoundSummary> rounds;
+  final String? discoveryRevision;
+  final String? discoveryEndpoint;
 
   bool isFresh(DateTime now) {
     final age = now.difference(checkedAt);
@@ -38,6 +42,8 @@ class VotingHomeRoundList {
   Map<String, Object?> toJson() => {
     'checkedAt': checkedAt.toIso8601String(),
     'fingerprint': fingerprint,
+    if (discoveryRevision != null) 'discoveryRevision': discoveryRevision,
+    if (discoveryEndpoint != null) 'discoveryEndpoint': discoveryEndpoint,
     'rounds': [for (final round in rounds) round.rawJson],
   };
 
@@ -45,6 +51,8 @@ class VotingHomeRoundList {
       VotingHomeRoundList(
         checkedAt: DateTime.parse(json['checkedAt'] as String),
         fingerprint: json['fingerprint'] as String,
+        discoveryRevision: json['discoveryRevision'] as String?,
+        discoveryEndpoint: json['discoveryEndpoint'] as String?,
         rounds: [
           for (final round in json['rounds'] as List)
             VotingRoundSummary.fromJson(
@@ -153,7 +161,20 @@ class VotingHomeCacheNotifier extends Notifier<int> {
 
   Future<void> recordList(String key, VotingHomeRoundList list) => _update(() {
     if (_lists[key]?.checkedAt.isAfter(list.checkedAt) ?? false) return false;
-    _lists[key] = list;
+    final previous = _lists[key];
+    // Existing voting screens also refresh this list. Preserve the last applied
+    // hint within the same authenticated source, without inventing a new one.
+    _lists[key] =
+        list.discoveryRevision == null &&
+            previous?.fingerprint == list.fingerprint
+        ? VotingHomeRoundList(
+            checkedAt: list.checkedAt,
+            fingerprint: list.fingerprint,
+            rounds: list.rounds,
+            discoveryRevision: previous?.discoveryRevision,
+            discoveryEndpoint: previous?.discoveryEndpoint,
+          )
+        : list;
     return true;
   });
 

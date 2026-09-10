@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/voting/resolved_voting_config_extensions.dart';
 import '../../services/voting/voting_models.dart';
+import '../../services/voting/voting_config_loader.dart';
+import '../../services/voting/voting_discovery_client.dart';
+import '../../services/voting/voting_http.dart';
 import '../account_provider.dart';
 import '../app_security_provider.dart';
 import '../rpc_endpoint_provider.dart';
@@ -44,18 +47,48 @@ final votingHomeEntryVisibleProvider = Provider<bool>((ref) {
       );
 });
 
+final votingDiscoveryEndpointProvider = Provider<String>(
+  (ref) => votingDiscoveryUrl,
+);
+final votingDiscoveryClientProvider = Provider<VotingDiscoveryClient>((ref) {
+  final http = DartIoVotingHttpClient();
+  ref.onDispose(http.close);
+  return VotingDiscoveryClient(http);
+});
+
 final votingHomeRefreshProvider = Provider((ref) => VotingHomeRefresh(ref));
 
 class VotingHomeRefresh {
   VotingHomeRefresh(this.ref);
   final Ref ref;
   Future<void>? _inFlight;
+  (String?, String, String)? _runningContext;
+  bool _rerun = false;
   // Failed requests do not advance the durable six-hour success timestamp.
   // A short process-local cooldown prevents rebuild/reentry retry storms.
   final Map<String, DateTime> _failures = {};
+  final Map<String, DateTime> _probeFailures = {};
 
-  Future<void> refresh() =>
-      _inFlight ??= _refresh().whenComplete(() => _inFlight = null);
+  (String?, String, String) _context() => (
+    ref.read(votingConfigSourceProvider).value?.sourceUrl,
+    ref.read(rpcEndpointProvider).networkName,
+    ref.read(votingDiscoveryEndpointProvider),
+  );
+
+  Future<void> refresh() {
+    if (!ref.mounted) return Future.value();
+    if (_inFlight != null) {
+      if (_context() != _runningContext) _rerun = true;
+      return _inFlight!;
+    }
+    return _inFlight = _refresh().whenComplete(() {
+      _inFlight = null;
+      if (_rerun && ref.mounted) {
+        _rerun = false;
+        return refresh();
+      }
+    });
+  }
 
   Future<void> _refresh() async {
     final release = ref
@@ -65,10 +98,17 @@ class VotingHomeRefresh {
     String? key;
     try {
       if (ref.read(appSecurityProvider).requiresUnlock) return;
+      _runningContext = _context();
       final source = (await ref.read(
         votingConfigSourceProvider.future,
       )).sourceUrl;
+      if (!ref.mounted) return;
       final network = ref.read(rpcEndpointProvider).networkName;
+      _runningContext = (
+        source,
+        network,
+        ref.read(votingDiscoveryEndpointProvider),
+      );
       key = votingHomeListKey(network, source);
       final cache = ref.read(votingHomeCacheProvider.notifier);
       await cache.ensureLoaded();
@@ -87,7 +127,44 @@ class VotingHomeRefresh {
         );
       }
       final now = ref.read(votingHomeClockProvider)();
-      if (cache.list(key)?.isFresh(now) ?? false) return;
+      final endpoint = ref.read(votingDiscoveryEndpointProvider);
+      final cached = cache.list(key);
+      final fresh = cached?.isFresh(now) ?? false;
+      VotingDiscoverySnapshot? discovery;
+      final supported =
+          network == 'main' &&
+          kProductionStaticVotingConfigMirrors.contains(source);
+      if (supported) {
+        final probeKey = '$key/$endpoint';
+        final failed = _probeFailures[probeKey];
+        if (failed == null ||
+            now.difference(failed).isNegative ||
+            now.difference(failed) >= const Duration(minutes: 1)) {
+          try {
+            discovery = await ref
+                .read(votingDiscoveryClientProvider)
+                .fetch(Uri.parse(endpoint), ref.read(votingHomeClockProvider));
+            _probeFailures.remove(probeKey);
+          } catch (error) {
+            if (!ref.mounted) return;
+            _probeFailures[probeKey] = ref.read(votingHomeClockProvider)();
+            debugPrint('Voting change check failed: $error');
+          }
+        }
+      }
+      if (!ref.mounted ||
+          ref.read(appSecurityProvider).requiresUnlock ||
+          ref.read(votingConfigSourceProvider).value?.sourceUrl != source ||
+          ref.read(rpcEndpointProvider).networkName != network ||
+          ref.read(votingDiscoveryEndpointProvider) != endpoint) {
+        return;
+      }
+      if (fresh &&
+          (discovery == null ||
+              (cached?.discoveryRevision == discovery.revision &&
+                  cached?.discoveryEndpoint == endpoint))) {
+        return;
+      }
       final failedAt = _failures[key];
       if (failedAt != null &&
           now.difference(failedAt) < const Duration(minutes: 5)) {
@@ -118,6 +195,7 @@ class VotingHomeRefresh {
       if (!ref.mounted || ref.read(appSecurityProvider).requiresUnlock) return;
       if (ref.read(votingConfigSourceProvider).value?.sourceUrl != source ||
           ref.read(rpcEndpointProvider).networkName != network ||
+          ref.read(votingDiscoveryEndpointProvider) != endpoint ||
           !identical(ref.read(votingConfigProvider).value, config)) {
         return;
       }
@@ -127,6 +205,8 @@ class VotingHomeRefresh {
           checkedAt: now,
           fingerprint: config.sourceFingerprint,
           rounds: rounds,
+          discoveryRevision: discovery?.revision,
+          discoveryEndpoint: discovery == null ? null : endpoint,
         ),
       );
       _failures.remove(key);

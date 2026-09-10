@@ -1,0 +1,71 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:zcash_wallet/src/services/voting/voting_discovery_client.dart';
+import 'fake_voting_http.dart';
+
+void main() {
+  final now = DateTime.utc(2026, 9, 10);
+  final endpoint = Uri.parse('https://example.com/custom/path');
+  Map<String, dynamic> snapshot() => {
+    'schemaVersion': 1,
+    'scope': 'prod',
+    'revision': 'sha256:${'a' * 64}',
+    'checkedAt': now.toIso8601String(),
+  };
+  test('uses configured full URL and issues one bounded GET', () async {
+    final http = FakeVotingHttpClient(
+      responses: {endpoint.toString(): snapshot()},
+    );
+    final result = await VotingDiscoveryClient(http).fetch(endpoint, () => now);
+    expect(result.revision, snapshot()['revision']);
+    expect(http.requests, hasLength(1));
+    expect(http.requests.single.uri, endpoint);
+    expect(http.requests.single.timeout, const Duration(seconds: 5));
+  });
+  test('rejects unsupported, malformed, stale and future responses', () async {
+    for (final change in <Map<String, dynamic>>[
+      {'scope': 'stage'},
+      {'schemaVersion': 2},
+      {'revision': 'wrong'},
+      {'checkedAt': 'bad'},
+      {
+        'checkedAt': now
+            .subtract(const Duration(minutes: 10))
+            .toIso8601String(),
+      },
+      {'checkedAt': now.add(const Duration(minutes: 2)).toIso8601String()},
+    ]) {
+      final http = FakeVotingHttpClient(
+        responses: {
+          endpoint.toString(): {...snapshot(), ...change},
+        },
+      );
+      await expectLater(
+        VotingDiscoveryClient(http).fetch(endpoint, () => now),
+        throwsFormatException,
+      );
+    }
+  });
+  test('503 is a failure, never an empty snapshot', () async {
+    final http = FakeVotingHttpClient(
+      responses: {
+        endpoint.toString(): jsonResponse({
+          'error': 'offline',
+        }, statusCode: 503),
+      },
+    );
+    await expectLater(
+      VotingDiscoveryClient(http).fetch(endpoint, () => now),
+      throwsStateError,
+    );
+    expect(http.requests, hasLength(1));
+  });
+  test('build define overrides the default URL', () {
+    expect(
+      votingDiscoveryUrl,
+      const String.fromEnvironment(
+        'VIZOR_VOTING_DISCOVERY_URL',
+        defaultValue: 'https://functions.vizor.cash/v1/voting/discovery/prod',
+      ),
+    );
+  });
+}

@@ -16,6 +16,8 @@ import 'package:zcash_wallet/src/rust/third_party/zcash_voting/config.dart';
 import 'package:zcash_wallet/src/services/voting/voting_api_client.dart';
 import 'package:zcash_wallet/src/services/voting/voting_models.dart';
 
+import 'package:zcash_wallet/src/services/voting/voting_discovery_client.dart';
+import 'package:zcash_wallet/src/services/voting/voting_config_loader.dart';
 import '../../services/voting/fake_voting_http.dart';
 import '../../fakes/memory_voting_home_cache_store.dart';
 
@@ -34,12 +36,14 @@ class _Security extends AppSecurityNotifier {
 }
 
 class _Source extends VotingConfigSourceNotifier {
+  _Source([this.initial = 'source']);
+  final String initial;
   void select(String source) => state = AsyncData(
     VotingConfigSourceState(sourceUrl: source, isDefault: false),
   );
   @override
   Future<VotingConfigSourceState> build() async =>
-      const VotingConfigSourceState(sourceUrl: 'source', isDefault: false);
+      VotingConfigSourceState(sourceUrl: initial, isDefault: false);
 }
 
 class _Config extends VotingConfigNotifier {
@@ -105,22 +109,47 @@ class _Api extends VotingApiClient {
   }
 }
 
+class _Discovery extends VotingDiscoveryClient {
+  _Discovery() : super(FakeVotingHttpClient());
+  int calls = 0;
+  String revision = 'sha256:${'a' * 64}';
+  bool fail = false;
+  Completer<void>? gate;
+  @override
+  Future<VotingDiscoverySnapshot> fetch(
+    Uri endpoint,
+    DateTime Function() now,
+  ) async {
+    calls++;
+    await gate?.future;
+    if (fail) throw StateError('discovery offline');
+    return VotingDiscoverySnapshot(revision: revision, checkedAt: now());
+  }
+}
+
 void main() {
   late ProviderContainer container;
   late MemoryVotingHomeCacheStore store;
   late _Api api;
   late _Config config;
   late DateTime now;
-  void setup(List<String> ids) {
+  late _Discovery discovery;
+  var endpoint = votingDiscoveryUrl;
+  void setup(List<String> ids, {bool prod = false}) {
     now = DateTime.utc(2026, 9, 10);
     store = MemoryVotingHomeCacheStore();
     api = _Api();
     config = _Config(ids);
+    discovery = _Discovery();
     container = ProviderContainer(
       overrides: [
         appBootstrapProvider.overrideWithValue(AppBootstrapState.empty),
         appSecurityProvider.overrideWith(_Security.new),
-        votingConfigSourceProvider.overrideWith(_Source.new),
+        votingConfigSourceProvider.overrideWith(
+          () => _Source(prod ? kProductionStaticVotingConfigSource : 'source'),
+        ),
+        votingDiscoveryClientProvider.overrideWithValue(discovery),
+        votingDiscoveryEndpointProvider.overrideWith((ref) => endpoint),
         votingConfigProvider.overrideWith(() => config),
         votingHomeCacheStoreProvider.overrideWithValue(store),
         votingHomeClockProvider.overrideWithValue(() => now),
@@ -241,6 +270,208 @@ void main() {
       await refresh.refresh();
       expect(config.loads, 3);
       expect(api.calls, 2);
+    },
+  );
+  test(
+    'prod entry probes once and unchanged revision survives restart without full queries',
+    () async {
+      setup([roundId], prod: true);
+      final refresh = container.read(votingHomeRefreshProvider);
+      await refresh.refresh();
+      expect(discovery.calls, 1);
+      expect(config.loads, 1);
+      expect(api.calls, 1);
+      final stored = store.value;
+      container.invalidate(votingHomeRefreshProvider);
+      container.invalidate(votingHomeCacheProvider);
+      now = now.add(const Duration(hours: 1));
+      await container.read(votingHomeRefreshProvider).refresh();
+      expect(discovery.calls, 2);
+      expect(config.loads, 1);
+      expect(api.calls, 1);
+      expect(store.value, stored); // Probe must not extend full-refresh TTL.
+      now = now.add(const Duration(hours: 5));
+      await container.read(votingHomeRefreshProvider).refresh();
+      expect(discovery.calls, 3);
+      expect(api.calls, 2);
+    },
+  );
+
+  test(
+    'changed revision is only applied after full refresh succeeds',
+    () async {
+      setup([roundId], prod: true);
+      final refresh = container.read(votingHomeRefreshProvider);
+      await refresh.refresh();
+      final saved = store.value;
+      discovery.revision = 'sha256:${'b' * 64}';
+      config.fail = true;
+      await refresh.refresh();
+      expect(store.value, saved);
+      config.fail = false;
+      now = now.add(const Duration(minutes: 5));
+      await refresh.refresh();
+      expect(api.calls, 2);
+      expect(store.value, contains(discovery.revision));
+      await refresh.refresh();
+      expect(api.calls, 2);
+    },
+  );
+
+  test(
+    'failed probe preserves fresh list, backs off, and falls back when six hours pass',
+    () async {
+      setup([roundId], prod: true);
+      final refresh = container.read(votingHomeRefreshProvider);
+      await refresh.refresh();
+      final saved = store.value;
+      discovery.fail = true;
+      await refresh.refresh();
+      await refresh.refresh();
+      expect(discovery.calls, 2);
+      expect(api.calls, 1);
+      expect(store.value, saved);
+      now = now.add(const Duration(hours: 6));
+      await refresh.refresh();
+      expect(api.calls, 2);
+    },
+  );
+
+  test(
+    'first visit can discover directly while the probe is unavailable',
+    () async {
+      setup([roundId], prod: true);
+      discovery.fail = true;
+      await container.read(votingHomeRefreshProvider).refresh();
+      expect(api.calls, 1);
+      expect(store.value, isNotNull);
+    },
+  );
+
+  test(
+    'concurrent prod triggers share the probe and source changes discard it',
+    () async {
+      setup([roundId], prod: true);
+      discovery.gate = Completer<void>();
+      final refresh = container.read(votingHomeRefreshProvider);
+      final first = refresh.refresh();
+      final second = refresh.refresh();
+      while (discovery.calls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(discovery.calls, 1);
+      (container.read(votingConfigSourceProvider.notifier) as _Source).select(
+        'custom',
+      );
+      discovery.gate!.complete();
+      await Future.wait([first, second]);
+      expect(store.value, null);
+      expect(api.calls, 0);
+    },
+  );
+
+  test(
+    'endpoint replacement does not reuse another endpoints applied revision',
+    () async {
+      setup([roundId], prod: true);
+      final refresh = container.read(votingHomeRefreshProvider);
+      await refresh.refresh();
+      endpoint = 'https://other.example/discovery';
+      container.invalidate(votingDiscoveryEndpointProvider);
+      await refresh.refresh();
+      expect(api.calls, 2);
+    },
+  );
+
+  test('custom source never contacts production discovery', () async {
+    setup([roundId]);
+    await container.read(votingHomeRefreshProvider).refresh();
+    expect(discovery.calls, 0);
+  });
+  test(
+    'new source trigger during a probe runs after the obsolete request drains',
+    () async {
+      setup([roundId], prod: true);
+      discovery.gate = Completer<void>();
+      final refresh = container.read(votingHomeRefreshProvider);
+      final first = refresh.refresh();
+      while (discovery.calls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      (container.read(votingConfigSourceProvider.notifier) as _Source).select(
+        'custom',
+      );
+      final next = refresh.refresh();
+      discovery.gate!.complete();
+      await Future.wait([first, next]);
+      expect(discovery.calls, 1);
+      expect(api.calls, 1);
+      expect(
+        container
+            .read(votingHomeCacheProvider.notifier)
+            .list(votingHomeListKey('main', 'custom')),
+        isNotNull,
+      );
+    },
+  );
+
+  test(
+    'reset drains the lightweight probe and prevents later cache writes',
+    () async {
+      setup([roundId], prod: true);
+      discovery.gate = Completer<void>();
+      final first = container.read(votingHomeRefreshProvider).refresh();
+      while (discovery.calls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final registry = container.read(votingShareTrackingRegistryProvider);
+      var drained = false;
+      final drain = registry.quiesceAndDrain().then((_) => drained = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(drained, false);
+      discovery.gate!.complete();
+      await Future.wait([first, drain]);
+      expect(store.value, null);
+      registry.resume();
+    },
+  );
+  test(
+    'legacy fresh list gains discovery metadata without losing account facts',
+    () async {
+      setup([roundId], prod: true);
+      final key = votingHomeListKey(
+        'main',
+        kProductionStaticVotingConfigSource,
+      );
+      final cache = container.read(votingHomeCacheProvider.notifier);
+      await cache.recordList(
+        key,
+        VotingHomeRoundList(
+          checkedAt: now,
+          fingerprint: 'fingerprint',
+          rounds: [round()],
+        ),
+      );
+      await cache.recordEligibility('account-fact', false, 100);
+      await container.read(votingHomeRefreshProvider).refresh();
+      expect(api.calls, 1);
+      expect(cache.list(key)?.discoveryRevision, discovery.revision);
+      expect(
+        cache.fact('account-fact').eligibility,
+        VotingHomeEligibility.ineligible,
+      );
+      // A normal voting screen refresh cannot discard the last applied revision.
+      await cache.recordList(
+        key,
+        VotingHomeRoundList(
+          checkedAt: now,
+          fingerprint: 'fingerprint',
+          rounds: [round()],
+        ),
+      );
+      container.invalidate(votingHomeCacheProvider);
+      await container.read(votingHomeRefreshProvider).refresh();
+      expect(api.calls, 1);
     },
   );
 }

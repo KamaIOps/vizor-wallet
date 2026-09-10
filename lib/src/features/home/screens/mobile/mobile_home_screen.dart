@@ -1278,8 +1278,8 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
   }
 }
 
-/// Route/lifecycle triggers check the durable TTL; the minute timer only
-/// reevaluates cached deadlines and never fetches a fresh six-hour snapshot.
+/// Route/lifecycle triggers check for voting changes; the minute timer only
+/// reevaluates cached deadlines without issuing network requests.
 class _MobileVotingEntry extends ConsumerStatefulWidget {
   const _MobileVotingEntry();
 
@@ -1303,7 +1303,11 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
         if (_foreground) _refresh();
       },
     );
-    _timer = Timer.periodic(const Duration(minutes: 1), (_) => _refresh());
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted && _foreground && _homeCurrent) {
+        ref.invalidate(votingHomeEntryVisibleProvider);
+      }
+    });
   }
 
   @override
