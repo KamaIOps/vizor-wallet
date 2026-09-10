@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:zcash_wallet/src/services/voting/voting_home_startup.dart';
 import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
 import 'dart:async';
@@ -155,30 +154,25 @@ void main() {
   });
 
   test(
-    'legacy participation caches migrate without promoting unknown eligibility',
+    'incomplete negative observations preserve the previous decision',
     () async {
+      const partial = VotingParticipationResult(
+        fingerprint: 'partial',
+        usedCount: 1,
+        noteCount: 2,
+        remainingEligible: false,
+        localState: false,
+        complete: false,
+      );
       await seed([round()]);
+      await cache.recordParticipation(factKey, 500, partial);
+      expect(cache.fact(factKey).decision, VotingHomeDecision.unknown);
+      expect(visible(), false);
       await cache.recordParticipation(factKey, 500, unused);
-      final json = jsonDecode(store.value!) as Map<String, dynamic>;
-      final fact = (json['facts'] as Map)[factKey] as Map;
-      fact.remove('decision');
-      fact.remove('needsRecheck');
-      container.dispose();
-      container = ProviderContainer(
-        overrides: [
-          votingHomeStartupProvider.overrideWithValue(
-            VotingHomeStartup(cacheJson: jsonEncode(json)),
-          ),
-        ],
-      );
-      cache = container.read(votingHomeCacheProvider.notifier);
+      await cache.recordParticipation(factKey, 500, partial);
       expect(visible(), true);
-      fact.remove('participation');
-      fact['eligibility'] = 'eligible';
-      expect(
-        VotingHomeFact.fromJson(Map<String, dynamic>.from(fact)).decision,
-        VotingHomeDecision.unknown,
-      );
+      expect(cache.fact(factKey).hasCheckedParticipation, false);
+      expect(cache.fact(factKey).participation!.unavailable, false);
     },
   );
 
@@ -219,17 +213,6 @@ void main() {
       expect(cache.fact(factKey).hasCheckedParticipation, true);
     },
   );
-
-  test('legacy local state without a recovery decision is rechecked', () {
-    final fact = VotingHomeFact.fromJson({
-      'eligibility': 'unknown',
-      'progress': 'available',
-      'snapshotHeight': 500,
-      'participation': {...used.toJson(), 'localState': true},
-    });
-    expect(fact.decision, VotingHomeDecision.unknown);
-    expect(fact.hasCheckedParticipation, false);
-  });
 
   test('a changed round snapshot requires a new decision', () async {
     await seed([round()]);

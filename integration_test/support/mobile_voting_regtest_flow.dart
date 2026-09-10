@@ -46,6 +46,7 @@ Future<Widget> buildMobileVotingRegtestApp() => buildBootstrappedZcashWalletApp(
       return VotingParticipationClient(
         http,
         const VotingParticipationBridge(),
+        cache: ref.read(votingFileCacheProvider),
         regtestEndpoint: Uri.parse(
           const String.fromEnvironment('ZCASH_E2E_VOTING_GATEWAY_URL'),
         ),

@@ -213,6 +213,23 @@ class VotingHomeRefresh {
           discoveryEndpoint: discovery == null ? null : endpoint,
         ),
       );
+      for (final round in rounds) {
+        if (const [
+          '2',
+          '3',
+          'tallying',
+          'closed',
+        ].contains(round.status.toLowerCase())) {
+          try {
+            await ref
+                .read(votingFileCacheProvider)
+                .removeRound(network, round.roundId);
+          } catch (_) {
+            // Best-effort disposal must not turn successful discovery into a failure.
+            debugPrint('Voting ended-round cache cleanup deferred');
+          }
+        }
+      }
       _failures.remove(key);
     } catch (error) {
       if (key != null && ref.mounted) {

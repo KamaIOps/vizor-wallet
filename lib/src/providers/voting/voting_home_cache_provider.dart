@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/storage/app_secure_store.dart';
+import '../../services/voting/voting_file_cache.dart';
 import '../../features/voting/voting_poll_ordering.dart';
 import '../../rust/third_party/zcash_voting/wire.dart' as wire;
 import '../../services/voting/voting_models.dart';
@@ -82,33 +82,16 @@ class VotingHomeFact {
     this.progress = VotingHomeProgress.unknown,
     this.snapshotHeight,
     this.participation,
-    VotingHomeDecision? decision,
+    this.decision = VotingHomeDecision.unknown,
     this.needsRecheck = false,
-  }) : _decision = decision;
+  });
 
   final VotingHomeEligibility eligibility;
   final VotingHomeProgress progress;
   final int? snapshotHeight;
   final VotingParticipationResult? participation;
-  final VotingHomeDecision? _decision;
+  final VotingHomeDecision decision;
   final bool needsRecheck;
-
-  /// Legacy caches are migrated using positive evidence, never mere absence
-  /// of an ineligibility result. This value is a UI hint, not authorization.
-  VotingHomeDecision get decision =>
-      _decision ??
-      switch (progress) {
-        VotingHomeProgress.completed => VotingHomeDecision.hide,
-        VotingHomeProgress.inProgress => VotingHomeDecision.show,
-        _ =>
-          participation != null && !participation!.localState
-              ? (participation!.remainingEligible
-                    ? VotingHomeDecision.show
-                    : VotingHomeDecision.hide)
-              : eligibility == VotingHomeEligibility.ineligible
-              ? VotingHomeDecision.hide
-              : VotingHomeDecision.unknown,
-      };
 
   bool get hasCheckedParticipation =>
       participation != null &&
@@ -125,14 +108,8 @@ class VotingHomeFact {
   };
 
   factory VotingHomeFact.fromJson(Map<String, dynamic> json) => VotingHomeFact(
-    decision: json['decision'] == null
-        ? null
-        : VotingHomeDecision.values.byName(json['decision'] as String),
-    needsRecheck:
-        json['needsRecheck'] as bool? ??
-        ((json['participation'] as Map?)?['localState'] == true &&
-            json['progress'] != 'completed' &&
-            json['progress'] != 'inProgress'),
+    decision: VotingHomeDecision.values.byName(json['decision'] as String),
+    needsRecheck: json['needsRecheck'] as bool,
     eligibility: VotingHomeEligibility.values.byName(
       json['eligibility'] as String,
     ),
@@ -151,17 +128,21 @@ abstract interface class VotingHomeCacheStore {
   Future<void> write(String value);
 }
 
-class _SecureVotingHomeCacheStore implements VotingHomeCacheStore {
+class _FileVotingHomeCacheStore implements VotingHomeCacheStore {
+  _FileVotingHomeCacheStore(this.cache);
+  final VotingFileCache cache;
   @override
-  Future<String?> read() =>
-      AppSecureStore.instance.readPlain(votingHomeCacheKey);
+  Future<String?> read() => cache.read(votingHomeCacheKey);
   @override
-  Future<void> write(String value) =>
-      AppSecureStore.instance.writePlain(votingHomeCacheKey, value);
+  Future<void> write(String value) => cache.write(votingHomeCacheKey, value);
 }
 
+final votingFileCacheProvider = Provider<VotingFileCache>(
+  (ref) => VotingFileCache(),
+);
+
 final votingHomeCacheStoreProvider = Provider<VotingHomeCacheStore>(
-  (ref) => _SecureVotingHomeCacheStore(),
+  (ref) => _FileVotingHomeCacheStore(ref.watch(votingFileCacheProvider)),
 );
 final votingHomeClockProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
@@ -326,7 +307,8 @@ class VotingHomeCacheNotifier extends Notifier<int> {
     var decision = sameSnapshot ? old.decision : VotingHomeDecision.unknown;
     if (progress != VotingHomeProgress.completed &&
         progress != VotingHomeProgress.inProgress &&
-        !result.localState) {
+        !result.localState &&
+        (result.complete || result.remainingEligible)) {
       decision = result.remainingEligible
           ? VotingHomeDecision.show
           : VotingHomeDecision.hide;
@@ -339,7 +321,7 @@ class VotingHomeCacheNotifier extends Notifier<int> {
       snapshotHeight: snapshotHeight,
       participation: result,
       decision: decision,
-      needsRecheck: result.localState,
+      needsRecheck: result.localState || !result.complete,
     );
     return true;
   });

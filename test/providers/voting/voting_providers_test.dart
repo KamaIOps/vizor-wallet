@@ -1,3 +1,4 @@
+import 'package:zcash_wallet/src/services/voting/voting_file_cache.dart';
 import 'package:zcash_wallet/src/services/voting/voting_home_startup.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_home_entry_provider.dart';
 import 'dart:async';
@@ -128,7 +129,7 @@ void main() {
         final sync =
             container.read(syncProvider.notifier)
                 as _PollEligibilitySyncNotifier;
-        sync.complete();
+        sync.complete(scannedHeight: 123);
         await container.read(votingParticipationProvider).checkHomeCandidates();
         expect(container.read(votingHomeEntryVisibleProvider), visible);
         expect(client.calls, 0);
@@ -146,6 +147,22 @@ void main() {
               .participation,
           isNotNull,
         );
+        // An actual snapshot revision change causes one new local inspection.
+        (container.read(votingFileCacheProvider) as _SnapshotCache).revision =
+            'changed';
+        client.result = VotingParticipationResult(
+          fingerprint: 'notes',
+          usedCount: visible ? 0 : 1,
+          noteCount: 1,
+          remainingEligible: visible,
+          localState: false,
+          snapshotRevision: 'changed',
+        );
+        await container.read(votingParticipationProvider).checkHomeCandidates();
+        expect(client.calls, 1);
+        await container.read(votingParticipationProvider).checkHomeCandidates();
+        expect(client.calls, 1);
+        expect(container.read(votingHomeEntryVisibleProvider), visible);
         container.dispose();
       }
     },
@@ -658,7 +675,8 @@ void main() {
     final checker =
         container.read(votingParticipationProvider) as _CandidateChecker;
     await checker.checkHomeCandidates();
-    expect(checker.checked, ['a' * 64]);
+    // An eligibility-only hint is not a note-level participation observation.
+    expect(checker.checked, ['a' * 64, 'd' * 64]);
   });
 
   group('poll eligibility', () {
@@ -990,6 +1008,7 @@ void main() {
             lightwalletdUrl: 'https://lightwalletd.example:443',
           ),
         ),
+        votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
         votingHomeCacheStoreProvider.overrideWithValue(
           MemoryVotingHomeCacheStore(),
         ),
@@ -1048,6 +1067,7 @@ void main() {
               lightwalletdUrl: 'https://lightwalletd.example:443',
             ),
           ),
+          votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
           votingHomeCacheStoreProvider.overrideWithValue(
             MemoryVotingHomeCacheStore(),
           ),
@@ -1105,6 +1125,7 @@ void main() {
               lightwalletdUrl: 'https://lightwalletd.example:443',
             ),
           ),
+          votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
           votingHomeCacheStoreProvider.overrideWithValue(
             MemoryVotingHomeCacheStore(),
           ),
@@ -1163,6 +1184,7 @@ void main() {
             lightwalletdUrl: 'https://lightwalletd.example:443',
           ),
         ),
+        votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
         votingHomeCacheStoreProvider.overrideWithValue(
           MemoryVotingHomeCacheStore(),
         ),
@@ -1264,6 +1286,7 @@ void main() {
             lightwalletdUrl: 'https://lightwalletd.example:443',
           ),
         ),
+        votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
         votingHomeCacheStoreProvider.overrideWithValue(
           MemoryVotingHomeCacheStore(),
         ),
@@ -1344,6 +1367,7 @@ void main() {
               lightwalletdUrl: 'https://lightwalletd.example:443',
             ),
           ),
+          votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
           votingHomeCacheStoreProvider.overrideWithValue(
             MemoryVotingHomeCacheStore(),
           ),
@@ -1448,6 +1472,7 @@ void main() {
               lightwalletdUrl: 'https://lightwalletd.example:443',
             ),
           ),
+          votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
           votingHomeCacheStoreProvider.overrideWithValue(
             MemoryVotingHomeCacheStore(),
           ),
@@ -1581,6 +1606,7 @@ void main() {
             lightwalletdUrl: 'https://lightwalletd.example:443',
           ),
         ),
+        votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
         votingHomeCacheStoreProvider.overrideWithValue(
           MemoryVotingHomeCacheStore(),
         ),
@@ -1730,6 +1756,7 @@ void main() {
             lightwalletdUrl: 'https://lightwalletd.example:443',
           ),
         ),
+        votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
         votingHomeCacheStoreProvider.overrideWithValue(
           MemoryVotingHomeCacheStore(),
         ),
@@ -7926,6 +7953,7 @@ void main() {
             lightwalletdUrl: 'https://lightwalletd.example:443',
           ),
         ),
+        votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
         votingHomeCacheStoreProvider.overrideWithValue(
           MemoryVotingHomeCacheStore(),
         ),
@@ -11802,6 +11830,7 @@ ProviderContainer _container({
           lightwalletdUrl: 'https://lightwalletd.example:443',
         ),
       ),
+      votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
       votingHomeCacheStoreProvider.overrideWithValue(
         MemoryVotingHomeCacheStore(),
       ),
@@ -12021,6 +12050,7 @@ ProviderContainer _sessionContainer({
   return ProviderContainer(
     observers: observers,
     overrides: [
+      votingFileCacheProvider.overrideWithValue(_SnapshotCache()),
       votingHomeCacheStoreProvider.overrideWithValue(
         homeCacheStore ?? MemoryVotingHomeCacheStore(),
       ),
@@ -12153,8 +12183,11 @@ class _PollEligibilitySyncNotifier extends SyncNotifier {
   void progress() =>
       state = AsyncData(state.requireValue.copyWith(percentage: 50));
 
-  void complete() => state = AsyncData(
-    state.requireValue.copyWith(lastSyncCompletedAt: DateTime(2026, 8, 26)),
+  void complete({int? scannedHeight}) => state = AsyncData(
+    state.requireValue.copyWith(
+      lastSyncCompletedAt: DateTime(2026, 8, 26),
+      scannedHeight: scannedHeight,
+    ),
   );
 }
 
@@ -15745,4 +15778,10 @@ class _CandidateChecker extends VotingParticipationCoordinator {
   }) async {
     checked.add(round);
   }
+}
+
+class _SnapshotCache extends VotingFileCache {
+  String revision = '0';
+  @override
+  Future<String> snapshotRevision(int snapshot) async => revision;
 }

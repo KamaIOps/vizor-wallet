@@ -1,7 +1,7 @@
 # Restored voting participation
 
 Home schedules a client-side check for active candidate rounds (including those whose Home card is hidden) after
-wallet sync reaches the snapshot. Detail entry also waits for the same deduplicated
+wallet sync settles with the snapshot available. Detail entry also waits for the same deduplicated
 check before preparing voting power. The list preview and submission/recovery
 jobs do not start another participation check. Home keeps its card hidden until a positive actionable result is confirmed.
 Previously confirmed visibility is retained while checks wait or fail. Settings remains a permanent entry point.
@@ -12,7 +12,7 @@ UFVK-only Keystone accounts without QR interaction, spending keys, hotkeys, PIR,
 or proof generation. Actual voting still uses the existing signer flow.
 
 The Dart client uses the wallet's network HTTP transport, including its Tor policy.
-It reads `/commit`, `/validators`, then one `/abci_query` per real note, four at a
+It reads `/commit`, `/validators`, then one `/abci_query` per previously unknown real note, four at a
 time, at the signed header height minus one. Each request has a ten-second timeout;
 a check has a four-minute budget and a 1,024-note cap. It does not query Lambda
 with account identifiers. A vote RPC can observe and correlate the queried
@@ -26,7 +26,10 @@ Rust verifies IAVL membership (value `01`) or non-membership, then the multistor
 proof for `vote` against the signed header's app hash. It checks chain ID, height,
 header hash, time (at most ten minutes old or one minute ahead), validator-set
 hash and the Tendermint commit's signature quorum. Missing/pruned/invalid proofs
-leave the previous display decision unchanged and never exclude notes.
+remain unknown. Valid sibling proofs are retained; unknown notes are not used to
+prepare a new delegation. A partial result only changes visibility when its
+proven unused subset already meets the voting threshold. Otherwise the prior
+display decision is retained.
 Without a previous decision, the card stays hidden.
 
 This is a reader anchored to a bundled consensus committee, not a full rotating
@@ -56,13 +59,29 @@ exact-set anchor. Failed checks preserve the last confirmed display decision.
 
 ## Persistence and recovery
 
-A verified result is cached per network/config fingerprint/account/round. Successful
-checks are not repeated automatically. Consecutive failures back off for 1, 2, 4,
-8, 16, then at most 30 minutes, per network/source/account/round. Existing Home
-triggers retry once that deadline passes; no retry timer is added. Backoff lives
-only in memory and resets after success. Cancelled work (lock, account or source
-change) and incomplete sync do not increase the delay.
-Detail's **Check again** explicitly retries and refreshes eligibility.
+Each verified note observation is stored in Dart app-private ordinary files beside
+its wallet DB (`<wallet-db>.voting-cache`), not secure storage. The scope is
+network / account UUID / round ID / snapshot / governance derivation version.
+Records hold the full governance store key, a used/unused flag and proof height;
+they contain no viewing keys, spend keys, note plaintext or vote secrets.
+Both used and unused observations persist until the round ends. The current
+policy assumes voting occurs only in this app and the Tendermint voting chain
+has finality: no TTL or periodic revalidation of a known note is performed.
+
+Rust re-derives the current snapshot candidates and calculates eligibility from
+the known unused subset. Only unknown keys require RPC. A shared header is
+verified once and each note proof independently; successful siblings survive
+partial failures. Existing durable delegation confirmations promote matching
+notes to used without an RPC, including confirmations recovered after restart.
+Merging is monotonic: a late unused result cannot overwrite used.
+
+Consecutive failures back off for 1, 2, 4, 8, 16, then at most 30 minutes, per
+network/source/account/round. Existing Home triggers retry once that deadline
+passes; no retry timer is added. Only remaining unknown notes are queried.
+Backoff lives in memory and resets after success. Cancelled work (lock, account
+or source change) and incomplete sync do not increase the delay.
+Detail's **Check again** refreshes round details and reevaluates candidates and
+eligibility, reusing known note observations.
 
 Each durable fact stores an `unknown`, `show` or `hide` decision separately from
 `needsRecheck`. A successful participation result confirms `show` only when
@@ -72,15 +91,24 @@ with the round's proposal IDs before deciding whether work remains. Missing
 proposals or a failed planner call preserves the previous successful observation.
 Eligibility-only positive results are not enough to promote an unknown card.
 
-Neither Home refresh nor decreasing sync progress heights invalidate these facts.
-The explicit wallet-rewind cache API marks affected facts for recheck and preserves
-their last decisions; it must not be called with ordinary progress events. There
-is currently no production caller of that API. A changed round snapshot discards
-the old decision, and a newly eligible observation schedules a recheck. Round
-closure, deadline expiry, completion, account and source/network scoping still
-apply independently of sync. Old caches migrate from verified evidence; ambiguous
-legacy local recovery results are rechecked.
-This is a restore-time observation, not continuous cross-device monitoring.
+Sync progress heights never invalidate a decision. Dart registers inspected
+snapshot heights using tiny revision files. Rust changes those tokens before
+an actual affected scan/rewind and after affected Orchard note mutations.
+Scans entirely above a snapshot leave its token unchanged, regardless of how
+many new blocks arrive. After sync, a changed token triggers local candidate
+reevaluation; unchanged governance keys reuse their observations, and only new
+keys are queried. A token change during evaluation rejects the round summary
+while retaining verified note observations. This supports Zcash rescans/rewinds
+without assuming monotonically increasing displayed progress.
+
+Home summaries are also ordinary files and hydrate before the first frame.
+There is no old-cache migration. A changed round snapshot discards the old
+summary; closure, deadlines, completion and account/source/network scoping
+remain independent of sync. Explicit terminal round status deletes its note
+files and prevents late writes from recreating them. Missing listings or an
+individual proposal ending do not delete the whole round cache. Tiny snapshot
+revision/ended-round markers remain until wallet reset; account deletion removes
+that account's notes. Real voting/recovery records are not disposed with caches.
 
 Verified used notes are excluded from new eligibility, precomputation and all
 software/Keystone delegation preparation paths. The adapter retains the SDK's
@@ -150,8 +178,8 @@ Permanent HTTP errors, malformed data and failed proof verification are not retr
 inside the operation. The four-minute budget and Home cancellation still apply;
 a final failure falls back to the coordinator's exponential backoff.
 
-When preparation finds zero snapshot notes, no participation RPC is sent. Rust
-rereads the wallet and accepts empty evidence only for the same empty candidate
-set. The existing local result/persistence path still runs; zero notes never
+When preparation finds no unknown snapshot notes, no participation RPC is sent.
+Rust rereads the wallet and reevaluates the same candidate fingerprint using
+locally stored observations. The existing local result/persistence path still runs; zero notes never
 means previously used voting rights. It confirms a hidden Home decision when
 there is no actionable local recovery.

@@ -36,7 +36,11 @@ final votingParticipationSourceSupportedProvider =
 final votingParticipationClientProvider = Provider((ref) {
   final http = DartIoVotingHttpClient();
   ref.onDispose(() => http.close(force: true));
-  return VotingParticipationClient(http, const VotingParticipationBridge());
+  return VotingParticipationClient(
+    http,
+    const VotingParticipationBridge(),
+    cache: ref.watch(votingFileCacheProvider),
+  );
 });
 
 final votingParticipationProvider = Provider(
@@ -122,7 +126,11 @@ class VotingParticipationCoordinator {
     final account = ref.read(accountProvider).value?.activeAccountUuid;
     if (account == null) return;
     final showTest = ref.read(showTestVotingRoundsProvider).value ?? false;
-    final scannedHeight = ref.read(syncProvider).value?.scannedHeight ?? 0;
+    final sync = ref.read(syncProvider).value;
+    // Preserve the displayed decision while sync mutates the note set. Inspect
+    // once the existing sync-completion trigger fires, not at every batch.
+    if (sync?.isSyncing ?? false) return;
+    final scannedHeight = sync?.scannedHeight ?? 0;
     for (final round in list.rounds) {
       if (epoch != _epoch || isHomeCurrent?.call() == false) return;
       if (!showTest && isHiddenTestVotingRoundTitle(round.title)) continue;
@@ -130,14 +138,7 @@ class VotingParticipationCoordinator {
         votingHomeFactKey(network, list.fingerprint, account, round.roundId),
       );
       if ((fact.progress == VotingHomeProgress.inProgress ||
-              fact.progress == VotingHomeProgress.completed) ||
-          fact.hasCheckedParticipation) {
-        continue;
-      }
-      if (!fact.needsRecheck &&
-          fact.eligibility == VotingHomeEligibility.ineligible &&
-          fact.snapshotHeight != null &&
-          scannedHeight >= fact.snapshotHeight!) {
+          fact.progress == VotingHomeProgress.completed)) {
         continue;
       }
       if (!ref.mounted || ref.read(appSecurityProvider).requiresUnlock) return;
@@ -222,11 +223,21 @@ class VotingParticipationCoordinator {
           await cache.ensureLoaded();
           if (!current()) return;
           final list = cache.list(votingHomeListKey(network, source));
+          var snapshotChanged = false;
           if (list != null) {
             final fact = cache.fact(
               votingHomeFactKey(network, list.fingerprint, account, round),
             );
+            if (fact.snapshotHeight != null) {
+              final revision = await ref
+                  .read(votingFileCacheProvider)
+                  .snapshotRevision(fact.snapshotHeight!);
+              if (!current()) return;
+              snapshotChanged =
+                  revision != (fact.participation?.snapshotRevision ?? '0');
+            }
             if (!force &&
+                !snapshotChanged &&
                 (fact.hasCheckedParticipation ||
                     fact.progress == VotingHomeProgress.completed ||
                     fact.progress == VotingHomeProgress.inProgress)) {
@@ -244,7 +255,17 @@ class VotingParticipationCoordinator {
               round,
             ),
           );
+          if (currentFact.snapshotHeight != null) {
+            final revision = await ref
+                .read(votingFileCacheProvider)
+                .snapshotRevision(currentFact.snapshotHeight!);
+            if (!current()) return;
+            snapshotChanged =
+                revision !=
+                (currentFact.participation?.snapshotRevision ?? '0');
+          }
           if (!force &&
+              !snapshotChanged &&
               (currentFact.hasCheckedParticipation ||
                   currentFact.progress == VotingHomeProgress.inProgress ||
                   currentFact.progress == VotingHomeProgress.completed)) {
@@ -347,6 +368,9 @@ class VotingParticipationCoordinator {
             result,
           );
           if (plan != null) await cache.recordPlan(factKey, plan);
+          if (!result.complete) {
+            throw StateError('Some voting notes remain unverified');
+          }
           _failed.remove(key);
         })
         .catchError((Object _) {

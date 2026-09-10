@@ -1,3 +1,7 @@
+import 'dart:io';
+import 'package:zcash_wallet/src/services/voting/voting_file_cache.dart';
+import 'package:zcash_wallet/src/rust/third_party/zcash_voting/wire.dart'
+    as wire;
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,22 +9,41 @@ import 'package:zcash_wallet/src/rust/api/voting.dart' as rust;
 import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
 import 'fake_voting_http.dart';
 
+class _Params implements wire.VotingRoundParams {
+  @override
+  String get voteRoundId => 'a' * 64;
+  @override
+  BigInt get snapshotHeight => BigInt.from(123);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _Context implements rust.ApiVotingRoundContext {
   _Context(this.network);
   @override
   final String network;
+  @override
+  String get accountUuid => 'account';
+  @override
+  wire.VotingRoundParams get roundParams => _Params();
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _Bridge extends VotingParticipationBridge {
   List<String> keys = ['01', '02'];
+  List<String> confirmed = [];
+  bool used = true;
   int evaluations = 0;
   String? evidence;
   bool reject = false;
   @override
   Future<String> prepare(rust.ApiVotingRoundContext context) async =>
-      jsonEncode({'keys': keys, 'fingerprint': 'notes'});
+      jsonEncode({
+        'keys': keys,
+        'fingerprint': 'notes',
+        'confirmed': confirmed,
+      });
   @override
   Future<String> evaluate(
     rust.ApiVotingRoundContext context,
@@ -31,7 +54,15 @@ class _Bridge extends VotingParticipationBridge {
     evaluations++;
     this.evidence = evidence;
     if (reject) throw StateError('invalid proof');
+    final input = jsonDecode(evidence) as Map;
+    final observations = <String, dynamic>{
+      ...input['cached'] as Map<String, dynamic>,
+      for (final key in input['queryKeys'] as List)
+        key as String: {'used': used, 'height': 100},
+    };
     return jsonEncode({
+      'complete': keys.every(observations.containsKey),
+      'observations': observations,
       'fingerprint': fingerprint,
       'usedCount': keys.length,
       'noteCount': keys.length,
@@ -60,6 +91,92 @@ void main() {
       },
     },
   );
+  test(
+    'restart reuses used and unused notes; only additions use RPC',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('voting-client-');
+      addTearDown(() => directory.delete(recursive: true));
+      VotingFileCache cache() =>
+          VotingFileCache(directory: () async => directory);
+      final bridge = _Bridge()
+        ..keys = ['0100${'a' * 128}']
+        ..used = false;
+      final first = http();
+      await VotingParticipationClient(
+        first,
+        bridge,
+        cache: cache(),
+      ).check(_Context('main'), () => now, () => true);
+      expect(first.requests, hasLength(3));
+      final reopened = http();
+      final client = VotingParticipationClient(
+        reopened,
+        bridge,
+        cache: cache(),
+      );
+      await client.check(_Context('main'), () => now, () => true);
+      expect(reopened.requests, isEmpty);
+      bridge.keys = [...bridge.keys, '0100${'b' * 128}'];
+      bridge.used = true;
+      await client.check(_Context('main'), () => now, () => true);
+      expect(reopened.requests, hasLength(3));
+      expect(
+        reopened.requests.last.uri.queryParameters['data'],
+        '0x${bridge.keys.last}',
+      );
+      bridge.confirmed = [bridge.keys.first];
+      await client.refreshLocal(_Context('main'));
+      final records = await cache().readNotes(
+        'account',
+        client.scopeFor(_Context('main')),
+      );
+      expect(records.values.every((v) => v['used'] == true), true);
+      reopened.requests.clear();
+      await VotingParticipationClient(
+        reopened,
+        bridge,
+        cache: cache(),
+      ).check(_Context('main'), () => now, () => true);
+      expect(reopened.requests, isEmpty);
+    },
+  );
+
+  test(
+    'partial transport failure persists successes and retries only unknown notes',
+    () async {
+      final transport = http();
+      final bridge = _Bridge();
+      final failing =
+          Uri.parse(
+            'https://vote-rpc-primary.valargroup.org/abci_query',
+          ).replace(
+            queryParameters: {
+              'path': '"/store/vote/key"',
+              'data': '0x02',
+              'height': '100',
+              'prove': 'true',
+            },
+          );
+      transport.responses[failing.toString()] = jsonResponse(
+        {},
+        statusCode: 400,
+      );
+      final client = VotingParticipationClient(transport, bridge);
+      expect(
+        (await client.check(_Context('main'), () => now, () => true)).complete,
+        false,
+      );
+      transport.responses.remove(failing.toString());
+      transport.requests.clear();
+      expect(
+        (await client.check(_Context('main'), () => now, () => true)).complete,
+        true,
+      );
+      expect(transport.requests, hasLength(3));
+      expect(transport.requests.last.uri.queryParameters['data'], '0x02');
+    },
+  );
+
   test(
     'both networks pin proofs to height before signed header and require Rust verification',
     () async {
@@ -155,7 +272,7 @@ void main() {
       ).check(_Context('main'), () => now, () => true);
       expect(transport.requests, isEmpty);
       expect(bridge.evaluations, 1);
-      expect(bridge.evidence, '');
+      expect(jsonDecode(bridge.evidence!), {'queryKeys': [], 'cached': {}});
       expect(result.unavailable, isFalse);
       bridge.reject = true;
       await expectLater(

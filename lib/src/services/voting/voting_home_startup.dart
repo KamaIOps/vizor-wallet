@@ -2,12 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/storage/app_secure_store.dart';
+import 'voting_file_cache.dart';
 
 const votingConfigSourceKey = 'zcash_voting_config_source_url';
 const votingConfigSavedSourcesKey = 'zcash_voting_config_saved_sources';
 const votingShowTestRoundsStorageKey = 'vizor_voting_show_test_rounds';
 
-const votingHomeCacheKey = 'zcash_voting_home_cache_v1';
+const votingHomeCacheKey = 'home-v2.json';
 
 /// Local-only startup data. Never resolves config or reads the wallet DB.
 class VotingHomeStartup {
@@ -28,7 +29,7 @@ final votingHomeStartupProvider = Provider<VotingHomeStartup?>((_) => null);
 Future<VotingHomeStartup?> loadVotingHomeStartup(AppSecureStore storage) async {
   try {
     final values = await Future.wait([
-      storage.readPlain(votingHomeCacheKey),
+      VotingFileCache().read(votingHomeCacheKey),
       storage.readPlain(votingConfigSourceKey),
       storage.readPlain(votingConfigSavedSourcesKey),
     ]);
