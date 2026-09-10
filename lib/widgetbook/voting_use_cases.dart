@@ -135,6 +135,7 @@ Widget buildMobileVotingPollsUseCase(BuildContext context) {
 Widget buildMobileVotingPollsEligibilityUseCase(
   BuildContext context, {
   Future<VotingPollEligibility> Function(String)? loadEligibility,
+  bool previouslyUsed = false,
 }) {
   return _mobileVotingFullPagePreview(
     context,
@@ -151,7 +152,7 @@ Widget buildMobileVotingPollsEligibilityUseCase(
           _PreviewShowTestVotingRoundsNotifier.new,
         ),
         votingParticipationUnavailableProvider.overrideWith(
-          (ref, roundId) => false,
+          (ref, roundId) => previouslyUsed && roundId == 'nu7-ineligible',
         ),
         votingPollEligibilityProvider.overrideWith(
           (ref, roundId) async => loadEligibility != null
@@ -277,6 +278,7 @@ Widget _buildMobileVotingActiveUseCase(
   BuildContext context, {
   required bool eligible,
   bool eligibilityUnknown = false,
+  bool previouslyUsed = false,
   String? votingEligibilityMessage,
 }) {
   return _mobileVotingFullPagePreview(
@@ -285,6 +287,8 @@ Widget _buildMobileVotingActiveUseCase(
       title: 'Coinholder voting',
       child: VotingActivePollContent(
         showDesktopToolbar: false,
+        participationUnavailable: previouslyUsed,
+        onParticipationRetry: _previewNoop,
         roundId: 'preview-nsm',
         title: '[TEST] Very Serious Snack Governance 3',
         snapshotHeight: 3543600,
@@ -302,7 +306,8 @@ Widget _buildMobileVotingActiveUseCase(
         votingEligibilityConfirmed: eligible,
         answersEditable: eligible,
         votingEligibilityMessage: votingEligibilityMessage,
-        votingEligibilityErrorMessage: eligible || eligibilityUnknown
+        votingEligibilityErrorMessage:
+            eligible || eligibilityUnknown || previouslyUsed
             ? null
             : 'This account did not have enough eligible '
                   'shielded funds at snapshot block 3,543,600. Switch to an eligible account to vote.',
@@ -913,3 +918,12 @@ const _previewSnackResultProposal = VotingProposalView(
     ),
   ],
 );
+
+Widget buildMobileVotingPreviouslyUsedListUseCase(BuildContext context) =>
+    buildMobileVotingPollsEligibilityUseCase(context, previouslyUsed: true);
+Widget buildMobileVotingPreviouslyUsedDetailUseCase(BuildContext context) =>
+    _buildMobileVotingActiveUseCase(
+      context,
+      eligible: false,
+      previouslyUsed: true,
+    );
