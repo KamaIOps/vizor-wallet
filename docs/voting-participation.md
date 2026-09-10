@@ -76,3 +76,28 @@ proofs. Tests use each fixture header's timestamp, so they remain deterministic.
 Corruption tests cover signatures, validator power, app hash, query key/height,
 proof bytes, value, wrong network and stale/future headers. No private wallet
 material is included.
+
+## Mobile reinstall regtest E2E
+
+Run `scripts/e2e/flutter-ios-regtest-mobile-voting-reinstall.sh` with an explicit
+`SIMULATOR_UDID` when multiple simulators are booted. The existing mobile voting
+runner now also asserts that a fully completed vote removes its Home card.
+
+The reinstall runner keeps the same Zcash and vote chain alive between two
+Flutter integration invocations. Phase one imports, syncs and votes through the
+real mobile UI. The host verifies the app is uninstalled after Flutter test cleanup,
+explicitly uninstalling it if the Flutter runner leaves it installed. Phase two asserts the old DB/sidecar are absent, clears only
+the regtest app's surviving secure storage, and imports the same mnemonic from
+birthday 1. No database, voting hotkey, progress or participation cache is copied.
+
+Tests configure transport/source support and the newly created local chain's
+trust anchor. They do not override eligibility, participation, Home visibility,
+or cryptographic verification. The regtest anchor is immutable for that process
+and is never consulted for mainnet/testnet. The gateway relays actual CometBFT
+proofs and records aggregate request counts without logging queried identifiers.
+
+The restored Home assertion requires an active round in the actual cached list,
+a synced snapshot, verified used notes, no remaining voting rights and no local
+recovery state. It then asserts the card is absent, checks Settings/detail access,
+and checks that Home reentry does not repeat participation RPCs. Screenshots are
+saved under `.regtest-voting/logs/screenshots/`.
