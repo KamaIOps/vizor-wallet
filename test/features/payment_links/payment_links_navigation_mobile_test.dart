@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_service.dart';
 import '../../support/payment_links_screen_support.dart';
+import 'package:zcash_wallet/src/features/payment_links/models/vizor_payment_link.dart';
+import 'package:zcash_wallet/src/features/payment_links/widgets/mobile/payment_link_scan_sheet.dart';
 
 const _amount = 'payment_link_mobile_amount_continue_button';
 const _message = 'payment_link_mobile_message_continue_button';
@@ -18,13 +20,18 @@ Future<GoRouter> openFromSettings(
   WidgetTester tester, {
   FakePaymentLinkOperations? operations,
   SwitchablePaymentLinkAccountNotifier? accounts,
+  PaymentLinkScanner? scanner,
+  FakePaymentLinkClipboard? clipboard,
 }) async {
   await pumpPaymentLinksScreen(
     tester,
     operations: operations,
     accountNotifier: accounts,
+    scanner: scanner,
     logicalSize: const Size(393, 852),
-    clipboard: FakePaymentLinkClipboard(text: incomingLink.toUri().toString()),
+    clipboard:
+        clipboard ??
+        FakePaymentLinkClipboard(text: incomingLink.toUri().toString()),
   );
   final router = GoRouter.of(
     tester.element(keyed('payment_links_mobile_screen')),
@@ -152,7 +159,8 @@ void main() {
     await accounts.switchAccount('account-2');
     await tester.pump();
     await back(tester);
-    expect(keyed(_amount), findsOneWidget);
+    expect(keyed(_review), findsOneWidget);
+    expect(find.text('Creating...'), findsOneWidget);
     expect(keyed('payment_links_mobile_create_button'), findsNothing);
     gate.complete();
     await tester.pumpAndSettle();
@@ -254,26 +262,146 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
 
+  testWidgets('claim execution blocks every back path until completion', (
+    tester,
+  ) async {
+    final gate = Completer<PaymentLinkClaimResult>();
+    final operations = FakePaymentLinkOperations(claimCompleter: gate);
+    final router = await openFromSettings(tester, operations: operations);
+    await tap(tester, 'payment_links_mobile_redeem_button');
+    await tester.tap(find.text('Paste card link'));
+    await tester.pumpAndSettle();
+    await tester.tap(keyed('payment_link_mobile_claim_button'));
+    await tester.pump();
+    await back(tester);
+    expect(find.text('Claiming...'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Close').last);
+    await tester.pump();
+    expect(find.text('Claiming...'), findsOneWidget);
+    expect(router.state.uri.path, '/payment-links');
+    gate.complete(broadcastedClaimResult);
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(router.state.uri.path, '/home');
+    expect(operations.discardedClaimAddresses, isEmpty);
+  }, variant: platforms);
+  testWidgets('claim failure unlocks the existing preview for checking', (
+    tester,
+  ) async {
+    final gate = Completer<PaymentLinkClaimResult>();
+    final operations = FakePaymentLinkOperations(claimCompleter: gate);
+    await openFromSettings(tester, operations: operations);
+    await tap(tester, 'payment_links_mobile_redeem_button');
+    await tester.tap(find.text('Paste card link'));
+    await tester.pumpAndSettle();
+    await tester.tap(keyed('payment_link_mobile_claim_button'));
+    await tester.pump();
+    await back(tester);
+    expect(find.text('Claiming...'), findsOneWidget);
+    gate.completeError(StateError('submission failed'));
+    await tester.pumpAndSettle();
+    expect(find.text('Try again'), findsOneWidget);
+    await back(tester);
+    expect(keyed('payment_links_mobile_create_button'), findsOneWidget);
+  }, variant: platforms);
+
+  testWidgets('failed funding after account change unlocks and requotes', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final accounts = SwitchablePaymentLinkAccountNotifier();
+    await openFromSettings(
+      tester,
+      accounts: accounts,
+      operations: FakePaymentLinkOperations(createFundedLinkGate: gate),
+    );
+    await createToReview(tester);
+    await tester.tap(keyed(_review));
+    await tester.pump();
+    await accounts.switchAccount('account-2');
+    await tester.pump();
+    expect(find.text('Creating...'), findsOneWidget);
+    gate.completeError(StateError('funding failed'));
+    await tester.pumpAndSettle();
+    expect(keyed(_amount), findsOneWidget);
+    await back(tester);
+    expect(keyed('payment_links_mobile_create_button'), findsOneWidget);
+  }, variant: platforms);
+
+  testWidgets('scanner result from an earlier redeem visit is ignored', (
+    tester,
+  ) async {
+    final gate = Completer<VizorPaymentLink?>();
+    final operations = FakePaymentLinkOperations();
+    await openFromSettings(
+      tester,
+      operations: operations,
+      scanner: (context, {required networkName}) => gate.future,
+    );
+    await tap(tester, 'payment_links_mobile_redeem_button');
+    await tester.tap(find.text('Scan QR code'));
+    await tester.pump();
+    await back(tester);
+    await tap(tester, 'payment_links_mobile_redeem_button');
+    gate.complete(incomingLink);
+    await tester.pumpAndSettle();
+    expect(find.text('Paste card link'), findsOneWidget);
+    expect(operations.preparedLinks, isEmpty);
+  }, variant: platforms);
+
+  testWidgets('late clipboard clear cannot reset a new preview', (
+    tester,
+  ) async {
+    final clipboard = _DelayedClearClipboard();
+    await openFromSettings(tester, clipboard: clipboard);
+    await tap(tester, 'payment_links_mobile_redeem_button');
+    await tester.tap(find.text('Paste card link'));
+    await tester.pumpAndSettle();
+    await tester.tap(keyed('payment_link_mobile_clear_clipboard_button'));
+    await tester.pump();
+    await back(tester);
+    await tap(tester, 'payment_links_mobile_redeem_button');
+    clipboard.text = incomingLink.toUri().toString();
+    await tester.tap(find.text('Paste card link'));
+    await tester.pumpAndSettle();
+    expect(keyed('payment_link_mobile_claim_button'), findsOneWidget);
+    clipboard.gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Claim the gift'), findsOneWidget);
+  }, variant: platforms);
   testWidgets(
-    'leaving submitted claim keeps ownership without late navigation',
+    'late clear preserves loading for a new check on the same visit',
     (tester) async {
-      final gate = Completer<PaymentLinkClaimResult>();
-      final operations = FakePaymentLinkOperations(claimCompleter: gate);
-      final router = await openFromSettings(tester, operations: operations);
+      final clipboard = _DelayedClearClipboard();
+      final gate = Completer<void>();
+      await openFromSettings(
+        tester,
+        clipboard: clipboard,
+        operations: FakePaymentLinkOperations(prepareClaimGates: {1: gate}),
+      );
       await tap(tester, 'payment_links_mobile_redeem_button');
       await tester.tap(find.text('Paste card link'));
       await tester.pumpAndSettle();
-      await tester.tap(keyed('payment_link_mobile_claim_button'));
+      await tester.tap(keyed('payment_link_mobile_clear_clipboard_button'));
       await tester.pump();
-      await back(tester);
-      expect(keyed('payment_links_mobile_create_button'), findsOneWidget);
-      gate.complete(broadcastedClaimResult);
-      for (var i = 0; i < 12; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      expect(router.state.uri.path, '/payment-links');
-      expect(operations.discardedClaimAddresses, isEmpty);
+      clipboard.text = incomingLink.toUri().toString();
+      await tester.tap(find.text('Paste card link'));
+      await tester.pump();
+      clipboard.gate.complete();
+      await tester.pump();
+      expect(keyed('payment_link_mobile_redeem_checking'), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Claim the gift'), findsOneWidget);
     },
     variant: platforms,
   );
+}
+
+class _DelayedClearClipboard extends FakePaymentLinkClipboard {
+  _DelayedClearClipboard() : super(text: 'invalid');
+  final gate = Completer<void>();
+  @override
+  Future<void> clear() => gate.future;
 }

@@ -132,6 +132,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
 
   int _mobileNavigationEpoch = 0;
   bool _softwareFundingInProgress = false;
+  bool _claimSubmissionInProgress = false;
 
   bool _isCurrentNavigation(int epoch) =>
       kAppFormFactor != AppFormFactor.mobile || epoch == _mobileNavigationEpoch;
@@ -241,6 +242,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
 
   bool get _mobileNavigationLocked =>
       _softwareFundingInProgress ||
+      _claimSubmissionInProgress ||
       _pendingFundingMetadata != null ||
       (_operationInProgress &&
           (_page == PaymentLinksLocalPage.review || _choosingClaimAccount));
@@ -616,6 +618,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       archived: record?.archived ?? false,
       onBack: () => _showPage(PaymentLinksLocalPage.home),
       onCheck: () async {
+        final epoch = _mobileNavigationEpoch;
         if (record?.isClaimInFlight ?? false) {
           setState(() => _operationInProgress = true);
           try {
@@ -629,7 +632,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
                     );
               },
             );
-            if (!mounted) return;
+            if (!mounted || !_isCurrentNavigation(epoch)) return;
             setState(() {
               _applyReceivedCards(records);
               final current = records
@@ -642,7 +645,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
               }
             });
           } catch (_) {
-            if (mounted) {
+            if (mounted && _isCurrentNavigation(epoch)) {
               _showError('Card status could not be checked. Try again.');
             }
           } finally {
@@ -663,6 +666,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     bool archived,
   ) async {
     if (_operationInProgress) return;
+    final epoch = _mobileNavigationEpoch;
     setState(() => _operationInProgress = true);
     try {
       await _paymentLinkOperations.setReceivedCardArchived(
@@ -670,14 +674,16 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
         archived,
       );
       final records = await _paymentLinkOperations.loadReceivedLinkRecoveries();
-      if (!mounted) return;
+      if (!mounted || !_isCurrentNavigation(epoch)) return;
       setState(() {
         _receivedCards = records;
         _outcomeLink = null;
         _page = PaymentLinksLocalPage.home;
       });
     } catch (_) {
-      if (mounted) _showError('Card could not be updated. Try again.');
+      if (mounted && _isCurrentNavigation(epoch)) {
+        _showError('Card could not be updated. Try again.');
+      }
     } finally {
       if (mounted) setState(() => _operationInProgress = false);
     }
@@ -851,9 +857,13 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
 
   void _handleActiveAccountChanged(String? previous, String? current) {
     if (current != null) _handleClaimDestinationAccountChanged(current);
-    // The pending metadata save belongs to funding that already happened, so
-    // resetting the wizard here would strand its retry behind _showPage.
-    if (_pendingFundingMetadata != null) return;
+    // Keep the original review and loading label during mobile funding.
+    // An unsaved result must also retain its review so saving can be retried.
+    if (_pendingFundingMetadata != null ||
+        (kAppFormFactor == AppFormFactor.mobile &&
+            _softwareFundingInProgress)) {
+      return;
+    }
     final quotedAccount = _fundingQuote?.sourceAccountUuid;
     final priorAccount =
         previous ?? quotedAccount ?? _fundingQuoteRequestedAccountUuid;
@@ -1197,6 +1207,14 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
           _operationInProgress = false;
           _softwareFundingInProgress = false;
         });
+        // A switch during funding must keep the existing loading UI visible.
+        // Once it finishes, invalidate a failed draft for the new account.
+        if (kAppFormFactor == AppFormFactor.mobile) {
+          _handleActiveAccountChanged(
+            sourceAccountUuid,
+            ref.read(accountProvider).value?.activeAccountUuid,
+          );
+        }
         unawaited(_refreshFundingProgress());
       }
     }
@@ -1369,6 +1387,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   Future<void> _scanPaymentLink() async {
     if (_operationInProgress) return;
     final page = _page;
+    final epoch = _mobileNavigationEpoch;
     setState(() => _operationInProgress = true);
     VizorPaymentLink? link;
     try {
@@ -1379,7 +1398,12 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
     } finally {
       if (mounted) setState(() => _operationInProgress = false);
     }
-    if (!mounted || link == null || _page != page) return;
+    if (!mounted ||
+        !_isCurrentNavigation(epoch) ||
+        link == null ||
+        _page != page) {
+      return;
+    }
     setState(() {
       _redeemFromQrCode = true;
       _retryLink = null;
@@ -1684,10 +1708,20 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
   }
 
   Future<void> _clearClipboard() async {
-    await ref.read(paymentLinkClipboardProvider).clear();
+    final epoch = _mobileNavigationEpoch;
+    final page = _page;
     final claimSession = _receivedClaimSession;
+    await ref.read(paymentLinkClipboardProvider).clear();
+    if (!mounted ||
+        !_isCurrentNavigation(epoch) ||
+        _page != page ||
+        _operationInProgress ||
+        !identical(_receivedClaimSession, claimSession)) {
+      return;
+    }
     if (claimSession != null) {
       await _paymentLinkOperations.discardClaimSession(claimSession);
+      if (!mounted || !_isCurrentNavigation(epoch)) return;
     }
     _paymentLinkIntake.clearError();
     if (mounted) {
@@ -1860,6 +1894,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
       // the card on mobile, so leaving the route cannot release its wallet.
       _receivedClaimSession = null;
       if (mobile) {
+        _claimSubmissionInProgress = true;
         _operationInProgress = true;
       } else {
         _receivedLink = null;
@@ -1955,6 +1990,10 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
               : 'Gift card claim failed. It may still be waiting for confirmation '
                     'or may already be spent.',
         );
+      }
+    } finally {
+      if (mounted && mobile) {
+        setState(() => _claimSubmissionInProgress = false);
       }
     }
   }
