@@ -1,0 +1,359 @@
+import 'dart:io';
+import 'dart:convert';
+import 'package:zcash_wallet/src/core/config/network_config.dart';
+import 'package:zcash_wallet/src/providers/account_provider.dart';
+import 'package:zcash_wallet/src/providers/sync_provider.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_home_cache_provider.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_config_source_provider.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_participation_provider.dart';
+import 'package:zcash_wallet/src/features/voting/voting_poll_ordering.dart';
+import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
+import 'package:zcash_wallet/src/services/voting/voting_http.dart';
+import 'package:zcash_wallet/src/services/voting/voting_config_loader.dart';
+import 'package:zcash_wallet/src/rust/api/voting.dart' as voting_rust;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:zcash_wallet/app.dart';
+import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_session_provider.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_submission_job_provider.dart';
+
+import 'mobile_regtest_flow.dart';
+
+const _roundId = String.fromEnvironment('ZCASH_E2E_VOTE_ROUND_ID');
+
+Future<void> initializeMobileVotingRegtestRuntime() async {
+  if (kZcashDefaultNetworkName != 'regtest') throw StateError('regtest only');
+  await initializeZcashWalletRuntime();
+  await voting_rust.configureRegtestVotingParticipation(
+    chainId: const String.fromEnvironment('ZCASH_E2E_VOTE_CHAIN_ID'),
+    validatorHash: const String.fromEnvironment(
+      'ZCASH_E2E_VOTE_VALIDATOR_HASH',
+    ),
+  );
+}
+
+Future<Widget> buildMobileVotingRegtestApp() => buildBootstrappedZcashWalletApp(
+  overrides: [
+    votingParticipationSourceSupportedProvider.overrideWithValue(
+      (network, source) =>
+          network == 'regtest' && source == kE2eStaticVotingConfigSource,
+    ),
+    votingParticipationClientProvider.overrideWith((ref) {
+      final http = DartIoVotingHttpClient();
+      ref.onDispose(() => http.close(force: true));
+      return VotingParticipationClient(
+        http,
+        const VotingParticipationBridge(),
+        regtestEndpoint: Uri.parse(
+          const String.fromEnvironment('ZCASH_E2E_VOTING_GATEWAY_URL'),
+        ),
+      );
+    }),
+  ],
+);
+
+Future<void> expectVotingHomeHidden(
+  WidgetTester tester,
+  ProviderContainer container, {
+  required bool restored,
+}) async {
+  String? lastObservation;
+  await pumpUntil(
+    tester,
+    () {
+      final account = container.read(accountProvider).value?.activeAccountUuid;
+      final source = container
+          .read(votingConfigSourceProvider)
+          .value
+          ?.sourceUrl;
+      if (account == null || source == null) return false;
+      final cache = container.read(votingHomeCacheProvider.notifier);
+      final list = cache.list(votingHomeListKey('regtest', source));
+      if (list == null) return false;
+      final rounds = list.rounds.where((r) => r.roundId == _roundId).toList();
+      if (rounds.length != 1 ||
+          votingPollListStatus(rounds.single.status) !=
+              VotingPollListStatus.active) {
+        return false;
+      }
+      final end = votingRoundEndDate(rounds.single.rawJson);
+      if (end != null && !DateTime.now().isBefore(end)) {
+        fail('Round expired before the Home assertion');
+      }
+      final fact = cache.fact(
+        votingHomeFactKey('regtest', list.fingerprint, account, _roundId),
+      );
+      final observation =
+          'progress=${fact.progress.name} '
+          'scanned=${container.read(syncProvider).value?.scannedHeight} '
+          'snapshot=${fact.snapshotHeight} used=${fact.participation?.usedCount} '
+          'remaining=${fact.participation?.remainingEligible} local=${fact.participation?.localState} '
+          'card=${tester.any(find.byKey(const ValueKey('mobile_home_coinholder_voting')))}';
+      if (observation != lastObservation) {
+        logE2e('Home assertion: $observation');
+        lastObservation = observation;
+      }
+      if (restored) {
+        if (fact.participation?.unavailable != true ||
+            fact.participation!.usedCount == 0 ||
+            fact.participation!.localState) {
+          return false;
+        }
+        if (fact.progress != VotingHomeProgress.unknown) {
+          fail('Restored check used old local progress');
+        }
+        if ((container.read(syncProvider).value?.scannedHeight ?? 0) <
+            (fact.snapshotHeight ?? 1)) {
+          return false;
+        }
+      } else if (fact.progress != VotingHomeProgress.completed) {
+        return false;
+      }
+      return tester.any(find.byKey(const ValueKey('mobile_home_send'))) &&
+          !tester.any(
+            find.byKey(const ValueKey('mobile_home_coinholder_voting')),
+          );
+    },
+    description: restored
+        ? 'verified restored participation hides Home card'
+        : 'completed local voting hides Home card',
+    timeout: const Duration(minutes: 10),
+  );
+  expect(
+    find.byKey(const ValueKey('mobile_home_coinholder_voting')),
+    findsNothing,
+  );
+}
+
+Future<void> captureVotingRegtest(WidgetTester tester, String name) async {
+  await tester.pump(const Duration(milliseconds: 300));
+  await postDriver(
+    '/screenshot',
+    {'name': name},
+    baseUrl: const String.fromEnvironment('ZCASH_E2E_VOTING_GATEWAY_URL'),
+  );
+}
+
+Future<int> participationRequestCount() async {
+  final client = HttpClient();
+  try {
+    final response = await (await client.getUrl(
+      Uri.parse(
+        '${const String.fromEnvironment('ZCASH_E2E_VOTING_GATEWAY_URL')}/metrics',
+      ),
+    )).close();
+    final text = await response.transform(const Utf8Decoder()).join();
+    return (jsonDecode(text) as Map)['participation_requests'] as int;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<void> completeMobileRegtestVote(WidgetTester tester) async {
+  tolerateRenderOverflows();
+  if (_roundId.length != 64) {
+    fail('ZCASH_E2E_VOTE_ROUND_ID must be a 64-character round id.');
+  }
+  if (const String.fromEnvironment('ZCASH_E2E_VOTING_KEEP_APP_STATE') != '1') {
+    addTearDown(cleanupE2eWalletState);
+  }
+  await cleanupE2eWalletState();
+
+  await tester.pumpWidget(await buildMobileVotingRegtestApp());
+  await importWalletViaPaste(
+    tester,
+    mnemonic: mobileIronwoodE2eMnemonic,
+    birthdayHeight: 1,
+    isFirstWallet: true,
+  );
+
+  logE2e('waiting for the confirmed Ironwood voting balance');
+  await pumpUntil(
+    tester,
+    () =>
+        tester.any(find.byKey(const ValueKey('mobile_home_coinholder_voting'))),
+    description: 'mobile voting entry point',
+    timeout: const Duration(minutes: 5),
+  );
+  final container = ProviderScope.containerOf(
+    tester.element(find.byKey(const ValueKey('mobile_home_coinholder_voting'))),
+  );
+
+  await captureVotingRegtest(tester, 'before-vote');
+  await tapWidget(tester, const ValueKey('mobile_home_coinholder_voting'));
+  await tapAppButton(
+    tester,
+    ValueKey('voting_poll_action_$_roundId'),
+    timeout: const Duration(minutes: 2),
+  );
+
+  await pumpUntil(
+    tester,
+    () {
+      final session = container.read(votingSessionProvider(_roundId));
+      return session.hasError || session.value?.round != null;
+    },
+    description: 'mobile voting session round to load',
+    timeout: const Duration(minutes: 2),
+  );
+  var session = container.read(votingSessionProvider(_roundId));
+  if (session.hasError) {
+    fail('Voting session failed to load: ${session.error}');
+  }
+  await pumpUntil(
+    tester,
+    () {
+      session = container.read(votingSessionProvider(_roundId));
+      final value = session.value;
+      return session.hasError ||
+          value?.error != null ||
+          value?.hasConfirmedVotingEligibility == true;
+    },
+    description: 'mobile Ironwood voting eligibility to confirm',
+    timeout: const Duration(minutes: 10),
+  );
+  if (session.hasError) {
+    fail('Voting eligibility failed: ${session.error}');
+  }
+  final eligibleSession = session.value!;
+  if (!eligibleSession.hasConfirmedVotingEligibility) {
+    fail(
+      'Voting eligibility was rejected: '
+      '${eligibleSession.error?.message ?? 'unknown error'}',
+    );
+  }
+
+  final accountUuid = eligibleSession.accountUuid;
+  expect(accountUuid, isNotNull);
+  final draftKey = VotingSessionKey(
+    roundId: _roundId,
+    accountUuid: accountUuid!,
+  );
+  for (var proposalId = 1; proposalId <= 4; proposalId++) {
+    final optionKey = ValueKey('voting_proposal_${proposalId}_option_0');
+    await _scrollUntilVisible(tester, optionKey);
+    await _tapVotingOption(
+      tester,
+      optionKey,
+      timeout: const Duration(minutes: 2),
+    );
+    await pumpUntil(
+      tester,
+      () =>
+          container.read(votingDraftProvider(draftKey)).choices[proposalId] ==
+          0,
+      description: 'mobile proposal $proposalId selection to persist',
+    );
+  }
+
+  await _scrollUntilVisible(
+    tester,
+    const ValueKey('voting_review_answers_button'),
+  );
+  await tapAppButton(tester, const ValueKey('voting_review_answers_button'));
+  await tapAppButton(tester, const ValueKey('voting_confirm_submit_button'));
+
+  await pumpUntil(
+    tester,
+    () {
+      final job = container.read(votingSubmissionJobProvider(draftKey));
+      return job.isInFlight ||
+          job.status == VotingSubmissionJobStatus.error ||
+          job.status == VotingSubmissionJobStatus.complete;
+    },
+    description: 'mobile voting submission job to start',
+    timeout: const Duration(minutes: 2),
+  );
+  var job = container.read(votingSubmissionJobProvider(draftKey));
+  if (!job.isInFlight && job.status != VotingSubmissionJobStatus.complete) {
+    fail('Voting submission did not start: ${job.errorMessage}');
+  }
+
+  logE2e('waiting on the voting progress screen for submission');
+  await pumpUntil(tester, () {
+    job = container.read(votingSubmissionJobProvider(draftKey));
+    return tester.any(
+          find.byKey(
+            const ValueKey('mobile_voting_submission_progress_content'),
+          ),
+        ) ||
+        job.status == VotingSubmissionJobStatus.complete ||
+        job.status == VotingSubmissionJobStatus.error;
+  }, description: 'mobile voting submission progress screen');
+
+  logE2e('waiting for real mobile vote proofs and receipt');
+  await pumpUntil(
+    tester,
+    () {
+      job = container.read(votingSubmissionJobProvider(draftKey));
+      return job.status == VotingSubmissionJobStatus.complete ||
+          job.status == VotingSubmissionJobStatus.error;
+    },
+    description: 'mobile voting submission to finish',
+    timeout: const Duration(minutes: 40),
+  );
+  if (job.status == VotingSubmissionJobStatus.error) {
+    fail('Voting submission failed: ${job.errorMessage}');
+  }
+  expect(job.status, VotingSubmissionJobStatus.complete);
+
+  const submittedTitleKey = ValueKey('mobile_voting_submitted_title');
+  const submittedHomeButtonKey = ValueKey(
+    'mobile_voting_submitted_home_button',
+  );
+  await pumpUntil(
+    tester,
+    () => tester.any(find.byKey(submittedHomeButtonKey)),
+    description: 'mobile voted confirmation screen',
+    timeout: const Duration(minutes: 2),
+  );
+  expect(find.byKey(submittedTitleKey), findsOneWidget);
+  await tapAppButton(tester, submittedHomeButtonKey);
+  await expectVotingHomeHidden(tester, container, restored: false);
+  await captureVotingRegtest(tester, 'completed-home');
+}
+
+Future<void> _tapVotingOption(
+  WidgetTester tester,
+  Key key, {
+  required Duration timeout,
+}) async {
+  final row = find.byKey(key);
+  final inkWell = find.descendant(of: row, matching: find.byType(InkWell));
+  await pumpUntil(
+    tester,
+    () => tester.any(inkWell) && tester.widget<InkWell>(inkWell).onTap != null,
+    description: '$key voting option to become enabled',
+    timeout: timeout,
+  );
+  final hitTestable = inkWell.hitTestable();
+  if (tester.any(hitTestable)) {
+    await tester.tap(hitTestable);
+  } else {
+    tester.widget<InkWell>(inkWell).onTap!.call();
+  }
+  await tester.pump(const Duration(milliseconds: 250));
+}
+
+Future<void> _scrollUntilVisible(WidgetTester tester, Key key) async {
+  final finder = find.byKey(key);
+  if (tester.any(finder)) {
+    await tester.ensureVisible(finder);
+    return;
+  }
+  final scrollable = find.byType(Scrollable).last;
+  await pumpUntil(
+    tester,
+    () => tester.any(scrollable),
+    description: 'mobile poll list for $key',
+  );
+  await tester.scrollUntilVisible(
+    finder,
+    300,
+    scrollable: scrollable,
+    maxScrolls: 20,
+  );
+  await tester.pump(const Duration(milliseconds: 250));
+}
