@@ -709,12 +709,18 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     }
     try {
       await ref.read(votingHomeCacheProvider.notifier).removeAccount(uuid);
+    } catch (e, st) {
+      log(
+        'removeAccount: failed to delete voting Home cache for $uuid: $e\n$st',
+      );
+    }
+    try {
       await VotingFileCache(
         directory: () async => Directory('$dbPath.voting-cache'),
       ).removeAccount(uuid);
     } catch (e, st) {
       log(
-        'removeAccount: failed to delete voting Home cache for $uuid: $e\n$st',
+        'removeAccount: failed to delete voting note cache for $uuid: $e\n$st',
       );
     }
 
