@@ -20,6 +20,7 @@ import '../../services/voting/resolved_voting_config_extensions.dart';
 import '../../services/voting/voting_api_client.dart';
 import '../../services/voting/voting_models.dart';
 import '../app_security_provider.dart';
+import 'voting_participation_provider.dart';
 import 'voting_config_provider.dart';
 import 'voting_home_cache_provider.dart';
 import 'voting_service_providers.dart';
@@ -2835,6 +2836,14 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       txHash: txHash,
       eventsJson: confirmation.eventsJson,
     );
+    try {
+      await ref
+          .read(votingParticipationClientProvider)
+          .refreshLocal(_apiRoundContext(context));
+    } catch (_) {
+      // Confirmation is durable in Rust. A later prepare reconciles it again.
+      debugPrint('Voting participation local cache update deferred');
+    }
     return (txHash: txHash, leafIndex: delegationConfirmation.vanLeafPosition);
   }
 

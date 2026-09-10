@@ -1281,7 +1281,8 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
 }
 
 /// Route/lifecycle triggers check for voting changes; the minute timer only
-/// reevaluates cached deadlines and retries unresolved participation checks.
+/// reevaluates cached deadlines. Participation retries require an event such
+/// as Home reentry, foregrounding, or sync completion.
 class _MobileVotingEntry extends ConsumerStatefulWidget {
   const _MobileVotingEntry();
 
@@ -1310,7 +1311,6 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
     _timer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted && _foreground && _homeCurrent) {
         ref.invalidate(votingHomeEntryVisibleProvider);
-        _checkParticipation();
       }
     });
   }
@@ -1379,23 +1379,6 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
     });
     ref.listen(rpcEndpointProvider.select((s) => s.networkName), (_, _) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
-    });
-    ref.listen(syncProvider.select((s) => s.value?.scannedHeight), (
-      previous,
-      next,
-    ) {
-      if (previous == null || next == null || next >= previous) return;
-      final account = ref.read(accountProvider).value?.activeAccountUuid;
-      if (account == null) return;
-      unawaited(
-        ref
-            .read(votingHomeCacheProvider.notifier)
-            .invalidateEligibilityAfterRewind(
-              network: ref.read(rpcEndpointProvider).networkName,
-              accountUuid: account,
-              scannedHeight: next,
-            ),
-      );
     });
     void schedule() => WidgetsBinding.instance.addPostFrameCallback(
       (_) => _checkParticipation(),

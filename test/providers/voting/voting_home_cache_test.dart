@@ -1,5 +1,6 @@
 import 'package:zcash_wallet/src/services/voting/voting_participation_client.dart';
 import 'dart:async';
+import 'dart:convert';
 import '../../fakes/memory_voting_home_cache_store.dart';
 import 'dart:typed_data';
 
@@ -52,102 +53,230 @@ void main() {
       rounds: rounds,
     ),
   );
-  bool visible({
-    String account = 'account-a',
-    bool showTest = false,
-    int scanned = 1000,
-  }) => cache.shouldShow(
-    listKey: listKey,
-    network: 'main',
-    accountUuid: account,
-    showTestRounds: showTest,
-    now: now,
-    scannedHeight: scanned,
-  );
-
-  test('verified prior usage hides only its account and yields to recovery', () async {
-    await seed([round()]);
-    const result = VotingParticipationResult(fingerprint: 'notes', usedCount: 2,
-      noteCount: 2, remainingEligible: false, localState: false);
-    await cache.recordParticipation(factKey, 500, result);
-    expect(visible(), false);
-    expect(visible(account: 'account-b'), true);
-    expect(visible(scanned: 499), true);
-    await cache.recordEligibility(factKey, true, 500);
-    expect(visible(), false);
-    await cache.invalidateEligibilityAfterRewind(network: 'main', accountUuid: 'account-a', scannedHeight: 499);
-    expect(visible(), true);
-    expect(cache.fact(factKey).participation, isNull);
-  });
-  test('partial usage and local recovery do not hide a candidate', () async {
-    await seed([round()]);
-    for (final result in [
-      const VotingParticipationResult(fingerprint: 'notes', usedCount: 1, noteCount: 2, remainingEligible: true, localState: false),
-      const VotingParticipationResult(fingerprint: 'notes', usedCount: 2, noteCount: 2, remainingEligible: false, localState: true),
-    ]) {
-      await cache.recordParticipation(factKey, 500, result);
-      expect(visible(), true);
-    }
-  });
-
-  test(
-    'unknown round is discoverable; empty, test-only and closed lists hide',
-    () async {
-      expect(visible(), false);
-      await seed([round()]);
-      expect(visible(), true);
-      await seed([]);
-      expect(visible(), false);
-      await seed([round(title: '[TEST] Vote')]);
-      expect(visible(), false);
-      expect(visible(showTest: true), true);
-      await seed([round(status: '3')]);
-      expect(visible(), false);
-      await seed([round(end: now)]);
-      expect(visible(), false);
-    },
-  );
-
-  test(
-    'negative eligibility is scoped to account and snapshot readiness',
-    () async {
-      await seed([round()]);
-      await cache.recordEligibility(factKey, false, 500);
-      expect(visible(), false);
-      expect(visible(account: 'account-b'), true);
-      expect(visible(scanned: 499), true);
-      await cache.recordEligibility(factKey, true, 500);
-      expect(visible(), true);
-    },
-  );
-
-  test(
-    'a rewind permanently invalidates eligibility until voting checks again',
-    () async {
-      await seed([round()]);
-      await cache.recordEligibility(factKey, false, 500);
-      await cache.invalidateEligibilityAfterRewind(
+  bool visible({String account = 'account-a', bool showTest = false}) =>
+      cache.shouldShow(
+        listKey: listKey,
         network: 'main',
-        accountUuid: 'account-a',
-        scannedHeight: 499,
+        accountUuid: account,
+        showTestRounds: showTest,
+        now: now,
       );
-      expect(visible(scanned: 1000), true);
+
+  const unused = VotingParticipationResult(
+    fingerprint: 'notes',
+    usedCount: 0,
+    noteCount: 1,
+    remainingEligible: true,
+    localState: false,
+  );
+  const used = VotingParticipationResult(
+    fingerprint: 'notes',
+    usedCount: 1,
+    noteCount: 1,
+    remainingEligible: false,
+    localState: false,
+  );
+
+  test(
+    'compact persistence preserves decisions, deadlines and snapshot hints',
+    () async {
+      final end = now.add(const Duration(hours: 1));
+      await seed([
+        VotingRoundSummary.fromJson({
+          'vote_round_id': roundId,
+          'title': 'Vote',
+          'status': '1',
+          'snapshot_height': '500',
+          'session': {'vote_end_time': end.millisecondsSinceEpoch ~/ 1000},
+          'proposals': [
+            {'description': List.filled(250000, 'x').join()},
+          ],
+        }),
+      ]);
+      await cache.recordParticipation(factKey, 500, unused);
+      expect(visible(), true);
+      expect(store.value!.length, lessThan(2000));
+      final saved = jsonDecode(store.value!) as Map<String, dynamic>;
+      final savedRound = saved['lists'][listKey]['rounds'][0] as Map;
+      expect(savedRound.containsKey('proposals'), false);
+      expect(savedRound.containsKey('session'), false);
+
       container.dispose();
       container = ProviderContainer(
         overrides: [votingHomeCacheStoreProvider.overrideWithValue(store)],
       );
       cache = container.read(votingHomeCacheProvider.notifier);
       await cache.ensureLoaded();
-      expect(visible(scanned: 1000), true);
-      await cache.recordEligibility(factKey, false, 500);
+      expect(visible(), true);
+      final restored = cache.list(listKey)!.rounds.single;
+      expect(restored.roundId, roundId);
+      expect(restored.title, 'Vote');
+      expect(restored.status, '1');
+      expect(restored.rawJson['snapshot_height'], 500);
+      expect(
+        cache.shouldShow(
+          listKey: listKey,
+          network: 'main',
+          accountUuid: 'account-a',
+          showTestRounds: false,
+          now: end,
+        ),
+        false,
+      );
+      await cache.recordParticipation(factKey, 500, used);
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [votingHomeCacheStoreProvider.overrideWithValue(store)],
+      );
+      cache = container.read(votingHomeCacheProvider.notifier);
+      await cache.ensureLoaded();
+      expect(cache.fact(factKey).decision, VotingHomeDecision.hide);
       expect(visible(), false);
     },
   );
 
-  test('one unknown round keeps the entry visible', () async {
+  test(
+    'unknown and eligibility-only rounds stay hidden until participation succeeds',
+    () async {
+      await seed([round()]);
+      expect(visible(), false);
+      await cache.recordEligibility(factKey, true, 500);
+      expect(visible(), false);
+      await cache.recordParticipation(factKey, 500, unused);
+      expect(visible(), true);
+      expect(visible(account: 'account-b'), false);
+      await cache.recordParticipation(factKey, 500, used);
+      expect(visible(), false);
+    },
+  );
+
+  test('no eligible notes is hidden even when unavailable is false', () async {
+    await seed([round()]);
+    const empty = VotingParticipationResult(
+      fingerprint: 'empty',
+      usedCount: 0,
+      noteCount: 0,
+      remainingEligible: false,
+      localState: false,
+    );
+    expect(empty.unavailable, false);
+    await cache.recordParticipation(factKey, 500, empty);
+    expect(cache.fact(factKey).decision, VotingHomeDecision.hide);
+    expect(visible(), false);
+  });
+
+  test('local records alone do not confirm an actionable recovery', () async {
+    await seed([round()]);
+    await cache.recordParticipation(
+      factKey,
+      500,
+      const VotingParticipationResult(
+        fingerprint: 'notes',
+        usedCount: 1,
+        noteCount: 1,
+        remainingEligible: false,
+        localState: true,
+      ),
+    );
+    expect(visible(), false);
+    expect(cache.fact(factKey).needsRecheck, true);
+  });
+
+  test('confirmed state survives recheck scheduling and restart', () async {
+    await seed([round()]);
+    for (final result in [unused, used]) {
+      await cache.recordParticipation(factKey, 500, result);
+      await cache.invalidateEligibilityAfterRewind(
+        network: 'main',
+        accountUuid: 'account-a',
+        scannedHeight: 499,
+        trigger: 'actual-rewind',
+      );
+      expect(visible(), result.remainingEligible);
+      expect(cache.fact(factKey).needsRecheck, true);
+      expect(cache.fact(factKey).participation, isNotNull);
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [votingHomeCacheStoreProvider.overrideWithValue(store)],
+      );
+      cache = container.read(votingHomeCacheProvider.notifier);
+      expect(visible(), false);
+      await cache.ensureLoaded();
+      expect(visible(), result.remainingEligible);
+      expect(cache.fact(factKey).needsRecheck, true);
+    }
+  });
+
+  test(
+    'incomplete negative observations preserve the previous decision',
+    () async {
+      const partial = VotingParticipationResult(
+        fingerprint: 'partial',
+        usedCount: 1,
+        noteCount: 2,
+        remainingEligible: false,
+        localState: false,
+        complete: false,
+      );
+      await seed([round()]);
+      await cache.recordParticipation(factKey, 500, partial);
+      expect(cache.fact(factKey).decision, VotingHomeDecision.unknown);
+      expect(visible(), false);
+      await cache.recordParticipation(factKey, 500, unused);
+      await cache.recordParticipation(factKey, 500, partial);
+      expect(visible(), true);
+      expect(cache.fact(factKey).hasCheckedParticipation, false);
+      expect(cache.fact(factKey).participation!.unavailable, false);
+    },
+  );
+
+  test('only a confirmed active round keeps the entry visible', () async {
     await seed([round(), round(id: secondRoundId)]);
-    await cache.recordEligibility(factKey, false, 500);
+    await cache.recordParticipation(factKey, 500, used);
+    expect(visible(), false);
+    await cache.recordParticipation(
+      votingHomeFactKey('main', 'fingerprint', 'account-a', secondRoundId),
+      500,
+      unused,
+    );
     expect(visible(), true);
+    await seed([]);
+    expect(visible(), false);
+    await seed([round(title: '[TEST] Vote')]);
+    await cache.recordParticipation(factKey, 500, unused);
+    expect(visible(), false);
+    expect(visible(showTest: true), true);
+    await seed([round(status: '3')]);
+    expect(visible(), false);
+    await seed([round(end: now)]);
+    expect(visible(), false);
+  });
+
+  test(
+    'eligibility improvement schedules recheck without erasing last decision',
+    () async {
+      await seed([round()]);
+      await cache.recordParticipation(factKey, 500, unused);
+      await cache.recordEligibility(factKey, false, 500);
+      expect(visible(), false);
+      await cache.recordEligibility(factKey, true, 500);
+      expect(visible(), false);
+      expect(cache.fact(factKey).hasCheckedParticipation, false);
+      await cache.recordParticipation(factKey, 500, unused);
+      expect(visible(), true);
+      expect(cache.fact(factKey).hasCheckedParticipation, true);
+    },
+  );
+
+  test('a changed round snapshot requires a new decision', () async {
+    await seed([round()]);
+    await cache.recordParticipation(factKey, 500, unused);
+    expect(visible(), true);
+    await seed([
+      VotingRoundSummary.fromJson({...round().rawJson, 'snapshot_height': 600}),
+    ]);
+    expect(visible(), false);
+    expect(cache.fact(factKey).decision, VotingHomeDecision.unknown);
   });
 
   test(
@@ -163,6 +292,7 @@ void main() {
           openProposals: Uint32List(0),
           allDecided: true,
           completedForDisplay: true,
+          needsDraftSetup: false,
         ),
       );
       expect(visible(), false);
@@ -175,6 +305,7 @@ void main() {
           openProposals: Uint32List.fromList([2]),
           allDecided: false,
           completedForDisplay: true,
+          needsDraftSetup: false,
         ),
       );
       expect(visible(), true);
@@ -234,7 +365,7 @@ void main() {
     await writing;
     await draining;
     await cache.removeAccount('account-a');
-    expect(visible(), true);
+    expect(visible(), false);
     registry.resume();
   });
 
@@ -287,6 +418,6 @@ void main() {
     await cache.ensureLoaded();
     expect(visible(), false);
     await seed([round()]);
-    expect(visible(), true);
+    expect(visible(), false);
   });
 }

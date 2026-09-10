@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/voting/voting_poll_ordering.dart';
+import '../../features/voting/voting_flow_models.dart';
 import '../../rust/api/voting.dart' as rust;
 import '../../services/voting/resolved_voting_config_extensions.dart';
 import '../../services/voting/voting_http.dart';
@@ -35,7 +36,11 @@ final votingParticipationSourceSupportedProvider =
 final votingParticipationClientProvider = Provider((ref) {
   final http = DartIoVotingHttpClient();
   ref.onDispose(() => http.close(force: true));
-  return VotingParticipationClient(http, const VotingParticipationBridge());
+  return VotingParticipationClient(
+    http,
+    const VotingParticipationBridge(),
+    cache: ref.watch(votingFileCacheProvider),
+  );
 });
 
 final votingParticipationProvider = Provider(
@@ -51,7 +56,6 @@ final votingParticipationUnavailableProvider = Provider.family<bool, String>((
   final account = ref.watch(accountProvider).value?.activeAccountUuid;
   final network = ref.watch(rpcEndpointProvider).networkName;
   final source = ref.watch(votingConfigSourceProvider).value?.sourceUrl;
-  final height = ref.watch(syncProvider).value?.scannedHeight ?? 0;
   if (account == null || source == null) return false;
   final cache = ref.read(votingHomeCacheProvider.notifier);
   final list = cache.list(votingHomeListKey(network, source));
@@ -65,7 +69,6 @@ final votingParticipationUnavailableProvider = Provider.family<bool, String>((
   return fact.progress != VotingHomeProgress.inProgress &&
       fact.progress != VotingHomeProgress.completed &&
       fact.snapshotHeight != null &&
-      height >= fact.snapshotHeight! &&
       (fact.participation?.unavailable ?? false);
 });
 
@@ -97,8 +100,9 @@ class VotingParticipationCoordinator {
     ({Future<void> future, bool Function() current, bool homeOnly})
   >
   _pending = {};
-  // Only retain details while waiting for the local snapshot to sync.
-  final Map<String, VotingRoundDetails> _syncWaitingDetails = {};
+  // Retain details while waiting for sync or participation retry, so local
+  // recovery can be restored during backoff without another status request.
+  final Map<String, VotingRoundDetails> _pendingDetails = {};
   // In-memory only: a fresh app session may check immediately.
   final Map<String, ({Duration delay, DateTime retryAt})> _failed = {};
 
@@ -123,7 +127,11 @@ class VotingParticipationCoordinator {
     final account = ref.read(accountProvider).value?.activeAccountUuid;
     if (account == null) return;
     final showTest = ref.read(showTestVotingRoundsProvider).value ?? false;
-    final scannedHeight = ref.read(syncProvider).value?.scannedHeight ?? 0;
+    final sync = ref.read(syncProvider).value;
+    // Preserve the displayed decision while sync mutates the note set. Inspect
+    // once the existing sync-completion trigger fires, not at every batch.
+    if (sync?.isSyncing ?? false) return;
+    final scannedHeight = sync?.scannedHeight ?? 0;
     for (final round in list.rounds) {
       if (epoch != _epoch || isHomeCurrent?.call() == false) return;
       if (!showTest && isHiddenTestVotingRoundTitle(round.title)) continue;
@@ -131,13 +139,7 @@ class VotingParticipationCoordinator {
         votingHomeFactKey(network, list.fingerprint, account, round.roundId),
       );
       if ((fact.progress == VotingHomeProgress.inProgress ||
-              fact.progress == VotingHomeProgress.completed) ||
-          fact.participation != null) {
-        continue;
-      }
-      if (fact.eligibility == VotingHomeEligibility.ineligible &&
-          fact.snapshotHeight != null &&
-          scannedHeight >= fact.snapshotHeight!) {
+          fact.progress == VotingHomeProgress.completed)) {
         continue;
       }
       if (!ref.mounted || ref.read(appSecurityProvider).requiresUnlock) return;
@@ -150,6 +152,9 @@ class VotingParticipationCoordinator {
       }
       final snapshot = int.tryParse('${round.rawJson['snapshot_height']}');
       if (snapshot != null && scannedHeight < snapshot) continue;
+      votingHomeTrace(
+        'participation.home.candidate scanned=$scannedHeight snapshot=$snapshot',
+      );
       await checkRound(round.roundId, isHomeCurrent: isHomeCurrent);
     }
   }
@@ -209,19 +214,26 @@ class VotingParticipationCoordinator {
           if (!current()) return;
           final clock = ref.read(votingHomeClockProvider);
           final failed = _failed[key];
-          if (!force && failed != null && clock().isBefore(failed.retryAt)) {
-            return;
-          }
           final cache = ref.read(votingHomeCacheProvider.notifier);
           await cache.ensureLoaded();
           if (!current()) return;
           final list = cache.list(votingHomeListKey(network, source));
+          var snapshotChanged = false;
           if (list != null) {
             final fact = cache.fact(
               votingHomeFactKey(network, list.fingerprint, account, round),
             );
+            if (fact.snapshotHeight != null) {
+              final revision = await ref
+                  .read(votingFileCacheProvider)
+                  .snapshotRevision(fact.snapshotHeight!);
+              if (!current()) return;
+              snapshotChanged =
+                  revision != (fact.participation?.snapshotRevision ?? '0');
+            }
             if (!force &&
-                (fact.participation != null ||
+                !snapshotChanged &&
+                (fact.hasCheckedParticipation ||
                     fact.progress == VotingHomeProgress.completed ||
                     fact.progress == VotingHomeProgress.inProgress)) {
               return;
@@ -238,18 +250,35 @@ class VotingParticipationCoordinator {
               round,
             ),
           );
+          if (currentFact.snapshotHeight != null) {
+            final revision = await ref
+                .read(votingFileCacheProvider)
+                .snapshotRevision(currentFact.snapshotHeight!);
+            if (!current()) return;
+            snapshotChanged =
+                revision !=
+                (currentFact.participation?.snapshotRevision ?? '0');
+          }
           if (!force &&
-              (currentFact.participation != null ||
+              !snapshotChanged &&
+              (currentFact.hasCheckedParticipation ||
                   currentFact.progress == VotingHomeProgress.inProgress ||
                   currentFact.progress == VotingHomeProgress.completed)) {
             return;
           }
           final detailsKey =
               '$network|${config.sourceFingerprint}|$account|$round';
-          if (force) _syncWaitingDetails.remove(detailsKey);
+          if (force) _pendingDetails.remove(detailsKey);
+          final backingOff =
+              !force && failed != null && clock().isBefore(failed.retryAt);
+          if (backingOff &&
+              knownRound == null &&
+              !_pendingDetails.containsKey(detailsKey)) {
+            return;
+          }
           final details =
               knownRound ??
-              _syncWaitingDetails[detailsKey] ??
+              _pendingDetails[detailsKey] ??
               VotingRoundDetails.fromStatus(
                 await ref
                     .read(votingApiClientProvider(config.apiServers))
@@ -257,6 +286,51 @@ class VotingParticipationCoordinator {
               );
           if (!current()) return;
           final dbPath = await ref.read(votingWalletDbPathProvider)();
+          final factKey = votingHomeFactKey(
+            network,
+            config.sourceFingerprint,
+            account,
+            round,
+          );
+          final localProposalIds = proposalsFromRound(
+            details,
+          ).map((p) => p.id).toList();
+          // Durable recovery is independent of note inspection and its RPCs.
+          // Empty proposal sets cannot establish that the round is completed.
+          if (localProposalIds.isNotEmpty) {
+            final localPlan = await ref
+                .read(votingRecoveryServiceProvider)
+                .loadRoundPlan(
+                  dbPath: dbPath,
+                  accountUuid: account,
+                  roundId: round,
+                  proposalIds: localProposalIds,
+                );
+            if (!current() ||
+                !identical(ref.read(votingConfigProvider).value, config)) {
+              return;
+            }
+            final actionable =
+                localPlan.blockingRecovery ||
+                (localPlan.pendingRecovery && !localPlan.completedForDisplay) ||
+                (!localPlan.needsDraftSetup &&
+                    localPlan.openProposals.isNotEmpty);
+            final completed =
+                localPlan.completedForDisplay &&
+                localPlan.openProposals.isEmpty &&
+                !localPlan.blockingRecovery;
+            if (actionable || completed) {
+              await cache.recordPlan(factKey, localPlan);
+              if (!current()) return;
+              if (!force) {
+                _failed.remove(key);
+                _pendingDetails.remove(detailsKey);
+                return;
+              }
+            }
+          }
+          if (backingOff) return;
+          _pendingDetails[detailsKey] = details;
           final scan = await ref
               .read(votingWalletSyncReadinessCheckerProvider)
               .check(
@@ -266,10 +340,12 @@ class VotingParticipationCoordinator {
               );
           if (!current()) return;
           if (!scan.isReady) {
-            _syncWaitingDetails[detailsKey] = details;
+            votingHomeTrace(
+              'participation.wait-sync snapshot=${details.snapshotHeight}',
+            );
+            _pendingDetails[detailsKey] = details;
             return;
           }
-          _syncWaitingDetails.remove(detailsKey);
           final params = await ref
               .read(votingRustApiProvider)
               .trustedVotingRoundParamsFromConfig(
@@ -292,24 +368,51 @@ class VotingParticipationCoordinator {
             maxRealNotesPerBundle: null,
             pirLayout: config.pirLayout,
           );
+          votingHomeTrace(
+            'participation.check.start home=${isHomeCurrent != null} force=$force snapshot=${details.snapshotHeight}',
+          );
+          final checkTimer = Stopwatch()..start();
           final result = await ref
               .read(votingParticipationClientProvider)
               .check(context, clock, current);
+          votingHomeTrace(
+            'participation.check.done elapsedMs=${checkTimer.elapsedMilliseconds} unavailable=${result.unavailable}',
+          );
+          if (!current() ||
+              !identical(ref.read(votingConfigProvider).value, config)) {
+            return;
+          }
+          final proposalIds = result.localState
+              ? proposalsFromRound(details).map((p) => p.id).toList()
+              : const <int>[];
+          if (result.localState && proposalIds.isEmpty) {
+            throw StateError('Recovery decision requires round proposals');
+          }
+          final plan = result.localState
+              ? await ref
+                    .read(votingRecoveryServiceProvider)
+                    .loadRoundPlan(
+                      dbPath: dbPath,
+                      accountUuid: account,
+                      roundId: round,
+                      proposalIds: proposalIds,
+                    )
+              : null;
           if (!current() ||
               !identical(ref.read(votingConfigProvider).value, config)) {
             return;
           }
           await cache.recordParticipation(
-            votingHomeFactKey(
-              network,
-              config.sourceFingerprint,
-              account,
-              round,
-            ),
+            factKey,
             details.snapshotHeight,
             result,
           );
+          if (plan != null) await cache.recordPlan(factKey, plan);
+          if (!result.complete) {
+            throw StateError('Some voting notes remain unverified');
+          }
           _failed.remove(key);
+          _pendingDetails.remove(detailsKey);
         })
         .catchError((Object _) {
           // Raw RPC errors may contain a queried identifier. Never log them.
@@ -320,6 +423,9 @@ class VotingParticipationCoordinator {
             minutes: previousMinutes == 0
                 ? 1
                 : (previousMinutes * 2).clamp(1, 30),
+          );
+          votingHomeTrace(
+            'participation.failed retryMinutes=${delay.inMinutes}',
           );
           _failed[key] = (
             delay: delay,

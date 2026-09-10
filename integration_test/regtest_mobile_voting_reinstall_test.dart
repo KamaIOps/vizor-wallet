@@ -3,9 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:zcash_wallet/src/core/storage/app_secure_store.dart';
 import 'package:zcash_wallet/src/core/storage/wallet_paths.dart';
-import 'package:zcash_wallet/src/providers/voting/voting_home_cache_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_participation_provider.dart';
 import 'support/mobile_regtest_flow.dart';
 import 'support/mobile_voting_regtest_flow.dart';
@@ -27,14 +25,16 @@ void main() {
         reason: 'Reinstall must remove the prior wallet DB',
       );
       expect(File('${directory.path}/$dbName.voting').existsSync(), isFalse);
+      expect(
+        await Directory('${directory.path}/$dbName.voting-cache').exists(),
+        false,
+        reason: 'Reinstall must remove Home summaries and note observations',
+      );
+      final requestsBeforeRestore = await participationRequestCount();
       // iOS uninstall preserves Keychain. Deliberately model restoration without
       // ANY old local hints; only this regtest app's storage is cleared.
       await cleanupE2eWalletState();
       addTearDown(cleanupE2eWalletState);
-      expect(
-        await AppSecureStore.instance.readString(votingHomeCacheKey),
-        isNull,
-      );
       await tester.pumpWidget(await buildMobileVotingRegtestApp());
       await importWalletViaPaste(
         tester,
@@ -49,7 +49,13 @@ void main() {
       await expectVotingHomeHidden(tester, container, restored: true);
       await captureVotingRegtest(tester, 'restored-home');
       final requests = await participationRequestCount();
-      expect(requests, greaterThan(0));
+      expect(
+        requests,
+        greaterThan(requestsBeforeRestore),
+        reason: 'This restored install must discover participation itself',
+      );
+      await expectVotingNoteCachePersisted(tester, container, used: true);
+      await expectVotingRecheckUsesDiskCache(container);
       await tapUntilVisible(
         tester,
         trigger: find.bySemanticsLabel('Settings'),

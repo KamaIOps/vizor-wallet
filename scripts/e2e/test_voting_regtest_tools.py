@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import unittest
+from unittest.mock import patch
 import threading
 import urllib.request
 import json
@@ -44,6 +45,29 @@ class ExporterTests(unittest.TestCase):
 
 
 class GatewayTests(unittest.TestCase):
+    def test_home_resync_mines_fixed_batch_and_returns_synced_tip(self) -> None:
+        handler = type("MiningGateway", (gateway.GatewayHandler,), {
+            "enable_zcash_mining": True,
+        })
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            with patch.object(gateway.subprocess, "run") as mine, patch.object(
+                gateway.subprocess, "check_output", return_value=b"650\n"
+            ) as tip:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/mine-for-home-sync",
+                    data=b"{}", headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(request) as response:
+                    self.assertEqual(json.load(response), {"height": 650})
+                self.assertEqual(mine.call_args.args[0][-1], "20")
+                self.assertTrue(mine.call_args.args[0][0].endswith("ironwood-regtest/mine.sh"))
+                self.assertEqual(tip.call_args.args[0][-1], "getblockcount")
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_participation_proxy_preserves_query_and_counts_requests(self) -> None:
         seen = []
         class Upstream(BaseHTTPRequestHandler):

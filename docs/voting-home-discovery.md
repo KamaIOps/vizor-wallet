@@ -1,11 +1,27 @@
 # Mobile Home voting discovery
 
-Home renders its local round list and account eligibility/completion hints first.
+Home renders the last confirmed account-scoped display decision. Unknown rounds
+start hidden. A verified remaining eligible note set or an actionable local
+recovery plan confirms visibility; an active round alone does not. Decisions
+survive restart and do not depend on the current sync progress height.
+
+App bootstrap does not load voting state. Home renders first, then its post-frame
+refresh loads the local summary; source and test-round preferences load through
+their asynchronous providers. The card stays hidden until the saved decision is
+available, then a confirmed show restores without waiting for sync or RPC.
+Loaded decisions stay in memory across Home reentry.
+The persisted round list contains only IDs, titles, statuses, snapshot heights
+and normalized vote deadlines, alongside source/discovery metadata. Full round
+payloads and proposal bodies are not serialized with Home decisions; voting
+details continue to use their existing live data path.
 On entry or foreground resume, mainnet with the bundled prod voting source and
 testnet with the bundled stage voting source query their public discovery
 endpoint once. Network or selected source changes trigger the same check. Concurrent triggers share
 one request; a source/network/endpoint switch queues a refresh for the new context.
-The one-minute Home timer only reevaluates local deadlines and does not poll.
+The one-minute Home timer only reevaluates in-memory deadlines. It does not read
+snapshot files, schedule participation checks or poll discovery. Participation
+checks use route, lifecycle, sync and relevant provider-change events; unresolved
+checks still respect the participation backoff.
 
 ## Build configuration
 
@@ -50,3 +66,15 @@ them in. Prod and stage hints are scoped by both wallet network and config sourc
 
 Settings keeps its permanent Coinholder voting entry. Actual voting still uses
 live config authentication and eligibility checks, irrespective of Home hints.
+
+## Mobile regtest coverage
+
+`scripts/e2e/flutter-ios-regtest-mobile-voting.sh` verifies a confirmed visible
+Home card before voting, mines 20 additional Zcash blocks, and drives the real
+sync engine. The test rejects any false visibility-provider transition and
+checks the rendered card on every pumped frame, including at least one syncing
+frame. It requires a newer scanned height and sync completion, and no additional
+participation RPCs. Screenshots are saved as `home-during-resync.png` and
+`home-after-resync.png` under `.regtest-voting/logs/screenshots/`.
+The same flow then completes voting and checks that Home hides the card; the
+reinstall runner also includes this pre-vote resync check.

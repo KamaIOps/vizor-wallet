@@ -74,6 +74,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
     participation_requests = 0
     simulator: str | None = None
     screenshot_dir: Path | None = None
+    enable_zcash_mining = False
     slow_helper_delay: float
     metrics_lock = threading.Lock()
     slow_share_inflight = 0
@@ -97,6 +98,13 @@ class GatewayHandler(BaseHTTPRequestHandler):
 
     def _dispatch(self) -> None:
         parsed = urlsplit(self.path)
+        if self.command == "POST" and parsed.path == "/mine-for-home-sync" and self.enable_zcash_mining:
+            read_request_body(self.rfile, self.headers)
+            scripts = Path(__file__).resolve().parents[1] / "ironwood-regtest"
+            subprocess.run([str(scripts / "mine.sh"), "20"], check=True, timeout=90, capture_output=True)
+            height = subprocess.check_output([str(scripts / "rpc.sh"), "getblockcount"], timeout=30)
+            self._json(200, {"height": int(height)})
+            return
         if self.command == "GET" and parsed.path in {"/commit", "/validators", "/abci_query"} and self.rpc_target is not None:
             with self.metrics_lock:
                 type(self).participation_requests += 1
@@ -105,7 +113,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         if self.command == "POST" and parsed.path == "/screenshot" and self.simulator and self.screenshot_dir:
             body = json.loads(read_request_body(self.rfile, self.headers) or b"{}")
             name = body.get("name")
-            if name not in {"before-vote", "completed-home", "restored-home", "restored-detail"}:
+            if name not in {"before-vote", "completed-home", "restored-home", "restored-detail", "home-during-resync", "home-after-resync"}:
                 self._json(400, {"error": "unknown screenshot"})
                 return
             self.screenshot_dir.mkdir(parents=True, exist_ok=True)
@@ -244,6 +252,7 @@ def main() -> None:
     parser.add_argument("--pir-target", type=parse_target, required=True)
     parser.add_argument("--vote-target", type=parse_target, required=True)
     parser.add_argument("--simulator")
+    parser.add_argument("--enable-zcash-mining", action="store_true")
     parser.add_argument("--screenshot-dir", type=Path)
     parser.add_argument("--rpc-target", type=parse_target)
     parser.add_argument("--slow-helper-delay", type=float, default=0.0)
@@ -262,6 +271,7 @@ def main() -> None:
             "vote_target": args.vote_target,
             "rpc_target": args.rpc_target,
             "simulator": args.simulator,
+            "enable_zcash_mining": args.enable_zcash_mining,
             "screenshot_dir": args.screenshot_dir,
             "slow_helper_delay": max(0.0, args.slow_helper_delay),
         },

@@ -4,19 +4,32 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/storage/app_secure_store.dart';
+import '../../services/voting/voting_file_cache.dart';
 import '../../features/voting/voting_poll_ordering.dart';
 import '../../rust/third_party/zcash_voting/wire.dart' as wire;
 import '../../services/voting/voting_models.dart';
 import '../../services/voting/voting_participation_client.dart';
 import 'voting_round_visibility_provider.dart';
 import 'voting_share_tracking_registry_provider.dart';
+import '../../services/voting/voting_storage_keys.dart';
 
-const votingHomeCacheKey = 'zcash_voting_home_cache_v1';
+export '../../services/voting/voting_storage_keys.dart' show votingHomeCacheKey;
+
+/// Diagnostic events contain no wallet identifiers or RPC payloads.
+void votingHomeTrace(String message) {
+  if (kDebugMode) {
+    debugPrint(
+      '[VotingHomeTrace] ${DateTime.now().toIso8601String()} $message',
+    );
+  }
+}
+
 const votingHomeRefreshInterval = Duration(hours: 6);
 
 /// UI hints only. These never authorize a vote or replace live validation.
 enum VotingHomeEligibility { unknown, eligible, ineligible }
+
+enum VotingHomeDecision { unknown, show, hide }
 
 enum VotingHomeProgress { unknown, available, inProgress, completed }
 
@@ -45,7 +58,22 @@ class VotingHomeRoundList {
     'fingerprint': fingerprint,
     if (discoveryRevision != null) 'discoveryRevision': discoveryRevision,
     if (discoveryEndpoint != null) 'discoveryEndpoint': discoveryEndpoint,
-    'rounds': [for (final round in rounds) round.rawJson],
+    // Home only consumes these hints. Keep proposal bodies and other detailed
+    // API payloads out of every startup read and participation-state write.
+    'rounds': [
+      for (final round in rounds)
+        {
+          'vote_round_id': round.roundId,
+          'title': round.title,
+          'status': round.status,
+          'snapshot_height': int.tryParse(
+            '${round.rawJson['snapshot_height']}',
+          ),
+          'vote_end_time': votingRoundEndDate(
+            round.rawJson,
+          )?.toUtc().toIso8601String(),
+        },
+    ],
   };
 
   factory VotingHomeRoundList.fromJson(Map<String, dynamic> json) =>
@@ -69,21 +97,34 @@ class VotingHomeFact {
     this.progress = VotingHomeProgress.unknown,
     this.snapshotHeight,
     this.participation,
+    this.decision = VotingHomeDecision.unknown,
+    this.needsRecheck = false,
   });
 
   final VotingHomeEligibility eligibility;
   final VotingHomeProgress progress;
   final int? snapshotHeight;
   final VotingParticipationResult? participation;
+  final VotingHomeDecision decision;
+  final bool needsRecheck;
+
+  bool get hasCheckedParticipation =>
+      participation != null &&
+      !needsRecheck &&
+      decision != VotingHomeDecision.unknown;
 
   Map<String, Object?> toJson() => {
     'eligibility': eligibility.name,
     'progress': progress.name,
     'snapshotHeight': snapshotHeight,
+    'decision': decision.name,
+    'needsRecheck': needsRecheck,
     if (participation != null) 'participation': participation!.toJson(),
   };
 
   factory VotingHomeFact.fromJson(Map<String, dynamic> json) => VotingHomeFact(
+    decision: VotingHomeDecision.values.byName(json['decision'] as String),
+    needsRecheck: json['needsRecheck'] as bool,
     eligibility: VotingHomeEligibility.values.byName(
       json['eligibility'] as String,
     ),
@@ -102,17 +143,21 @@ abstract interface class VotingHomeCacheStore {
   Future<void> write(String value);
 }
 
-class _SecureVotingHomeCacheStore implements VotingHomeCacheStore {
+class _FileVotingHomeCacheStore implements VotingHomeCacheStore {
+  _FileVotingHomeCacheStore(this.cache);
+  final VotingFileCache cache;
   @override
-  Future<String?> read() =>
-      AppSecureStore.instance.readPlain(votingHomeCacheKey);
+  Future<String?> read() => cache.read(votingHomeCacheKey);
   @override
-  Future<void> write(String value) =>
-      AppSecureStore.instance.writePlain(votingHomeCacheKey, value);
+  Future<void> write(String value) => cache.write(votingHomeCacheKey, value);
 }
 
+final votingFileCacheProvider = Provider<VotingFileCache>(
+  (ref) => VotingFileCache(),
+);
+
 final votingHomeCacheStoreProvider = Provider<VotingHomeCacheStore>(
-  (ref) => _SecureVotingHomeCacheStore(),
+  (ref) => _FileVotingHomeCacheStore(ref.watch(votingFileCacheProvider)),
 );
 final votingHomeClockProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
@@ -135,6 +180,8 @@ class VotingHomeCacheNotifier extends Notifier<int> {
   Future<void>? _load;
   Future<void> _writes = Future.value();
 
+  // Home renders unknown as hidden. Its post-frame refresh calls ensureLoaded;
+  // neither provider construction nor app bootstrap waits for voting storage.
   @override
   int build() => 0;
 
@@ -145,32 +192,60 @@ class VotingHomeCacheNotifier extends Notifier<int> {
 
   Future<void> _read() async {
     try {
+      votingHomeTrace('cache.load.start');
       final raw = await ref.read(votingHomeCacheStoreProvider).read();
-      if (!ref.mounted || raw == null) return;
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      final lists = (json['lists'] as Map<String, dynamic>).map(
-        (key, value) => MapEntry(
-          key,
-          VotingHomeRoundList.fromJson(value as Map<String, dynamic>),
-        ),
-      );
-      final facts = (json['facts'] as Map<String, dynamic>).map(
-        (key, value) => MapEntry(
-          key,
-          VotingHomeFact.fromJson(value as Map<String, dynamic>),
-        ),
-      );
-      _lists.addAll(lists);
-      _facts.addAll(facts);
+      if (!ref.mounted) return;
+      if (raw == null) {
+        votingHomeTrace('cache.load.empty');
+        return;
+      }
+      _decode(raw);
       state++;
     } catch (error) {
+      votingHomeTrace('cache.load.failed');
       debugPrint('Voting Home cache read failed: $error');
     }
+  }
+
+  void _decode(String? raw) {
+    if (raw == null) return;
+    final json = jsonDecode(raw) as Map<String, dynamic>;
+    final lists = (json['lists'] as Map<String, dynamic>).map(
+      (key, value) => MapEntry(
+        key,
+        VotingHomeRoundList.fromJson(value as Map<String, dynamic>),
+      ),
+    );
+    final facts = (json['facts'] as Map<String, dynamic>).map(
+      (key, value) =>
+          MapEntry(key, VotingHomeFact.fromJson(value as Map<String, dynamic>)),
+    );
+    _lists.addAll(lists);
+    _facts.addAll(facts);
+    votingHomeTrace(
+      'cache.load.done lists=${lists.length} facts=${facts.length} '
+      'participation=${facts.values.where((f) => f.participation != null).length}',
+    );
   }
 
   Future<void> recordList(String key, VotingHomeRoundList list) => _update(() {
     if (_lists[key]?.checkedAt.isAfter(list.checkedAt) ?? false) return false;
     final previous = _lists[key];
+    final network = (jsonDecode(key) as List)[0];
+    for (final round in list.rounds) {
+      final snapshot = int.tryParse('${round.rawJson['snapshot_height']}');
+      if (snapshot == null) continue;
+      for (final entry in _facts.entries.toList()) {
+        final scope = jsonDecode(entry.key) as List;
+        if (scope[0] == network &&
+            scope[1] == list.fingerprint &&
+            scope[3] == round.roundId &&
+            entry.value.snapshotHeight != null &&
+            entry.value.snapshotHeight != snapshot) {
+          _facts[entry.key] = const VotingHomeFact();
+        }
+      }
+    }
     // Existing voting screens also refresh this list. Preserve the last applied
     // hint within the same authenticated source, without inventing a new one.
     _lists[key] =
@@ -200,14 +275,23 @@ class VotingHomeCacheNotifier extends Notifier<int> {
         old.snapshotHeight == snapshotHeight) {
       return false;
     }
+    final sameSnapshot =
+        old.snapshotHeight == null || old.snapshotHeight == snapshotHeight;
+    final progress = sameSnapshot ? old.progress : VotingHomeProgress.unknown;
+    var decision = sameSnapshot ? old.decision : VotingHomeDecision.unknown;
+    if (progress != VotingHomeProgress.inProgress &&
+        progress != VotingHomeProgress.completed &&
+        !eligible) {
+      decision = VotingHomeDecision.hide;
+    }
     _facts[key] = VotingHomeFact(
-      eligibility: eligible
-          ? VotingHomeEligibility.eligible
-          : VotingHomeEligibility.ineligible,
-      progress: old.progress,
-      participation: old.snapshotHeight == snapshotHeight
-          ? old.participation
-          : null,
+      eligibility: nextEligibility,
+      progress: progress,
+      decision: decision,
+      needsRecheck:
+          old.needsRecheck ||
+          (eligible && old.eligibility == VotingHomeEligibility.ineligible),
+      participation: sameSnapshot ? old.participation : null,
       snapshotHeight: snapshotHeight,
     );
     return true;
@@ -219,11 +303,31 @@ class VotingHomeCacheNotifier extends Notifier<int> {
     VotingParticipationResult result,
   ) => _update(() {
     final old = fact(key);
+    votingHomeTrace(
+      'participation.record snapshot=$snapshotHeight '
+      'unavailable=${result.unavailable}',
+    );
+    final sameSnapshot =
+        old.snapshotHeight == null || old.snapshotHeight == snapshotHeight;
+    final progress = sameSnapshot ? old.progress : VotingHomeProgress.unknown;
+    var decision = sameSnapshot ? old.decision : VotingHomeDecision.unknown;
+    if (progress != VotingHomeProgress.completed &&
+        progress != VotingHomeProgress.inProgress &&
+        !result.localState &&
+        (result.complete || result.remainingEligible)) {
+      decision = result.remainingEligible
+          ? VotingHomeDecision.show
+          : VotingHomeDecision.hide;
+    }
     _facts[key] = VotingHomeFact(
-      eligibility: old.eligibility,
-      progress: old.progress,
+      eligibility: sameSnapshot
+          ? old.eligibility
+          : VotingHomeEligibility.unknown,
+      progress: progress,
       snapshotHeight: snapshotHeight,
       participation: result,
+      decision: decision,
+      needsRecheck: result.localState || !result.complete,
     );
     return true;
   });
@@ -241,20 +345,47 @@ class VotingHomeCacheNotifier extends Notifier<int> {
         : plan.pendingRecovery && !plan.completedForDisplay
         ? VotingHomeProgress.inProgress
         : VotingHomeProgress.available;
-    if (old.progress == progress) return false;
+    final actionable =
+        plan != null &&
+        (progress == VotingHomeProgress.inProgress ||
+            (!plan.needsDraftSetup && plan.openProposals.isNotEmpty));
+    final decision = progress == VotingHomeProgress.completed
+        ? VotingHomeDecision.hide
+        : actionable
+        ? VotingHomeDecision.show
+        : plan != null && (old.participation?.localState ?? false)
+        ? (old.participation!.remainingEligible
+              ? VotingHomeDecision.show
+              : VotingHomeDecision.hide)
+        : old.decision;
+    final needsRecheck =
+        old.needsRecheck &&
+        !actionable &&
+        progress != VotingHomeProgress.completed &&
+        !(plan != null && (old.participation?.localState ?? false));
+    if (old.progress == progress &&
+        old.decision == decision &&
+        old.needsRecheck == needsRecheck) {
+      return false;
+    }
     _facts[key] = VotingHomeFact(
       eligibility: old.eligibility,
       progress: progress,
       snapshotHeight: old.snapshotHeight,
       participation: old.participation,
+      decision: decision,
+      needsRecheck: needsRecheck,
     );
     return true;
   });
 
+  /// Only callers that know an actual wallet rewind occurred may use this.
+  /// A sync progress height is not evidence of a rewind.
   Future<void> invalidateEligibilityAfterRewind({
     required String network,
     required String accountUuid,
     required int scannedHeight,
+    String trigger = 'unspecified',
   }) => _update(() {
     var changed = false;
     for (final entry in _facts.entries.toList()) {
@@ -268,7 +399,20 @@ class VotingHomeCacheNotifier extends Notifier<int> {
           scannedHeight >= fact.snapshotHeight!) {
         continue;
       }
-      _facts[entry.key] = VotingHomeFact(progress: fact.progress);
+      votingHomeTrace(
+        'cache.invalidate trigger=$trigger scanned=$scannedHeight '
+        'snapshot=${fact.snapshotHeight} participation=${fact.participation != null} '
+        'progress=${fact.progress.name}',
+      );
+      if (fact.needsRecheck) continue;
+      _facts[entry.key] = VotingHomeFact(
+        progress: fact.progress,
+        eligibility: fact.eligibility,
+        snapshotHeight: fact.snapshotHeight,
+        participation: fact.participation,
+        decision: fact.decision,
+        needsRecheck: true,
+      );
       changed = true;
     }
     return changed;
@@ -299,8 +443,12 @@ class VotingHomeCacheNotifier extends Notifier<int> {
       'lists': _lists.map((key, value) => MapEntry(key, value.toJson())),
       'facts': _facts.map((key, value) => MapEntry(key, value.toJson())),
     });
-    final write = _writes.then((_) => store.write(value));
+    final write = _writes.then((_) async {
+      await store.write(value);
+      votingHomeTrace('cache.persist.done');
+    });
     _writes = write.catchError((Object error) {
+      votingHomeTrace('cache.persist.failed');
       debugPrint('Voting Home cache persistence failed: $error');
     });
     return write;
@@ -328,10 +476,12 @@ class VotingHomeCacheNotifier extends Notifier<int> {
     required String accountUuid,
     required bool showTestRounds,
     required DateTime now,
-    required int scannedHeight,
   }) {
     final rounds = list(listKey);
-    if (rounds == null) return false;
+    if (rounds == null) {
+      votingHomeTrace('visibility=false reason=no-list');
+      return false;
+    }
     return rounds.rounds.any((round) {
       if (!showTestRounds && isHiddenTestVotingRoundTitle(round.title)) {
         return false;
@@ -349,15 +499,11 @@ class VotingHomeCacheNotifier extends Notifier<int> {
           round.roundId,
         ),
       );
-      if (local.progress == VotingHomeProgress.inProgress) return true;
-      if (local.progress == VotingHomeProgress.completed) return false;
-      // A rewind below the checked snapshot makes a negative hint uncertain.
-      if (local.snapshotHeight != null &&
-          scannedHeight < local.snapshotHeight!) {
-        return true;
-      }
-      if (local.participation?.unavailable ?? false) return false;
-      return local.eligibility != VotingHomeEligibility.ineligible;
+      votingHomeTrace(
+        'visibility.candidate decision=${local.decision.name} '
+        'recheck=${local.needsRecheck}',
+      );
+      return local.decision == VotingHomeDecision.show;
     });
   }
 }

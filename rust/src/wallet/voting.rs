@@ -8,3 +8,5 @@ pub(crate) mod transport;
 
 #[cfg(test)]
 pub(crate) mod test_support;
+
+pub mod snapshot_changes;

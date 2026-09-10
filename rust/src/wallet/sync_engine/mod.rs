@@ -2852,6 +2852,7 @@ async fn run_sync_impl(
     let initial_window_start_height =
         earliest_pending_scan_start(&initial_ranges).unwrap_or(current_tip_height);
     let mut queued_ranges = Some(initial_ranges);
+    let mut voting_scan_end = None;
     let mut prev_remaining = initial_total;
     let mut progress_display_mode = ProgressDisplayMode::Work;
     let mut last_progress_percentage: f64 = 0.0;
@@ -3373,6 +3374,14 @@ async fn run_sync_impl(
                     );
                 }
             }
+            // One notification per contiguous scan range, not per batch.
+            if voting_scan_end != Some(start) {
+                crate::wallet::voting::snapshot_changes::record(
+                    db_data_path,
+                    u32::from(start) as u64,
+                );
+            }
+            voting_scan_end = Some(end);
             scan_cached_blocks(
                 &network,
                 &block_source,
@@ -3414,6 +3423,18 @@ async fn run_sync_impl(
                     }
                 }
                 other => SyncError::other(format!("scan: {other}")),
+            })
+            .map(|summary| {
+                // A snapshot can be registered while a contiguous range is
+                // already scanning. Notify actual note changes as well, before
+                // releasing the wallet write lock, so that registration cannot
+                // miss a later mutation in that range.
+                if summary.received_orchard_note_count() > 0
+                    || summary.spent_orchard_note_count() > 0
+                {
+                    crate::wallet::voting::snapshot_changes::record(db_data_path, u32::from(start) as u64);
+                }
+                summary
             })
         });
 

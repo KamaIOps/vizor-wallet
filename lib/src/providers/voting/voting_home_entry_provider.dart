@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/voting/voting_poll_ordering.dart';
 
 import '../../services/voting/resolved_voting_config_extensions.dart';
 import '../../services/voting/voting_models.dart';
@@ -11,7 +12,6 @@ import '../../services/voting/voting_http.dart';
 import '../account_provider.dart';
 import '../app_security_provider.dart';
 import '../rpc_endpoint_provider.dart';
-import '../sync_provider.dart';
 import 'voting_config_provider.dart';
 import 'voting_config_source_provider.dart';
 import 'voting_home_cache_provider.dart';
@@ -31,11 +31,8 @@ final votingHomeEntryVisibleProvider = Provider<bool>((ref) {
   );
   final network = ref.watch(rpcEndpointProvider.select((s) => s.networkName));
   final showTest = ref.watch(showTestVotingRoundsProvider).value ?? false;
-  final scanned = ref.watch(
-    syncProvider.select((s) => s.value?.scannedHeight ?? 0),
-  );
   if (account == null || source == null) return false;
-  return ref
+  final visible = ref
       .read(votingHomeCacheProvider.notifier)
       .shouldShow(
         listKey: votingHomeListKey(network, source),
@@ -43,8 +40,9 @@ final votingHomeEntryVisibleProvider = Provider<bool>((ref) {
         accountUuid: account,
         showTestRounds: showTest,
         now: ref.read(votingHomeClockProvider)(),
-        scannedHeight: scanned,
       );
+  votingHomeTrace('visibility=$visible');
+  return visible;
 });
 
 final votingDiscoveryEndpointProvider = Provider<String>(
@@ -131,19 +129,6 @@ class VotingHomeRefresh {
       final cache = ref.read(votingHomeCacheProvider.notifier);
       await cache.ensureLoaded();
       if (!ref.mounted) return;
-      final account = ref.exists(accountProvider)
-          ? ref.read(accountProvider).value?.activeAccountUuid
-          : null;
-      final sync = ref.exists(syncProvider)
-          ? ref.read(syncProvider).value?.scopedToAccount(account)
-          : null;
-      if (account != null && sync != null && sync.hasAccountScopedData) {
-        await cache.invalidateEligibilityAfterRewind(
-          network: network,
-          accountUuid: account,
-          scannedHeight: sync.scannedHeight,
-        );
-      }
       final now = ref.read(votingHomeClockProvider)();
       final endpoint = _endpoint();
       final cached = cache.list(key);
@@ -229,6 +214,18 @@ class VotingHomeRefresh {
           discoveryEndpoint: discovery == null ? null : endpoint,
         ),
       );
+      for (final round in rounds) {
+        if (votingPollListStatus(round.status) != VotingPollListStatus.active) {
+          try {
+            await ref
+                .read(votingFileCacheProvider)
+                .removeRound(network, round.roundId);
+          } catch (_) {
+            // Best-effort disposal must not turn successful discovery into a failure.
+            debugPrint('Voting ended-round cache cleanup deferred');
+          }
+        }
+      }
       _failures.remove(key);
     } catch (error) {
       if (key != null && ref.mounted) {

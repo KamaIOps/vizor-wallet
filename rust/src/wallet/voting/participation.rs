@@ -50,6 +50,8 @@ const INVALID: &str = "Voting participation evidence could not be verified";
 pub struct Candidates {
     pub keys: Vec<String>,
     pub fingerprint: String,
+    #[serde(default)]
+    pub confirmed: Vec<String>,
 }
 
 fn notes(
@@ -101,7 +103,62 @@ fn notes(
     let fingerprint = hex::encode(Sha256::digest(
         serde_json::to_vec(&(network, round, snapshot, &keys)).map_err(|_| INVALID)?,
     ));
-    Ok((notes, Candidates { keys, fingerprint }))
+    let confirmed = confirmed_keys(db_path, account, round, &notes, &keys)?;
+    Ok((
+        notes,
+        Candidates {
+            keys,
+            fingerprint,
+            confirmed,
+        },
+    ))
+}
+
+fn confirmed_keys(
+    db_path: &str,
+    account: &str,
+    round: &str,
+    notes: &[NoteInfo],
+    keys: &[String],
+) -> Result<Vec<String>, String> {
+    let db = super::db::open_voting_db(db_path, account)?;
+    let mut found = Vec::new();
+    for index in 0..db.get_bundle_count(round).map_err(|_| INVALID)? {
+        if db.load_van_position(round, index).is_err() {
+            continue;
+        }
+        let positions = zcash_voting::storage::queries::load_bundle_note_positions(
+            &db.conn(),
+            round,
+            account,
+            index,
+        )
+        .map_err(|_| INVALID)?;
+        let bundle: Vec<NoteInfo> = positions
+            .iter()
+            .filter_map(|p| notes.iter().find(|n| n.position == *p).cloned())
+            .collect();
+        if zcash_voting::storage::queries::require_bundle_notes(
+            &db.conn(),
+            round,
+            account,
+            index,
+            &bundle,
+        )
+        .is_err()
+        {
+            continue;
+        }
+        for n in bundle {
+            if let Some(i) = notes
+                .iter()
+                .position(|candidate| candidate.nullifier == n.nullifier)
+            {
+                found.push(keys[i].clone());
+            }
+        }
+    }
+    Ok(found)
 }
 
 pub fn prepare(
@@ -374,6 +431,7 @@ pub fn verify(
 
 // Call only with candidates freshly read from the wallet DB. Empty evidence is
 // meaningful only when that locally verified snapshot still contains no notes.
+#[cfg(test)]
 fn verify_prepared_candidates(
     candidates: &Candidates,
     fingerprint: &str,
@@ -390,6 +448,67 @@ fn verify_prepared_candidates(
     verify(&candidates.keys, network, evidence, now)
 }
 
+/// A local observation is bound to the full governance store key. It is a
+/// disposable app cache, not remote evidence or authority to submit a vote.
+#[derive(Clone, Serialize, Deserialize)]
+struct Observation {
+    used: bool,
+    height: u64,
+}
+
+fn incremental_observations(
+    candidates: &Candidates,
+    network: &str,
+    evidence: &str,
+    now: i64,
+) -> Result<std::collections::BTreeMap<String, Observation>, String> {
+    let value: serde_json::Value = serde_json::from_str(evidence).map_err(|_| INVALID)?;
+    let mut cached: std::collections::BTreeMap<String, Observation> =
+        serde_json::from_value(value["cached"].clone()).map_err(|_| INVALID)?;
+    cached.retain(|key, _| candidates.keys.contains(key));
+    let keys: Vec<String> =
+        serde_json::from_value(value["queryKeys"].clone()).map_err(|_| INVALID)?;
+    if keys.len() > MAX_NOTES
+        || keys.iter().any(|k| !candidates.keys.contains(k))
+        || keys.iter().collect::<std::collections::HashSet<_>>().len() != keys.len()
+    {
+        return Err(INVALID.into());
+    }
+    if keys.is_empty() {
+        return Ok(cached);
+    }
+    let commit: Envelope<CommitResult> =
+        serde_json::from_value(value["commit"].clone()).map_err(|_| INVALID)?;
+    let validators: Envelope<ValidatorsResult> =
+        serde_json::from_value(value["validators"].clone()).map_err(|_| INVALID)?;
+    verify_header(&commit.result, &validators.result, network, now)?;
+    let queries = value["queries"].as_array().ok_or(INVALID)?;
+    if keys.len() != queries.len() {
+        return Err(INVALID.into());
+    }
+    let h = &commit.result.signed_header.header;
+    let height = h.height.value().checked_sub(1).ok_or(INVALID)?;
+    for (key, raw) in keys.iter().zip(queries) {
+        let Ok(query) = serde_json::from_value::<Envelope<QueryResult>>(raw.clone()) else {
+            continue;
+        };
+        let bytes = hex::decode(key).map_err(|_| INVALID)?;
+        if let Ok(used) = verify_query(
+            &query.result.response,
+            &bytes,
+            h.app_hash.as_bytes(),
+            height,
+        ) {
+            let old = cached.get(key);
+            if old.is_some_and(|o| o.used || o.height > height) {
+                continue;
+            }
+            cached.insert(key.clone(), Observation { used, height });
+        }
+    }
+    Ok(cached)
+}
+
 /// Re-read the note set after network I/O, rejecting a changed restore/snapshot.
 /// No remote result can mark a different account or note set as unavailable.
 pub fn evaluate(
@@ -404,16 +523,33 @@ pub fn evaluate(
     max_real_notes: Option<u32>,
 ) -> Result<String, String> {
     let (notes, candidates) = notes(db_path, account, network, round, snapshot)?;
-    let used = verify_prepared_candidates(&candidates, fingerprint, network, evidence, now)?;
+    if fingerprint != candidates.fingerprint || evidence.len() > MAX_JSON {
+        return Err(INVALID.into());
+    }
+    let mut observations = incremental_observations(&candidates, network, evidence, now)?;
+    for key in &candidates.confirmed {
+        observations.insert(
+            key.clone(),
+            Observation {
+                used: true,
+                height: 0,
+            },
+        );
+    }
+    let used: Vec<Option<bool>> = candidates
+        .keys
+        .iter()
+        .map(|k| observations.get(k).map(|o| o.used))
+        .collect();
     let excluded: Vec<String> = notes
         .iter()
         .zip(&used)
-        .filter_map(|(n, u)| u.then(|| hex::encode(&n.nullifier)))
+        .filter_map(|(n, u)| (*u != Some(false)).then(|| hex::encode(&n.nullifier)))
         .collect();
     let remaining: Vec<_> = notes
         .into_iter()
         .zip(&used)
-        .filter_map(|(n, used)| (!used).then_some(n))
+        .filter_map(|(n, used)| (*used == Some(false)).then_some(n))
         .collect();
     let policy = match max_real_notes {
         None => zcash_voting::recoverable_bundle_policy_v1(),
@@ -432,7 +568,9 @@ pub fn evaluate(
     serde_json::to_string(&serde_json::json!({
         "localState": local_state,
         "fingerprint": fingerprint,
-        "usedCount": used.iter().filter(|v| **v).count(),
+        "usedCount": used.iter().filter(|v| **v == Some(true)).count(),
+        "complete": used.iter().all(Option::is_some),
+        "observations": observations,
         "noteCount": used.len(),
         "remainingEligible": eligible,
     }))
@@ -595,6 +733,40 @@ mod tests {
         let now = header.header.time.unix_timestamp();
         (value, keys, now)
     }
+    #[test]
+    fn incremental_cache_keeps_valid_siblings_and_never_needs_fresh_evidence_for_known_notes() {
+        let (mut value, keys, now) = fixture("main");
+        let candidates = Candidates {
+            keys: keys.clone(),
+            fingerprint: "snapshot".into(),
+            confirmed: Vec::new(),
+        };
+        value["cached"] = serde_json::json!({});
+        value["queryKeys"] = serde_json::json!(keys);
+        let all = incremental_observations(&candidates, "main", &value.to_string(), now).unwrap();
+        assert_eq!(all.len(), keys.len());
+        assert!(all.values().any(|o| o.used));
+        assert!(all.values().any(|o| !o.used));
+        value["queries"][0] = serde_json::json!({"malformed": true});
+        let partial =
+            incremental_observations(&candidates, "main", &value.to_string(), now).unwrap();
+        assert_eq!(partial.len(), keys.len() - 1);
+        assert!(!partial.contains_key(&keys[0]));
+        let cached = serde_json::json!({"cached": all, "queryKeys": []});
+        let restored =
+            incremental_observations(&candidates, "main", &cached.to_string(), now + 86400)
+                .unwrap();
+        assert_eq!(restored.len(), keys.len());
+        let changed = Candidates {
+            keys: vec![keys[0].clone(), "0100".into()],
+            fingerprint: "changed".into(),
+            confirmed: Vec::new(),
+        };
+        let retained =
+            incremental_observations(&changed, "main", &cached.to_string(), now).unwrap();
+        assert_eq!(retained.len(), 1);
+    }
+
     fn test_validators(powers: &[(u8, u64)]) -> validator::Set {
         let validators = powers
             .iter()
@@ -729,6 +901,7 @@ mod tests {
     #[test]
     fn empty_snapshot_requires_unchanged_local_candidates() {
         let empty = Candidates {
+            confirmed: Vec::new(),
             keys: vec![],
             fingerprint: "empty".into(),
         };
@@ -738,6 +911,7 @@ mod tests {
         );
         assert!(verify_prepared_candidates(&empty, "old", "main", "", 0).is_err());
         let populated = Candidates {
+            confirmed: Vec::new(),
             keys: vec!["01".into()],
             fingerprint: "new".into(),
         };
@@ -805,6 +979,60 @@ mod tests {
             serde_json::json!(B64.encode([0; 64]));
         assert!(verify(&k, "main", &corrupt.to_string(), now).is_err());
     }
+    #[test]
+    fn confirmed_local_bundles_match_note_identity_not_only_position() {
+        use super::super::test_support::{
+            test_api_round_params, test_note_info, TEST_ACCOUNT_UUID,
+        };
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("wallet.db");
+        let path = path.to_str().unwrap();
+        let params = test_api_round_params();
+        let note = test_note_info(1);
+        let db = super::super::db::open_voting_db(path, TEST_ACCOUNT_UUID).unwrap();
+        db.ensure_round(zcash_voting::Network::Mainnet, &params, None)
+            .unwrap();
+        db.ensure_bundles_with_skipped_suffix_with_policy(
+            &params.vote_round_id,
+            &[note.clone()],
+            zcash_voting::recoverable_bundle_policy_v1(),
+        )
+        .unwrap();
+        let keys = vec!["governance-key".to_string()];
+        assert!(confirmed_keys(
+            path,
+            TEST_ACCOUNT_UUID,
+            &params.vote_round_id,
+            &[note.clone()],
+            &keys
+        )
+        .unwrap()
+        .is_empty());
+        db.store_van_position(&params.vote_round_id, 0, 1).unwrap();
+        assert_eq!(
+            confirmed_keys(
+                path,
+                TEST_ACCOUNT_UUID,
+                &params.vote_round_id,
+                &[note.clone()],
+                &keys
+            )
+            .unwrap(),
+            keys
+        );
+        let mut replacement = note;
+        replacement.nullifier[0] ^= 1;
+        assert!(confirmed_keys(
+            path,
+            TEST_ACCOUNT_UUID,
+            &params.vote_round_id,
+            &[replacement],
+            &keys
+        )
+        .unwrap()
+        .is_empty());
+    }
+
     #[test]
     fn exclusions_persist_and_never_rewrite_an_existing_bundle_plan() {
         let dir = tempfile::tempdir().unwrap();

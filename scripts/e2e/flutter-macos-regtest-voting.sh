@@ -242,8 +242,9 @@ EOF
 
 gateway_args=(--screenshot-dir "$LOG_DIR/screenshots")
 if [[ "$VIZOR_FORM_FACTOR" == "mobile" ]]; then
-  gateway_args+=(--simulator "$FLUTTER_DEVICE")
+  gateway_args+=(--simulator "$FLUTTER_DEVICE" --enable-zcash-mining)
 fi
+IRONWOOD_ACTIVATION_HEIGHT="$ACTIVATION_HEIGHT" IRONWOOD_LIGHTWALLETD_PORT="$LWD_PORT" \
 python3 "$ROOT_DIR/scripts/e2e/voting-regtest-gateway.py" "${gateway_args[@]}" \
   --port "$GATEWAY_PORT" --config-dir "$CONFIG_DIR" \
   --pir-target "http://127.0.0.1:$PIR_PORT" \

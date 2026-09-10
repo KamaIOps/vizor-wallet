@@ -2,6 +2,9 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
+import 'package:zcash_wallet/src/providers/voting/voting_home_cache_provider.dart';
+import 'package:zcash_wallet/src/services/voting/voting_models.dart';
 import 'package:zcash_wallet/src/providers/rpc_endpoint_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_home_entry_provider.dart';
 
@@ -212,6 +215,8 @@ Widget _app(
   SyncKeepAwakeNotifier? syncKeepAwakeNotifier,
   bool? swapEnabled,
   bool showVoting = true,
+  VotingHomeCacheStore? deferredVotingStore,
+  DateTime Function()? votingNow,
   Future<void> Function()? refreshVoting,
   List<bool Function()>? participationGuards,
   RpcEndpointNotifier? rpcNotifier,
@@ -306,10 +311,32 @@ Widget _app(
         ),
       if (rpcNotifier != null)
         rpcEndpointProvider.overrideWith(() => rpcNotifier),
-      votingHomeEntryVisibleProvider.overrideWithValue(showVoting),
-      votingHomeRefreshActionProvider.overrideWithValue(
-        refreshVoting ?? () async {},
-      ),
+      if (deferredVotingStore == null)
+        votingHomeEntryVisibleProvider.overrideWithValue(showVoting)
+      else ...[
+        votingHomeCacheStoreProvider.overrideWithValue(deferredVotingStore),
+        votingHomeEntryVisibleProvider.overrideWith((ref) {
+          ref.watch(votingHomeCacheProvider);
+          return ref
+              .read(votingHomeCacheProvider.notifier)
+              .shouldShow(
+                listKey: votingHomeListKey('main', 'source'),
+                network: 'main',
+                accountUuid: 'account',
+                showTestRounds: false,
+                now: (votingNow ?? DateTime.now)(),
+              );
+        }),
+      ],
+      if (deferredVotingStore == null)
+        votingHomeRefreshActionProvider.overrideWithValue(
+          refreshVoting ?? () async {},
+        )
+      else
+        votingHomeRefreshActionProvider.overrideWith(
+          (ref) =>
+              () => ref.read(votingHomeCacheProvider.notifier).ensureLoaded(),
+        ),
       appBootstrapProvider.overrideWithValue(_bootstrap()),
       if (migrationCompletion != null || migrationCompletionFuture != null)
         ironwoodMigrationCompletionProvider.overrideWith(
@@ -593,7 +620,94 @@ SwapIntentRecord _externalToZecActivityRecord({
   );
 }
 
+class _DeferredVotingStore implements VotingHomeCacheStore {
+  final readGate = Completer<String?>();
+  int reads = 0;
+  @override
+  Future<String?> read() {
+    reads++;
+    return readGate.future;
+  }
+
+  @override
+  Future<void> write(String value) async {}
+}
+
 void main() {
+  testWidgets(
+    'Home renders before cache read and restores the card during sync',
+    (tester) async {
+      final store = _DeferredVotingStore();
+      final round = 'a' * 64;
+      var now = DateTime.utc(2026, 9, 10);
+      final end = now.add(const Duration(hours: 1));
+      final guards = <bool Function()>[];
+      await tester.pumpWidget(
+        _app(
+          _syncedState().copyWith(isSyncing: true, scannedHeight: 0),
+          deferredVotingStore: store,
+          votingNow: () => now,
+          participationGuards: guards,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 500));
+      final card = find.byKey(const ValueKey('mobile_home_coinholder_voting'));
+      expect(store.reads, 1);
+      expect(store.readGate.isCompleted, false);
+      expect(find.byKey(const ValueKey('mobile_home_receive')), findsOneWidget);
+      expect(card, findsNothing);
+      store.readGate.complete(
+        jsonEncode({
+          'lists': {
+            votingHomeListKey('main', 'source'): VotingHomeRoundList(
+              checkedAt: DateTime.now(),
+              fingerprint: 'config',
+              rounds: [
+                VotingRoundSummary.fromJson({
+                  'vote_round_id': round,
+                  'title': 'Vote',
+                  'status': '1',
+                  'vote_end_time': end.toIso8601String(),
+                }),
+              ],
+            ).toJson(),
+          },
+          'facts': {
+            votingHomeFactKey(
+              'main',
+              'config',
+              'account',
+              round,
+            ): const VotingHomeFact(
+              decision: VotingHomeDecision.show,
+            ).toJson(),
+          },
+        }),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(card, findsOneWidget);
+      // Returning to Home reuses the loaded state instead of reading again.
+      final router = GoRouter.of(tester.element(card));
+      router.go('/voting');
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 500));
+      router.go('/home');
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(card, findsOneWidget);
+      expect(store.reads, 1);
+      final checks = guards.length;
+      now = end;
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pump();
+      expect(card, findsNothing);
+      expect(guards, hasLength(checks));
+      expect(store.reads, 1);
+    },
+  );
+
   testWidgets('hides the voting card when no actionable rounds are cached', (
     tester,
   ) async {
@@ -652,8 +766,11 @@ void main() {
     final router = GoRouter.of(tester.element(find.byType(MobileHomeScreen)));
     final initial = refreshes;
     expect(initial, greaterThan(0));
+    final initialChecks = guards.length;
+    expect(initialChecks, greaterThan(0));
     await tester.pump(const Duration(minutes: 2));
     expect(refreshes, initial); // The minute timer must stay local on Home too.
+    expect(guards, hasLength(initialChecks));
     final firstVisit = guards.last;
     expect(firstVisit(), isTrue);
     router.go('/shell-activity');
@@ -664,6 +781,7 @@ void main() {
     router.go('/home');
     await tester.pumpAndSettle();
     expect(refreshes, greaterThan(initial));
+    expect(guards.length, greaterThan(initialChecks));
     expect(firstVisit(), isFalse);
     final secondVisit = guards.last;
     expect(secondVisit(), isTrue);

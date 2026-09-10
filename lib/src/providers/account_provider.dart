@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'dart:typed_data';
+
+import '../services/voting/voting_file_cache.dart';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -707,7 +710,18 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     try {
       await ref.read(votingHomeCacheProvider.notifier).removeAccount(uuid);
     } catch (e, st) {
-      log('removeAccount: failed to delete voting Home cache for $uuid: $e\n$st');
+      log(
+        'removeAccount: failed to delete voting Home cache for $uuid: $e\n$st',
+      );
+    }
+    try {
+      await VotingFileCache(
+        directory: () async => Directory('$dbPath.voting-cache'),
+      ).removeAccount(uuid);
+    } catch (e, st) {
+      log(
+        'removeAccount: failed to delete voting note cache for $uuid: $e\n$st',
+      );
     }
 
     final updated = [
@@ -934,6 +948,11 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       }
       try {
         ref.read(votingHomeCacheProvider.notifier).clearForReset();
+        await clearVotingCachesForReset();
+      } catch (e, st) {
+        recordError('voting cache wipe', e, st);
+      }
+      try {
         await _storage.deleteAll();
       } catch (e, st) {
         recordError('secure storage wipe', e, st);
