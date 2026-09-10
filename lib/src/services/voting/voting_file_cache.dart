@@ -9,6 +9,38 @@ import '../../core/storage/wallet_paths.dart';
 Future<Directory> votingCacheDirectory() async =>
     Directory('${await getWalletDbPath()}.voting-cache');
 
+/// Full-wallet reset only, after draining voting work. Discover caches without
+/// consulting secure storage: a prior failed reset may have erased the DB name.
+Future<void> clearVotingCachesForReset({
+  Future<Directory> Function() resolveSupportDirectory =
+      getWalletSupportDirectory,
+  Future<void> Function(Directory)? deleteDirectory,
+}) async {
+  final root = await resolveSupportDirectory();
+  if (!await root.exists()) return;
+  // Current randomized DB names (12 random bytes), plus the legacy fixed name.
+  final pattern = RegExp(r'^zcash_wallet(?:_[0-9a-f]{24})?\.db\.voting-cache$');
+  Object? firstError;
+  StackTrace? firstStack;
+  await for (final entry in root.list(followLinks: false)) {
+    if (entry is! Directory ||
+        !pattern.hasMatch(entry.path.split(Platform.pathSeparator).last)) {
+      continue;
+    }
+    try {
+      if (deleteDirectory != null) {
+        await deleteDirectory(entry);
+      } else {
+        await entry.delete(recursive: true);
+      }
+    } catch (error, stack) {
+      firstError ??= error;
+      firstStack ??= stack;
+    }
+  }
+  if (firstError != null) Error.throwWithStackTrace(firstError, firstStack!);
+}
+
 /// App-private disposable files, separate from secure storage and voting secrets.
 /// Callers hold the voting destructive-operation lease for the whole operation.
 class VotingFileCache {

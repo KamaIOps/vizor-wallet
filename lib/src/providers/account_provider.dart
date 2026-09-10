@@ -948,9 +948,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       }
       try {
         ref.read(votingHomeCacheProvider.notifier).clearForReset();
-        await VotingFileCache(
-          directory: () async => Directory('$dbPath.voting-cache'),
-        ).clear();
+        await clearVotingCachesForReset();
       } catch (e, st) {
         recordError('voting cache wipe', e, st);
       }

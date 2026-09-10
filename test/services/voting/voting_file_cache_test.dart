@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:zcash_wallet/src/core/storage/app_secure_store.dart';
 import 'package:zcash_wallet/src/services/voting/voting_file_cache.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
   late VotingFileCache cache;
   final key = '0100${'a' * 128}';
@@ -17,6 +20,72 @@ void main() {
   tearDown(() async {
     if (await root.exists()) await root.delete(recursive: true);
   });
+
+  test(
+    'reset retries orphaned caches after secure storage loses the DB name',
+    () async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final storage = AppSecureStore.instance;
+      final oldName = await storage.ensureWalletDbName();
+      final oldCache = Directory('${root.path}/$oldName.voting-cache');
+      final sibling = Directory(
+        '${root.path}/zcash_wallet_${'a' * 24}.db.voting-cache',
+      );
+      for (final directory in [oldCache, sibling]) {
+        await directory.create();
+        await File('${directory.path}/home-v2.json').writeAsString('{}');
+      }
+      await expectLater(
+        clearVotingCachesForReset(
+          resolveSupportDirectory: () async => root,
+          deleteDirectory: (directory) async {
+            if (directory.path == oldCache.path) {
+              throw FileSystemException('locked');
+            }
+            await directory.delete(recursive: true);
+          },
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await sibling.exists(), false);
+      expect(await oldCache.exists(), true);
+      // Matches resetWallet: secrets are wiped even if cache cleanup failed.
+      await storage.deleteAll();
+      expect(await storage.ensureWalletDbName(), isNot(oldName));
+      await clearVotingCachesForReset(
+        resolveSupportDirectory: () async => root,
+      );
+      expect(await oldCache.exists(), false);
+      await storage.deleteAll();
+    },
+  );
+
+  test(
+    'reset sweep only deletes wallet cache directories and never follows links',
+    () async {
+      final legacy = Directory('${root.path}/zcash_wallet.db.voting-cache');
+      await legacy.create();
+      final unrelated = Directory('${root.path}/other.db.voting-cache');
+      await unrelated.create();
+      final db = File('${root.path}/zcash_wallet_${'b' * 24}.db');
+      await db.writeAsString('wallet');
+      final link = Link(
+        '${root.path}/zcash_wallet_${'c' * 24}.db.voting-cache',
+      );
+      await link.create(unrelated.path);
+      await clearVotingCachesForReset(
+        resolveSupportDirectory: () async => root,
+      );
+      expect(await legacy.exists(), false);
+      expect(await unrelated.exists(), true);
+      expect(await db.exists(), true);
+      expect(await link.exists(), true);
+      await link.delete();
+      await clearVotingCachesForReset(
+        resolveSupportDirectory: () async => Directory('${root.path}/absent'),
+      );
+    },
+  );
 
   test(
     'restart preserves used and unused and isolates accounts and rounds',

@@ -77,6 +77,13 @@ Both used and unused observations persist until the round ends. The current
 policy assumes voting occurs only in this app and the Tendermint voting chain
 has finality: no TTL or periodic revalidation of a known note is performed.
 
+Full wallet reset sweeps wallet-named voting-cache directories in the app's
+support directory after draining voting work. It does not depend on the current
+secure-storage DB name, so cache deletion can be retried after a partial reset
+has already erased that name. One failed directory does not prevent cleanup of
+the others; failures still make reset report an error. Per-account deletion
+continues to remove only that account's observations.
+
 Rust re-derives the current snapshot candidates and calculates eligibility from
 the known unused subset. Only unknown keys require RPC. A shared header is
 verified once and each note proof independently; successful siblings survive
