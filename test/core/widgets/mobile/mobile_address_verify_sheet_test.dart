@@ -70,7 +70,8 @@ void main() {
           expect(find.text(address), findsOneWidget);
           final copy = find.byKey(const ValueKey('full_address_copy_button'));
           expect(copy.hitTestable(), findsOneWidget);
-          expect(find.text('Cancel').hitTestable(), findsOneWidget);
+          expect(find.text('Cancel'), findsNothing);
+          expect(find.bySemanticsLabel('Close').hitTestable(), findsOneWidget);
           if (compact) {
             final scrollable = find.descendant(
               of: find.byType(MobileAddressVerifySheet),
@@ -86,11 +87,6 @@ void main() {
           await tester.pump();
           expect(copied, [address]);
           expect(find.byType(MobileAddressVerifySheet), findsOneWidget);
-          await tester.tap(find.text('Cancel'));
-          await tester.pumpAndSettle();
-          expect(find.byType(MobileAddressVerifySheet), findsNothing);
-          await tester.tap(find.text('Open'));
-          await tester.pumpAndSettle();
           await tester.tap(find.bySemanticsLabel('Close'));
           await tester.pumpAndSettle();
           expect(find.byType(MobileAddressVerifySheet), findsNothing);

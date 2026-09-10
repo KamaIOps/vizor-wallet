@@ -6,7 +6,7 @@ import '../app_button.dart';
 import '../full_address_viewer.dart';
 
 /// Full-address verification sheet — identity title on top, a continuous
-/// wrapping Geist Mono address, a primary Copy address action, and Cancel.
+/// wrapping Geist Mono address, a primary Copy address action, and header close.
 Future<void> showMobileAddressVerifySheet(
   BuildContext context, {
   required String title,
@@ -44,14 +44,9 @@ class MobileAddressVerifySheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
     return MobileModalScaffold(
       title: title,
       leading: leading,
-      titleStyle: AppTypography.labelLarge.copyWith(
-        fontWeight: FontWeight.w600,
-        color: colors.text.accent,
-      ),
       bodyGap: AppSpacing.sm,
       bottomPadding: AppSpacing.md,
       constrainBody: true,
@@ -75,37 +70,7 @@ class MobileAddressVerifySheet extends StatelessWidget {
             expand: true,
             size: AppButtonSize.large,
           ),
-          const SizedBox(height: AppSpacing.xs),
-          _MobileAddressVerifyCancel(onTap: onClose),
         ],
-      ),
-    );
-  }
-}
-
-class _MobileAddressVerifyCancel extends StatelessWidget {
-  const _MobileAddressVerifyCancel({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox(
-          height: AppButtonSizing.largeHeight,
-          child: Center(
-            child: Text(
-              'Cancel',
-              style: AppTypography.labelLarge.copyWith(
-                color: context.colors.text.primary,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

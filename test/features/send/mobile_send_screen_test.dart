@@ -3353,8 +3353,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Copy address'), findsOneWidget);
-    expect(find.text('Cancel'), findsWidgets);
-    await tester.tap(find.text('Cancel').last);
+    await tester.tap(find.bySemanticsLabel('Close').last);
     await tester.pumpAndSettle();
 
     // Memo round-trip through the sheet.

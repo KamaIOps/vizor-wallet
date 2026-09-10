@@ -247,7 +247,7 @@ void main() {
 
     expect(find.text('Solana address'), findsOneWidget);
     final title = tester.widget<Text>(find.text('Solana address'));
-    expect(title.style?.fontSize, AppTypography.labelLarge.fontSize);
+    expect(title.style?.fontSize, AppTypography.bodyLarge.fontSize);
     expect(title.style?.fontWeight, FontWeight.w600);
 
     final addressScope = find.byKey(
@@ -264,7 +264,8 @@ void main() {
     expect(addressText.softWrap, isTrue);
     expect(addressText.style?.fontFamily, 'Geist Mono');
     expect(find.text('Copy address'), findsOneWidget);
-    expect(find.text('Cancel'), findsOneWidget);
+    expect(find.text('Cancel'), findsNothing);
+    expect(find.bySemanticsLabel('Close'), findsOneWidget);
   });
 }
 
