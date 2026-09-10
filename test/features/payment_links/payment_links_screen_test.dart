@@ -14,6 +14,7 @@ import 'package:zcash_wallet/src/core/widgets/app_icon.dart';
 import 'package:zcash_wallet/src/core/widgets/app_modal_card.dart';
 import 'package:zcash_wallet/src/features/payment_links/models/vizor_payment_link.dart';
 import 'package:zcash_wallet/src/features/payment_links/providers/payment_link_intake_provider.dart';
+import 'package:zcash_wallet/src/features/payment_links/providers/payment_link_cards_provider.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_entry_policy.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_hardware_signing_service.dart';
 import 'package:zcash_wallet/src/features/payment_links/services/payment_link_received_store.dart';
@@ -32,6 +33,63 @@ import '../../fakes/fake_sync_notifier.dart';
 import '../../support/payment_links_screen_support.dart';
 
 void main() {
+  testWidgets('copying an older card preserves creation order after reload', (
+    tester,
+  ) async {
+    final older = PaymentLinkRecoveryRecord(
+      link: otherAccountLink,
+      sourceAccountUuid: 'account-1',
+      claimFeeReserveZatoshi: BigInt.from(10000),
+      state: PaymentLinkRecoveryState.funded,
+      updatedAt: DateTime.utc(2026, 8, 5),
+      fundingTxids: 'funding-txid-2',
+    );
+    final operations = FakePaymentLinkOperations(
+      records: [older, fundedRecovery],
+    );
+    final clipboard = FakePaymentLinkClipboard();
+    await pumpPaymentLinksScreen(
+      tester,
+      operations: operations,
+      clipboard: clipboard,
+    );
+    await tester.pumpAndSettle();
+    final newestRow = find.byKey(
+      ValueKey('payment_link_recovery_${incomingLink.address}'),
+    );
+    final olderRow = find.byKey(
+      ValueKey('payment_link_recovery_${otherAccountLink.address}'),
+    );
+    final originalPositions = [
+      tester.getTopLeft(newestRow),
+      tester.getTopLeft(olderRow),
+    ];
+    expect(originalPositions.first.dy, lessThan(originalPositions.last.dy));
+
+    await tester.tap(
+      find.descendant(
+        of: olderRow,
+        matching: find.byKey(const ValueKey('payment_link_card_copy_action')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(clipboard.copiedSecrets, [otherAccountLink.toUri().toString()]);
+    expect(
+      operations.records.first.updatedAt.isAfter(fundedRecovery.updatedAt),
+      isTrue,
+    );
+    expect([
+      tester.getTopLeft(newestRow),
+      tester.getTopLeft(olderRow),
+    ], originalPositions);
+    final reloaded = await loadPaymentLinkCardsSnapshot(operations);
+    expect(reloaded.created.map((record) => record.link.address), [
+      incomingLink.address,
+      otherAccountLink.address,
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final saveAccepted in [true, false]) {
     testWidgets(
       'share buttons track their own pending action (save: $saveAccepted)',

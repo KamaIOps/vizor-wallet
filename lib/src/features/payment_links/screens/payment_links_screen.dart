@@ -360,8 +360,7 @@ class _PaymentLinksScreenState extends ConsumerState<PaymentLinksScreen> {
           .read(paymentLinkOperationsProvider)
           .loadCreatedLinkRecoveries();
       if (!mounted) return;
-      final visible = records.toList()
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      final visible = records.toList()..sort(compareCreatedPaymentLinks);
       setState(() => _recoveries = visible);
       unawaited(_refreshFundingProgress(records: visible));
     } catch (_) {
