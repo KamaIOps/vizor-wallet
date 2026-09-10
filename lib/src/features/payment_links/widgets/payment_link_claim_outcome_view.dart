@@ -59,37 +59,40 @@ class PaymentLinkClaimOutcomeView extends StatelessWidget {
       PaymentLinkAvailability.failed => true,
       _ => false,
     };
-    final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Column(
-        key: const ValueKey('payment_link_claim_outcome_content'),
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            availability.label,
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyMediumStrong.copyWith(
-              color: isError
-                  ? context.colors.text.destructive
-                  : context.colors.text.primary,
+    final content = SingleChildScrollView(
+      key: const ValueKey('payment_link_claim_outcome_scroll'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        child: Column(
+          key: const ValueKey('payment_link_claim_outcome_content'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              availability.label,
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyMediumStrong.copyWith(
+                color: isError
+                    ? context.colors.text.destructive
+                    : context.colors.text.primary,
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            availability.description,
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyMedium.copyWith(
-              color: context.colors.text.secondary,
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              availability.description,
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.colors.text.secondary,
+              ),
             ),
-          ),
-          if (onCheck != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            AppButton(
-              onPressed: busy ? null : onCheck,
-              child: Text(busy ? 'Checking...' : 'Check status'),
-            ),
+            if (onCheck != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              AppButton(
+                onPressed: busy ? null : onCheck,
+                child: Text(busy ? 'Checking...' : 'Check status'),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
     final archiveAction = onArchive == null

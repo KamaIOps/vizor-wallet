@@ -1378,104 +1378,115 @@ class PaymentLinkRedeemDesktopView extends StatelessWidget {
         alignment: Alignment.topCenter,
         child: SizedBox(
           width: 396,
-          height: 624,
-          child: Stack(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Positioned(
-                top: 94,
-                left: 0,
-                right: 0,
-                child: Text(
-                  title ??
-                      (loading
-                          ? kPaymentLinkCheckingLabel
-                          : kPaymentLinkRedeemTheCardTitle),
-                  textAlign: TextAlign.center,
-                  style: AppTypography.headlineLarge.copyWith(
-                    color: context.colors.text.accent,
-                  ),
+              const SizedBox(height: 94),
+              Text(
+                title ??
+                    (loading
+                        ? kPaymentLinkCheckingLabel
+                        : kPaymentLinkRedeemTheCardTitle),
+                textAlign: TextAlign.center,
+                style: AppTypography.headlineLarge.copyWith(
+                  color: context.colors.text.accent,
                 ),
               ),
-              Positioned(
-                top: 179,
-                left: 18,
-                child: loading
-                    ? loadingPlaceholder ?? const PaymentLinkLoadingCard()
-                    : PaymentLinkDashedDropZone(
-                        child:
-                            statusContent ??
-                            (invalid
-                                ? Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        invalidTitle,
-                                        textAlign: TextAlign.center,
-                                        style: AppTypography.bodyMediumStrong
-                                            .copyWith(
-                                              color: context
-                                                  .colors
-                                                  .text
-                                                  .destructive,
+              const SizedBox(height: 52),
+              SizedBox(
+                height: 445,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 0,
+                      left: 18,
+                      child: loading
+                          ? loadingPlaceholder ?? const PaymentLinkLoadingCard()
+                          : PaymentLinkDashedDropZone(
+                              child:
+                                  statusContent ??
+                                  (invalid
+                                      ? Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              invalidTitle,
+                                              textAlign: TextAlign.center,
+                                              style: AppTypography
+                                                  .bodyMediumStrong
+                                                  .copyWith(
+                                                    color: context
+                                                        .colors
+                                                        .text
+                                                        .destructive,
+                                                  ),
                                             ),
-                                      ),
-                                      const SizedBox(height: AppSpacing.xs),
-                                      Text(
-                                        invalidSubtitle,
-                                        textAlign: TextAlign.center,
-                                        style: AppTypography.bodyMedium
-                                            .copyWith(
-                                              color:
-                                                  context.colors.text.secondary,
+                                            const SizedBox(
+                                              height: AppSpacing.xs,
                                             ),
-                                      ),
-                                      const SizedBox(height: AppSpacing.sm),
-                                      PaymentLinkPasteButton(
-                                        label: pasteLabel,
-                                        onPressed: onPaste,
-                                      ),
-                                    ],
-                                  )
-                                : PaymentLinkPasteButton(
-                                    label: pasteLabel,
-                                    onPressed: onPaste,
-                                  )),
-                      ),
-              ),
-              Positioned(
-                top: 462,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 260),
-                    child: Text(
-                      subtitle,
-                      textAlign: TextAlign.center,
-                      style: AppTypography.bodyMedium.copyWith(
-                        color: context.colors.text.secondary,
+                                            Text(
+                                              invalidSubtitle,
+                                              textAlign: TextAlign.center,
+                                              style: AppTypography.bodyMedium
+                                                  .copyWith(
+                                                    color: context
+                                                        .colors
+                                                        .text
+                                                        .secondary,
+                                                  ),
+                                            ),
+                                            const SizedBox(
+                                              height: AppSpacing.sm,
+                                            ),
+                                            PaymentLinkPasteButton(
+                                              label: pasteLabel,
+                                              onPressed: onPaste,
+                                            ),
+                                          ],
+                                        )
+                                      : PaymentLinkPasteButton(
+                                          label: pasteLabel,
+                                          onPressed: onPaste,
+                                        )),
+                            ),
+                    ),
+                    Positioned(
+                      top: 283,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 260),
+                          child: Text(
+                            subtitle,
+                            textAlign: TextAlign.center,
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: context.colors.text.secondary,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    if (secondaryAction != null || invalid)
+                      Positioned(
+                        top: secondaryAction != null
+                            ? PaymentLinkGiftCard.height + AppSpacing.md
+                            : 366,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child:
+                              secondaryAction ??
+                              PaymentLinkTextAction(
+                                label: clearLabel,
+                                onTap: onClearClipboard,
+                                leading: const AppIcon(AppIcons.trash),
+                              ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              if (secondaryAction != null || invalid)
-                Positioned(
-                  top: secondaryAction != null
-                      ? 179 + PaymentLinkGiftCard.height + AppSpacing.md
-                      : 545,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child:
-                        secondaryAction ??
-                        PaymentLinkTextAction(
-                          label: clearLabel,
-                          onTap: onClearClipboard,
-                          leading: const AppIcon(AppIcons.trash),
-                        ),
-                  ),
-                ),
             ],
           ),
         ),
