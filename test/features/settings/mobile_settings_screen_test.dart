@@ -1273,6 +1273,48 @@ void main() {
     );
   });
 
+  testWidgets('Touch ID settings and disable sheet use Apple naming', (
+    tester,
+  ) async {
+    final biometricNotifier = _FakeBiometricNotifier(
+      const BiometricUnlockState(
+        availability: BiometricAvailability(
+          supported: true,
+          enrolled: true,
+          kind: BiometricKind.touchId,
+        ),
+        enabled: true,
+      ),
+    );
+
+    await tester.pumpWidget(_app(biometricNotifier: () => biometricNotifier));
+    await tester.pump();
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('mobile_settings_biometric_row')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('mobile_settings_biometric_row')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Turn off Touch ID unlock?'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(biometricNotifier.disableCount, 0);
+    expect(find.text('Turn off Touch ID unlock?'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('mobile_settings_biometric_row')),
+        matching: find.text('On'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('close keeps biometric unlock enabled', (tester) async {
     final biometricNotifier = _FakeBiometricNotifier(
       const BiometricUnlockState(
