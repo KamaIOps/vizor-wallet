@@ -46,11 +46,13 @@ class FullAddressCopyButton extends StatelessWidget {
   const FullAddressCopyButton({
     required this.address,
     this.expand = false,
+    this.size = AppButtonSize.mediumLarge,
     super.key,
   });
 
   final String address;
   final bool expand;
+  final AppButtonSize size;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +60,7 @@ class FullAddressCopyButton extends StatelessWidget {
       key: const ValueKey('full_address_copy_button'),
       onPressed: () => copyFullAddress(context, address),
       variant: AppButtonVariant.primary,
-      size: AppButtonSize.mediumLarge,
+      size: size,
       expand: expand,
       minWidth: kFullAddressCopyActionMinWidth,
       leading: const AppIcon(AppIcons.copy),

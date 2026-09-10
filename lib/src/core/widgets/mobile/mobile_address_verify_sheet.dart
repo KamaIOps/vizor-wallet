@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../layout/mobile/app_mobile_sheet.dart';
 import '../../theme/app_theme.dart';
+import '../app_button.dart';
 import '../full_address_viewer.dart';
 
 /// Full-address verification sheet — identity title on top, a continuous
@@ -51,20 +52,23 @@ class MobileAddressVerifySheet extends StatelessWidget {
         fontWeight: FontWeight.w600,
         color: colors.text.accent,
       ),
-      bodyGap: AppSpacing.md,
-      bottomPadding: AppSpacing.base,
+      bodyGap: AppSpacing.sm,
+      bottomPadding: AppSpacing.md,
       onClose: onClose,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
+          SizedBox(
             key: const ValueKey('mobile_address_verify_chunks'),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
             child: FullAddressText(address: address),
           ),
           const SizedBox(height: AppSpacing.md),
-          FullAddressCopyButton(address: address, expand: true),
+          FullAddressCopyButton(
+            address: address,
+            expand: true,
+            size: AppButtonSize.large,
+          ),
           const SizedBox(height: AppSpacing.xs),
           _MobileAddressVerifyCancel(onTap: onClose),
         ],
