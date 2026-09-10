@@ -21,6 +21,28 @@ void main() {
     expect(http.requests.single.uri, endpoint);
     expect(http.requests.single.timeout, const Duration(seconds: 5));
   });
+  test('accepts IPv6 loopback HTTP and preserves the complete URL', () async {
+    final local = Uri.parse('http://[::1]:8080/v1/voting/discovery/prod');
+    final http = FakeVotingHttpClient(
+      responses: {local.toString(): snapshot()},
+    );
+    await VotingDiscoveryClient(http).fetch(local, () => now);
+    expect(http.requests.single.uri, local);
+  });
+
+  test('rejects non-loopback IPv6 HTTP before making a request', () async {
+    final http = FakeVotingHttpClient();
+    for (final host in ['2001:db8::1', '::', 'fe80::1']) {
+      await expectLater(
+        VotingDiscoveryClient(
+          http,
+        ).fetch(Uri.parse('http://[$host]:8080/discovery'), () => now),
+        throwsFormatException,
+      );
+    }
+    expect(http.requests, isEmpty);
+  });
+
   test('rejects unsupported, malformed, stale and future responses', () async {
     for (final change in <Map<String, dynamic>>[
       {'scope': 'stage'},

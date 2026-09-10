@@ -41,7 +41,7 @@ class VotingDiscoveryClient {
                 const [
                   'localhost',
                   '127.0.0.1',
-                  '[::1]',
+                  '::1',
                 ].contains(endpoint.host)))) {
       throw const FormatException('Invalid voting discovery endpoint');
     }
