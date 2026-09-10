@@ -150,6 +150,9 @@ class VotingParticipationCoordinator {
       }
       final snapshot = int.tryParse('${round.rawJson['snapshot_height']}');
       if (snapshot != null && scannedHeight < snapshot) continue;
+      votingHomeTrace(
+        'participation.home.candidate scanned=$scannedHeight snapshot=$snapshot',
+      );
       await checkRound(round.roundId, isHomeCurrent: isHomeCurrent);
     }
   }
@@ -210,6 +213,9 @@ class VotingParticipationCoordinator {
           final clock = ref.read(votingHomeClockProvider);
           final failed = _failed[key];
           if (!force && failed != null && clock().isBefore(failed.retryAt)) {
+            votingHomeTrace(
+              'participation.skip.backoff retryAt=${failed.retryAt.toIso8601String()}',
+            );
             return;
           }
           final cache = ref.read(votingHomeCacheProvider.notifier);
@@ -266,6 +272,9 @@ class VotingParticipationCoordinator {
               );
           if (!current()) return;
           if (!scan.isReady) {
+            votingHomeTrace(
+              'participation.wait-sync snapshot=${details.snapshotHeight}',
+            );
             _syncWaitingDetails[detailsKey] = details;
             return;
           }
@@ -292,9 +301,16 @@ class VotingParticipationCoordinator {
             maxRealNotesPerBundle: null,
             pirLayout: config.pirLayout,
           );
+          votingHomeTrace(
+            'participation.check.start home=${isHomeCurrent != null} force=$force snapshot=${details.snapshotHeight}',
+          );
+          final checkTimer = Stopwatch()..start();
           final result = await ref
               .read(votingParticipationClientProvider)
               .check(context, clock, current);
+          votingHomeTrace(
+            'participation.check.done elapsedMs=${checkTimer.elapsedMilliseconds} unavailable=${result.unavailable}',
+          );
           if (!current() ||
               !identical(ref.read(votingConfigProvider).value, config)) {
             return;
@@ -320,6 +336,9 @@ class VotingParticipationCoordinator {
             minutes: previousMinutes == 0
                 ? 1
                 : (previousMinutes * 2).clamp(1, 30),
+          );
+          votingHomeTrace(
+            'participation.failed retryMinutes=${delay.inMinutes}',
           );
           _failed[key] = (
             delay: delay,

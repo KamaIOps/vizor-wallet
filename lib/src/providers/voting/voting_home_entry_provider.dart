@@ -35,7 +35,7 @@ final votingHomeEntryVisibleProvider = Provider<bool>((ref) {
     syncProvider.select((s) => s.value?.scannedHeight ?? 0),
   );
   if (account == null || source == null) return false;
-  return ref
+  final visible = ref
       .read(votingHomeCacheProvider.notifier)
       .shouldShow(
         listKey: votingHomeListKey(network, source),
@@ -45,6 +45,8 @@ final votingHomeEntryVisibleProvider = Provider<bool>((ref) {
         now: ref.read(votingHomeClockProvider)(),
         scannedHeight: scanned,
       );
+  votingHomeTrace('visibility=$visible scanned=$scanned');
+  return visible;
 });
 
 final votingDiscoveryEndpointProvider = Provider<String>(
@@ -137,11 +139,16 @@ class VotingHomeRefresh {
       final sync = ref.exists(syncProvider)
           ? ref.read(syncProvider).value?.scopedToAccount(account)
           : null;
+      votingHomeTrace(
+        'refresh.sync scanned=${sync?.scannedHeight} '
+        'scoped=${sync?.hasAccountScopedData} syncing=${sync?.isSyncing}',
+      );
       if (account != null && sync != null && sync.hasAccountScopedData) {
         await cache.invalidateEligibilityAfterRewind(
           network: network,
           accountUuid: account,
           scannedHeight: sync.scannedHeight,
+          trigger: 'home-refresh',
         );
       }
       final now = ref.read(votingHomeClockProvider)();

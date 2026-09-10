@@ -1394,6 +1394,7 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
               network: ref.read(rpcEndpointProvider).networkName,
               accountUuid: account,
               scannedHeight: next,
+              trigger: 'height-decrease:$previous->$next',
             ),
       );
     });

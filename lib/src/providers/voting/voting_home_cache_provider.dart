@@ -12,6 +12,15 @@ import '../../services/voting/voting_participation_client.dart';
 import 'voting_round_visibility_provider.dart';
 import 'voting_share_tracking_registry_provider.dart';
 
+/// Diagnostic events contain no wallet identifiers or RPC payloads.
+void votingHomeTrace(String message) {
+  if (kDebugMode) {
+    debugPrint(
+      '[VotingHomeTrace] ${DateTime.now().toIso8601String()} $message',
+    );
+  }
+}
+
 const votingHomeCacheKey = 'zcash_voting_home_cache_v1';
 const votingHomeRefreshInterval = Duration(hours: 6);
 
@@ -145,8 +154,13 @@ class VotingHomeCacheNotifier extends Notifier<int> {
 
   Future<void> _read() async {
     try {
+      votingHomeTrace('cache.load.start');
       final raw = await ref.read(votingHomeCacheStoreProvider).read();
-      if (!ref.mounted || raw == null) return;
+      if (!ref.mounted) return;
+      if (raw == null) {
+        votingHomeTrace('cache.load.empty');
+        return;
+      }
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final lists = (json['lists'] as Map<String, dynamic>).map(
         (key, value) => MapEntry(
@@ -162,8 +176,13 @@ class VotingHomeCacheNotifier extends Notifier<int> {
       );
       _lists.addAll(lists);
       _facts.addAll(facts);
+      votingHomeTrace(
+        'cache.load.done lists=${lists.length} facts=${facts.length} '
+        'participation=${facts.values.where((f) => f.participation != null).length}',
+      );
       state++;
     } catch (error) {
+      votingHomeTrace('cache.load.failed');
       debugPrint('Voting Home cache read failed: $error');
     }
   }
@@ -219,6 +238,10 @@ class VotingHomeCacheNotifier extends Notifier<int> {
     VotingParticipationResult result,
   ) => _update(() {
     final old = fact(key);
+    votingHomeTrace(
+      'participation.record snapshot=$snapshotHeight '
+      'unavailable=${result.unavailable}',
+    );
     _facts[key] = VotingHomeFact(
       eligibility: old.eligibility,
       progress: old.progress,
@@ -255,6 +278,7 @@ class VotingHomeCacheNotifier extends Notifier<int> {
     required String network,
     required String accountUuid,
     required int scannedHeight,
+    String trigger = 'unspecified',
   }) => _update(() {
     var changed = false;
     for (final entry in _facts.entries.toList()) {
@@ -268,6 +292,11 @@ class VotingHomeCacheNotifier extends Notifier<int> {
           scannedHeight >= fact.snapshotHeight!) {
         continue;
       }
+      votingHomeTrace(
+        'cache.invalidate trigger=$trigger scanned=$scannedHeight '
+        'snapshot=${fact.snapshotHeight} participation=${fact.participation != null} '
+        'progress=${fact.progress.name}',
+      );
       _facts[entry.key] = VotingHomeFact(progress: fact.progress);
       changed = true;
     }
@@ -299,8 +328,12 @@ class VotingHomeCacheNotifier extends Notifier<int> {
       'lists': _lists.map((key, value) => MapEntry(key, value.toJson())),
       'facts': _facts.map((key, value) => MapEntry(key, value.toJson())),
     });
-    final write = _writes.then((_) => store.write(value));
+    final write = _writes.then((_) async {
+      await store.write(value);
+      votingHomeTrace('cache.persist.done');
+    });
     _writes = write.catchError((Object error) {
+      votingHomeTrace('cache.persist.failed');
       debugPrint('Voting Home cache persistence failed: $error');
     });
     return write;
@@ -331,7 +364,10 @@ class VotingHomeCacheNotifier extends Notifier<int> {
     required int scannedHeight,
   }) {
     final rounds = list(listKey);
-    if (rounds == null) return false;
+    if (rounds == null) {
+      votingHomeTrace('visibility=false reason=no-list');
+      return false;
+    }
     return rounds.rounds.any((round) {
       if (!showTestRounds && isHiddenTestVotingRoundTitle(round.title)) {
         return false;
@@ -349,11 +385,19 @@ class VotingHomeCacheNotifier extends Notifier<int> {
           round.roundId,
         ),
       );
+      votingHomeTrace(
+        'visibility.candidate factPresent=${_facts.containsKey(votingHomeFactKey(network, rounds.fingerprint, accountUuid, round.roundId))} '
+        'scanned=$scannedHeight snapshot=${local.snapshotHeight} '
+        'progress=${local.progress.name} eligibility=${local.eligibility.name} '
+        'participation=${local.participation != null} '
+        'unavailable=${local.participation?.unavailable}',
+      );
       if (local.progress == VotingHomeProgress.inProgress) return true;
       if (local.progress == VotingHomeProgress.completed) return false;
       // A rewind below the checked snapshot makes a negative hint uncertain.
       if (local.snapshotHeight != null &&
           scannedHeight < local.snapshotHeight!) {
+        votingHomeTrace('visibility=true reason=below-snapshot');
         return true;
       }
       if (local.participation?.unavailable ?? false) return false;
