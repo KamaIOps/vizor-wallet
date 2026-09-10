@@ -11,7 +11,6 @@ import '../../services/voting/voting_http.dart';
 import '../account_provider.dart';
 import '../app_security_provider.dart';
 import '../rpc_endpoint_provider.dart';
-import '../sync_provider.dart';
 import 'voting_config_provider.dart';
 import 'voting_config_source_provider.dart';
 import 'voting_home_cache_provider.dart';
@@ -31,9 +30,6 @@ final votingHomeEntryVisibleProvider = Provider<bool>((ref) {
   );
   final network = ref.watch(rpcEndpointProvider.select((s) => s.networkName));
   final showTest = ref.watch(showTestVotingRoundsProvider).value ?? false;
-  final scanned = ref.watch(
-    syncProvider.select((s) => s.value?.scannedHeight ?? 0),
-  );
   if (account == null || source == null) return false;
   final visible = ref
       .read(votingHomeCacheProvider.notifier)
@@ -43,9 +39,8 @@ final votingHomeEntryVisibleProvider = Provider<bool>((ref) {
         accountUuid: account,
         showTestRounds: showTest,
         now: ref.read(votingHomeClockProvider)(),
-        scannedHeight: scanned,
       );
-  votingHomeTrace('visibility=$visible scanned=$scanned');
+  votingHomeTrace('visibility=$visible');
   return visible;
 });
 
@@ -133,24 +128,6 @@ class VotingHomeRefresh {
       final cache = ref.read(votingHomeCacheProvider.notifier);
       await cache.ensureLoaded();
       if (!ref.mounted) return;
-      final account = ref.exists(accountProvider)
-          ? ref.read(accountProvider).value?.activeAccountUuid
-          : null;
-      final sync = ref.exists(syncProvider)
-          ? ref.read(syncProvider).value?.scopedToAccount(account)
-          : null;
-      votingHomeTrace(
-        'refresh.sync scanned=${sync?.scannedHeight} '
-        'scoped=${sync?.hasAccountScopedData} syncing=${sync?.isSyncing}',
-      );
-      if (account != null && sync != null && sync.hasAccountScopedData) {
-        await cache.invalidateEligibilityAfterRewind(
-          network: network,
-          accountUuid: account,
-          scannedHeight: sync.scannedHeight,
-          trigger: 'home-refresh',
-        );
-      }
       final now = ref.read(votingHomeClockProvider)();
       final endpoint = _endpoint();
       final cached = cache.list(key);

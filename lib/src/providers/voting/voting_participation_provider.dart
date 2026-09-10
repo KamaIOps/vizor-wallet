@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/voting/voting_poll_ordering.dart';
+import '../../features/voting/voting_flow_models.dart';
 import '../../rust/api/voting.dart' as rust;
 import '../../services/voting/resolved_voting_config_extensions.dart';
 import '../../services/voting/voting_http.dart';
@@ -51,7 +52,6 @@ final votingParticipationUnavailableProvider = Provider.family<bool, String>((
   final account = ref.watch(accountProvider).value?.activeAccountUuid;
   final network = ref.watch(rpcEndpointProvider).networkName;
   final source = ref.watch(votingConfigSourceProvider).value?.sourceUrl;
-  final height = ref.watch(syncProvider).value?.scannedHeight ?? 0;
   if (account == null || source == null) return false;
   final cache = ref.read(votingHomeCacheProvider.notifier);
   final list = cache.list(votingHomeListKey(network, source));
@@ -65,7 +65,6 @@ final votingParticipationUnavailableProvider = Provider.family<bool, String>((
   return fact.progress != VotingHomeProgress.inProgress &&
       fact.progress != VotingHomeProgress.completed &&
       fact.snapshotHeight != null &&
-      height >= fact.snapshotHeight! &&
       (fact.participation?.unavailable ?? false);
 });
 
@@ -132,10 +131,11 @@ class VotingParticipationCoordinator {
       );
       if ((fact.progress == VotingHomeProgress.inProgress ||
               fact.progress == VotingHomeProgress.completed) ||
-          fact.participation != null) {
+          fact.hasCheckedParticipation) {
         continue;
       }
-      if (fact.eligibility == VotingHomeEligibility.ineligible &&
+      if (!fact.needsRecheck &&
+          fact.eligibility == VotingHomeEligibility.ineligible &&
           fact.snapshotHeight != null &&
           scannedHeight >= fact.snapshotHeight!) {
         continue;
@@ -227,7 +227,7 @@ class VotingParticipationCoordinator {
               votingHomeFactKey(network, list.fingerprint, account, round),
             );
             if (!force &&
-                (fact.participation != null ||
+                (fact.hasCheckedParticipation ||
                     fact.progress == VotingHomeProgress.completed ||
                     fact.progress == VotingHomeProgress.inProgress)) {
               return;
@@ -245,7 +245,7 @@ class VotingParticipationCoordinator {
             ),
           );
           if (!force &&
-              (currentFact.participation != null ||
+              (currentFact.hasCheckedParticipation ||
                   currentFact.progress == VotingHomeProgress.inProgress ||
                   currentFact.progress == VotingHomeProgress.completed)) {
             return;
@@ -315,16 +315,38 @@ class VotingParticipationCoordinator {
               !identical(ref.read(votingConfigProvider).value, config)) {
             return;
           }
+          final proposalIds = result.localState
+              ? proposalsFromRound(details).map((p) => p.id).toList()
+              : const <int>[];
+          if (result.localState && proposalIds.isEmpty) {
+            throw StateError('Recovery decision requires round proposals');
+          }
+          final plan = result.localState
+              ? await ref
+                    .read(votingRecoveryServiceProvider)
+                    .loadRoundPlan(
+                      dbPath: dbPath,
+                      accountUuid: account,
+                      roundId: round,
+                      proposalIds: proposalIds,
+                    )
+              : null;
+          if (!current() ||
+              !identical(ref.read(votingConfigProvider).value, config)) {
+            return;
+          }
+          final factKey = votingHomeFactKey(
+            network,
+            config.sourceFingerprint,
+            account,
+            round,
+          );
           await cache.recordParticipation(
-            votingHomeFactKey(
-              network,
-              config.sourceFingerprint,
-              account,
-              round,
-            ),
+            factKey,
             details.snapshotHeight,
             result,
           );
+          if (plan != null) await cache.recordPlan(factKey, plan);
           _failed.remove(key);
         })
         .catchError((Object _) {

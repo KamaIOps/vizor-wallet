@@ -1380,24 +1380,6 @@ class _MobileVotingEntryState extends ConsumerState<_MobileVotingEntry> {
     ref.listen(rpcEndpointProvider.select((s) => s.networkName), (_, _) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     });
-    ref.listen(syncProvider.select((s) => s.value?.scannedHeight), (
-      previous,
-      next,
-    ) {
-      if (previous == null || next == null || next >= previous) return;
-      final account = ref.read(accountProvider).value?.activeAccountUuid;
-      if (account == null) return;
-      unawaited(
-        ref
-            .read(votingHomeCacheProvider.notifier)
-            .invalidateEligibilityAfterRewind(
-              network: ref.read(rpcEndpointProvider).networkName,
-              accountUuid: account,
-              scannedHeight: next,
-              trigger: 'height-decrease:$previous->$next',
-            ),
-      );
-    });
     void schedule() => WidgetsBinding.instance.addPostFrameCallback(
       (_) => _checkParticipation(),
     );

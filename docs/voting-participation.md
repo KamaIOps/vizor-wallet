@@ -1,10 +1,10 @@
 # Restored voting participation
 
-Home schedules a client-side check for active, visible candidate rounds after
+Home schedules a client-side check for active candidate rounds (including those whose Home card is hidden) after
 wallet sync reaches the snapshot. Detail entry also waits for the same deduplicated
 check before preparing voting power. The list preview and submission/recovery
-jobs do not start another participation check. Home can show its card while the
-first check runs. Settings remains a permanent entry point.
+jobs do not start another participation check. Home keeps its card hidden until a positive actionable result is confirmed.
+Previously confirmed visibility is retained while checks wait or fail. Settings remains a permanent entry point.
 
 Rust reads the account's Orchard full viewing key and snapshot notes. It derives
 real-note governance nullifiers with the pinned `zcash_voting` SDK. This works for
@@ -26,7 +26,8 @@ Rust verifies IAVL membership (value `01`) or non-membership, then the multistor
 proof for `vote` against the signed header's app hash. It checks chain ID, height,
 header hash, time (at most ten minutes old or one minute ahead), validator-set
 hash and the Tendermint commit's signature quorum. Missing/pruned/invalid proofs
-remain unknown and never suppress a card or exclude notes.
+leave the previous display decision unchanged and never exclude notes.
+Without a previous decision, the card stays hidden.
 
 This is a reader anchored to a bundled consensus committee, not a full rotating
 light client. The bundled public keys and original voting powers live in
@@ -51,7 +52,7 @@ client. Cumulative changes that lose the bundled >2/3 quorum require a reviewed
 anchor update. The original committee remains a long-lived trust assumption;
 this does not provide automatic protection against compromise of its retired
 keys. Custom sources remain unsupported. Regtest retains its explicit disposable
-exact-set anchor. Failed checks remain unknown and never suppress a card.
+exact-set anchor. Failed checks preserve the last confirmed display decision.
 
 ## Persistence and recovery
 
@@ -61,8 +62,24 @@ checks are not repeated automatically. Consecutive failures back off for 1, 2, 4
 triggers retry once that deadline passes; no retry timer is added. Backoff lives
 only in memory and resets after success. Cancelled work (lock, account or source
 change) and incomplete sync do not increase the delay.
-Detail's **Check again** explicitly retries and refreshes eligibility. Rewinding
-below the checked snapshot invalidates cached eligibility and participation hints.
+Detail's **Check again** explicitly retries and refreshes eligibility.
+
+Each durable fact stores an `unknown`, `show` or `hide` decision separately from
+`needsRecheck`. A successful participation result confirms `show` only when
+`remainingEligible` is true; `unavailable == false` alone is insufficient (it
+also includes empty wallets). Existing local bundles require the recovery planner
+with the round's proposal IDs before deciding whether work remains. Missing
+proposals or a failed planner call preserves the previous successful observation.
+Eligibility-only positive results are not enough to promote an unknown card.
+
+Neither Home refresh nor decreasing sync progress heights invalidate these facts.
+The explicit wallet-rewind cache API marks affected facts for recheck and preserves
+their last decisions; it must not be called with ordinary progress events. There
+is currently no production caller of that API. A changed round snapshot discards
+the old decision, and a newly eligible observation schedules a recheck. Round
+closure, deadline expiry, completion, account and source/network scoping still
+apply independently of sync. Old caches migrate from verified evidence; ambiguous
+legacy local recovery results are rechecked.
 This is a restore-time observation, not continuous cross-device monitoring.
 
 Verified used notes are excluded from new eligibility, precomputation and all
@@ -136,4 +153,5 @@ a final failure falls back to the coordinator's exponential backoff.
 When preparation finds zero snapshot notes, no participation RPC is sent. Rust
 rereads the wallet and accepts empty evidence only for the same empty candidate
 set. The existing local result/persistence path still runs; zero notes never
-means previously used voting rights and does not change Home visibility rules.
+means previously used voting rights. It confirms a hidden Home decision when
+there is no actionable local recovery.

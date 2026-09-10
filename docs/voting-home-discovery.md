@@ -1,11 +1,19 @@
 # Mobile Home voting discovery
 
-Home renders its local round list and account eligibility/completion hints first.
+Home renders the last confirmed account-scoped display decision. Unknown rounds
+start hidden. A verified remaining eligible note set or an actionable local
+recovery plan confirms visibility; an active round alone does not. Decisions
+survive restart and do not depend on the current sync progress height.
+
+Bootstrap reads the local cache, selected source and test-round preference before
+Home's first frame. It performs no voting RPC or wallet query for this hydration.
 On entry or foreground resume, mainnet with the bundled prod voting source and
 testnet with the bundled stage voting source query their public discovery
 endpoint once. Network or selected source changes trigger the same check. Concurrent triggers share
 one request; a source/network/endpoint switch queues a refresh for the new context.
-The one-minute Home timer only reevaluates local deadlines and does not poll.
+The one-minute Home timer reevaluates local deadlines without polling discovery.
+It also runs the participation candidate scheduler; already checked rounds are
+skipped, and unresolved checks respect the participation backoff.
 
 ## Build configuration
 
