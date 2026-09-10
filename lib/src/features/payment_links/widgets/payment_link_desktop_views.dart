@@ -441,8 +441,8 @@ class PaymentLinkReviewDesktopView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Keep the card, summary and CTA in one layout. A floating summary adds
-    // scroll reserve even though the Figma review fits the 720px window.
+    // Preserve the standard window's geometry while letting scaled text grow
+    // the content. The card and summary must never compete for the same space.
     return LayoutBuilder(
       builder: (context, constraints) => PaymentLinkPane(
         backLabel: backLabel,
@@ -451,113 +451,117 @@ class PaymentLinkReviewDesktopView extends StatelessWidget {
           alignment: Alignment.topCenter,
           child: SizedBox(
             width: 420,
-            height: math.max(640, constraints.maxHeight - 64),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.s,
-                0,
-                AppSpacing.s,
-                AppSpacing.sm,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: math.max(640, constraints.maxHeight - 64),
               ),
-              child: Column(
-                children: [
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyLarge.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.text.accent,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    subtitle,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: context.colors.text.secondary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  PaymentLinkWizardStepper(
-                    currentStep: 2,
-                    onStepSelected: onStepSelected,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Expanded(
-                    child: Stack(
-                      fit: StackFit.expand,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.s,
+                  0,
+                  AppSpacing.s,
+                  AppSpacing.sm,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Positioned(
-                          top: 53,
-                          left: 0,
-                          right: 0,
-                          child: Center(child: card),
+                        Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodyLarge.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: context.colors.text.accent,
+                          ),
                         ),
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: SizedBox(
-                              key: const ValueKey(
-                                'payment_link_review_summary',
-                              ),
-                              width: 320,
-                              height: 136,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: AppSpacing.s,
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          subtitle,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: context.colors.text.secondary,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        PaymentLinkWizardStepper(
+                          currentStep: 2,
+                          onStepSelected: onStepSelected,
+                        ),
+                        const SizedBox(height: AppSpacing.md + 53),
+                        card,
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          key: const ValueKey('payment_link_review_summary'),
+                          width: 320,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.s,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: AppSpacing.base,
+                                  ),
+                                  child: _ReviewAmountRow(
+                                    label: 'Card amount',
+                                    value: cardAmountText,
+                                  ),
                                 ),
-                                child: Column(
-                                  children: [
-                                    SizedBox(
-                                      height: AppSpacing.base,
-                                      child: _ReviewAmountRow(
-                                        label: 'Card amount',
-                                        value: cardAmountText,
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      height: AppSpacing.base,
-                                      child: _ReviewAmountRow(
-                                        label: kPaymentLinkCardFeeLabel,
-                                        value: cardFeeText,
-                                      ),
-                                    ),
-                                    const SizedBox(height: AppSpacing.sm),
-                                    SizedBox(
-                                      height: AppSpacing.base,
-                                      child: _ReviewAmountRow(
-                                        label: kPaymentLinkTotalDeductedLabel,
-                                        value: totalAmountText,
-                                        emphasized: true,
-                                        showHelp: true,
-                                      ),
-                                    ),
-                                  ],
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: AppSpacing.base,
+                                  ),
+                                  child: _ReviewAmountRow(
+                                    label: kPaymentLinkCardFeeLabel,
+                                    value: cardFeeText,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: AppSpacing.sm),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: AppSpacing.base,
+                                  ),
+                                  child: _ReviewAmountRow(
+                                    label: kPaymentLinkTotalDeductedLabel,
+                                    value: totalAmountText,
+                                    emphasized: true,
+                                    showHelp: true,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
+                        const SizedBox(height: AppSpacing.md),
+                        AppButton(
+                          key: const ValueKey(
+                            'payment_link_confirm_create_button',
+                          ),
+                          onPressed: onConfirm,
+                          minWidth: 196,
+                          size: AppButtonSize.large,
+                          leading: const Center(
+                            child: AppIcon(
+                              AppIcons.giftCard,
+                              size: AppIconSize.medium,
+                            ),
+                          ),
+                          child: Text(confirmLabel),
+                        ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppButton(
-                    key: const ValueKey('payment_link_confirm_create_button'),
-                    onPressed: onConfirm,
-                    minWidth: 196,
-                    size: AppButtonSize.large,
-                    leading: const Center(
-                      child: AppIcon(
-                        AppIcons.giftCard,
-                        size: AppIconSize.medium,
-                      ),
-                    ),
-                    child: Text(confirmLabel),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

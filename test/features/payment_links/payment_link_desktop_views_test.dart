@@ -250,6 +250,94 @@ void main() {
     expect(gap, greaterThanOrEqualTo(30));
   });
 
+  for (final showMessage in [false, true]) {
+    testWidgets('review fits normally and scrolls with larger text '
+        '(message: $showMessage)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1080, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      // Match the production pane without the unrelated sidebar fixtures.
+      await _pump(
+        tester,
+        SizedBox(
+          width: 800,
+          height: 704,
+          child: PaymentLinkReviewDesktopView(
+            card: PaymentLinkGiftCard(
+              artwork: PaymentLinkCardArtwork.ruby,
+              amountText: '4.45',
+              supportingText: r'$1,210.20',
+              showCaret: false,
+              showBack: showMessage,
+              message: showMessage ? 'Happy birthday!' : '',
+            ),
+            onBack: () {},
+            onConfirm: () {},
+            cardAmountText: '4.45 ZEC',
+            cardFeeText: '0.04 ZEC',
+            totalAmountText: '4.49 ZEC',
+          ),
+        ),
+      );
+      final summary = find.byKey(const ValueKey('payment_link_review_summary'));
+      final card = find.byType(PaymentLinkGiftCard);
+      final confirm = find.byKey(
+        const ValueKey('payment_link_confirm_create_button'),
+      );
+
+      for (final scale in [1.0, 1.3, 2.0, 1.0]) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        await tester.pumpAndSettle();
+        final scroll = tester
+            .widget<SingleChildScrollView>(
+              find.byKey(const ValueKey('app_pane_scroll_view')),
+            )
+            .controller!;
+        scroll.jumpTo(0);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(summary).dy - tester.getBottomLeft(card).dy,
+          greaterThanOrEqualTo(AppSpacing.sm),
+        );
+        expect(
+          scroll.position.maxScrollExtent,
+          scale == 1 ? 0 : greaterThan(0),
+        );
+
+        final rows = find.byWidgetPredicate(
+          (widget) =>
+              widget is Padding &&
+              widget.key is ValueKey<String> &&
+              (widget.key! as ValueKey<String>).value.startsWith(
+                'payment_link_review_row_',
+              ),
+        );
+        expect(rows, findsNWidgets(3));
+        for (var index = 0; index < 3; index++) {
+          final rowRect = tester.getRect(rows.at(index));
+          if (index > 0) {
+            expect(
+              rowRect.top,
+              greaterThanOrEqualTo(tester.getBottomLeft(rows.at(index - 1)).dy),
+            );
+          }
+          for (final text
+              in find
+                  .descendant(of: rows.at(index), matching: find.byType(Text))
+                  .evaluate()) {
+            final textRect = tester.getRect(find.byWidget(text.widget));
+            expect(textRect.top, greaterThanOrEqualTo(rowRect.top));
+            expect(textRect.bottom, lessThanOrEqualTo(rowRect.bottom));
+          }
+        }
+        scroll.jumpTo(scroll.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        expect(confirm.hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
+
   testWidgets('review exposes the total tooltip without a divider', (
     tester,
   ) async {
