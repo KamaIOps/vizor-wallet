@@ -416,7 +416,7 @@ void main() {
     },
   );
 
-  testWidgets('verify modal shows the full address grid for unknown address', (
+  testWidgets('verify modal shows the wrapping address for unknown address', (
     tester,
   ) async {
     await _setDesktopViewport(tester);

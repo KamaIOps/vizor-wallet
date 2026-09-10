@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart' show MaterialApp;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/core/formatting/address_display.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/core/widgets/app_button.dart';
 import 'package:zcash_wallet/src/core/widgets/app_profile_picture.dart';
+import 'package:zcash_wallet/src/core/widgets/full_address_viewer.dart';
 import 'package:zcash_wallet/src/core/widgets/review_info_row.dart';
 import 'package:zcash_wallet/src/features/accounts/widgets/account_modal_card.dart';
 import 'package:zcash_wallet/src/features/send/widgets/verify_address_modal.dart';
@@ -15,7 +16,7 @@ const _address =
 
 void main() {
   group('VerifyAddressModal unknown variant', () {
-    testWidgets('renders header copy, grid, and the Close action', (
+    testWidgets('renders header copy, wrapping address, and the Close action', (
       tester,
     ) async {
       var closed = 0;
@@ -30,10 +31,16 @@ void main() {
 
       expect(find.text('Unknown shielded address'), findsOneWidget);
       expect(find.byType(ReviewInfoIconCircle), findsOneWidget);
+      expect(find.text(_address), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('full_address_code_block')),
+        findsOneWidget,
+      );
+      expect(find.text('Copy'), findsOneWidget);
 
-      // The add-to-contacts flow is deferred: Close is the only action.
+      // The add-to-contacts flow is deferred: Close plus the inline copy.
       expect(find.text('Add to contacts'), findsNothing);
-      expect(find.byType(AppButton), findsOneWidget);
+      expect(find.byType(AppButton), findsNWidgets(2));
 
       await tester.tap(find.text('Close'));
       await tester.pump();
@@ -73,9 +80,28 @@ void main() {
       expect(find.text('Unknown shielded address'), findsNothing);
     });
 
-    testWidgets('highlights the fixed head/tail groups in crimson', (
+    testWidgets('copies the exact address from the inline Copy chip', (
       tester,
     ) async {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add(
+              (call.arguments as Map<Object?, Object?>)['text']! as String,
+            );
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
       await _pump(
         tester,
         VerifyAddressModal(
@@ -85,28 +111,35 @@ void main() {
         ),
       );
 
-      final colors = AppThemeData.light.colors;
-      final rows = addressVerifyGrid(_address);
+      await tester.tap(find.byKey(const ValueKey('full_address_copy_button')));
+      await tester.pump();
+      expect(copied, [_address]);
+    });
 
-      final firstGroup = rows.first.first;
-      expect(firstGroup.highlighted, isTrue);
-      final firstText = tester.widget<Text>(find.text(firstGroup.text).first);
-      expect(firstText.style?.color, colors.text.brandCrimson);
-      expect(firstText.style?.fontWeight, FontWeight.w600);
+    testWidgets('action footer uses Copy address as the primary action', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        VerifyAddressModal(
+          address: _address,
+          variant: VerifyAddressModalVariant.unknown,
+          layout: FullAddressViewerLayout.actionFooter,
+          onClose: () {},
+        ),
+      );
 
-      final lastGroup = rows.last.last;
-      expect(lastGroup.highlighted, isTrue);
-      final lastText = tester.widget<Text>(find.text(lastGroup.text).last);
-      expect(lastText.style?.color, colors.text.brandCrimson);
-      expect(lastText.style?.fontWeight, FontWeight.w600);
-
-      // Second group of the first row sits outside the mock's
-      // non-consecutive emphasis pattern (0, 2, N-3, N-1).
-      final middleGroup = rows.first[1];
-      expect(middleGroup.highlighted, isFalse);
-      final middleText = tester.widget<Text>(find.text(middleGroup.text).first);
-      expect(middleText.style?.color, colors.text.primary);
-      expect(middleText.style?.fontWeight, FontWeight.w500);
+      expect(
+        find.byKey(const ValueKey('full_address_code_block')),
+        findsNothing,
+      );
+      expect(find.text('Copy address'), findsOneWidget);
+      expect(find.text('Close'), findsOneWidget);
+      expect(find.text(_address), findsOneWidget);
+      final addressText = tester.widget<Text>(
+        find.byKey(const ValueKey('full_address_text')),
+      );
+      expect(addressText.style?.fontFamily, 'Geist Mono');
     });
   });
 
@@ -130,7 +163,8 @@ void main() {
       expect(find.text('12 previous transactions'), findsOneWidget);
       expect(find.text('Unknown shielded address'), findsNothing);
       expect(find.text('Add to contacts'), findsNothing);
-      expect(find.byType(AppButton), findsOneWidget);
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Close'), findsOneWidget);
 
       await tester.tap(find.text('Close'));
       await tester.pump();

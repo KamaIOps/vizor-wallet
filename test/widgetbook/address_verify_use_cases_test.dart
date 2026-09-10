@@ -38,6 +38,34 @@ void main() {
     expect(find.text('Unknown shielded address'), findsNothing);
     expect(find.text('Close'), findsOneWidget);
   });
+
+  testWidgets('code-block variation shows inline Copy on a recessed block', (
+    tester,
+  ) async {
+    await _pumpUseCase(tester, buildVerifyAddressCodeBlockUseCase);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text(kAddressViewerShowcaseAddress), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('full_address_code_block')),
+      findsOneWidget,
+    );
+    expect(find.text('Copy'), findsOneWidget);
+    expect(find.text('Copy address'), findsNothing);
+    expect(find.text('Close'), findsOneWidget);
+  });
+
+  testWidgets('action-footer variation shows Copy address as the primary CTA', (
+    tester,
+  ) async {
+    await _pumpUseCase(tester, buildVerifyAddressActionFooterUseCase);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text(kAddressViewerShowcaseAddress), findsOneWidget);
+    expect(find.byKey(const ValueKey('full_address_code_block')), findsNothing);
+    expect(find.text('Copy address'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+  });
 }
 
 Future<void> _pumpUseCase(WidgetTester tester, WidgetBuilder builder) async {

@@ -1,12 +1,11 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../core/formatting/address_display.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_profile_picture.dart';
+import '../../../core/widgets/full_address_viewer.dart';
 import '../../../core/widgets/review_info_row.dart';
-import '../../../core/widgets/review_wrap_card.dart';
 import '../../accounts/widgets/account_modal_card.dart';
 
 /// Recipient flavor shown by [VerifyAddressModal].
@@ -24,9 +23,9 @@ enum VerifyAddressModalAddressKind { shielded, transparent, external }
 /// The address verification modal opened from "Show full address" on the
 /// send review screen (and later the received receipt).
 ///
-/// Renders the full unified address through the canonical verify grid
-/// ([addressVerifyGrid]): 5-character groups, 5 groups per row, with the
-/// fixed head/tail groups emphasized in the brand crimson.
+/// Renders the full address as a continuous Geist Mono string that wraps
+/// naturally, plus a visible copy control. [layout] selects between the
+/// recessed code-block treatment and the primary Copy address footer.
 ///
 /// Static only — no provider wiring. The caller hosts this card inside an
 /// `AppPaneModalOverlay` and supplies the callbacks.
@@ -39,6 +38,7 @@ class VerifyAddressModal extends StatelessWidget {
     this.contactProfilePictureId,
     this.previousTransactionCount,
     this.unknownAddressKind = VerifyAddressModalAddressKind.shielded,
+    this.layout = FullAddressViewerLayout.codeBlock,
     super.key,
   }) : assert(
          variant == VerifyAddressModalVariant.unknown ||
@@ -46,8 +46,11 @@ class VerifyAddressModal extends StatelessWidget {
          'knownContact requires contactName and contactProfilePictureId.',
        );
 
-  /// Full unified address rendered as the verify grid.
+  /// Full unified address rendered as wrapping monospace text.
   final String address;
+
+  /// Copy-control placement. Defaults to the recessed code-block layout.
+  final FullAddressViewerLayout layout;
 
   final VerifyAddressModalVariant variant;
 
@@ -91,8 +94,12 @@ class VerifyAddressModal extends StatelessWidget {
         children: [
           SizedBox(height: _titleRowHeight, child: _header(context)),
           const SizedBox(height: AppSpacing.md),
-          _AddressVerifyGrid(address: address),
+          FullAddressBody(address: address, layout: layout),
           const SizedBox(height: AppSpacing.md),
+          if (layout == FullAddressViewerLayout.actionFooter) ...[
+            FullAddressCopyButton(address: address, expand: true),
+            const SizedBox(height: AppSpacing.xs),
+          ],
           Center(
             child: AppButton(
               key: const ValueKey('verify_address_close_button'),
@@ -194,69 +201,5 @@ class VerifyAddressModal extends StatelessWidget {
           ],
         );
     }
-  }
-}
-
-/// The full-address grid body: centered rows of 5-character groups with
-/// row dividers between address lines. Highlighted groups
-/// render Label M
-/// SemiBold in the brand crimson; normal groups render Label M in the
-/// primary text color, per the Figma address-color pattern.
-class _AddressVerifyGrid extends StatelessWidget {
-  const _AddressVerifyGrid({required this.address});
-
-  final String address;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final rows = addressVerifyGrid(address);
-    final normalStyle = AppTypography.labelLarge.copyWith(
-      color: colors.text.primary,
-    );
-    final highlightedStyle = AppTypography.labelLarge.copyWith(
-      color: colors.text.brandCrimson,
-      fontWeight: FontWeight.w600,
-    );
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Each address line except the last carries a hairline divider
-          // 12px below its digits; lines are separated by a further 8px,
-          // per the Figma "Address Line" column structure.
-          for (var row = 0; row < rows.length; row++) ...[
-            if (row > 0) const SizedBox(height: AppSpacing.xs),
-            // scaleDown keeps wide glyph metrics (and the test environment's
-            // square Ahem font) from overflowing the 256px column; with the
-            // production Geist metrics the row fits and renders 1:1.
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < rows[row].length; i++) ...[
-                    if (i > 0) const SizedBox(width: AppSpacing.s),
-                    Text(
-                      rows[row][i].text,
-                      style: rows[row][i].highlighted
-                          ? highlightedStyle
-                          : normalStyle,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (row < rows.length - 1) ...[
-              const SizedBox(height: AppSpacing.s),
-              const ReviewWrapDivider(),
-            ],
-          ],
-        ],
-      ),
-    );
   }
 }

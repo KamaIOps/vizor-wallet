@@ -18,6 +18,7 @@ import '../widgetbook/carousel_use_cases.dart';
 import '../widgetbook/screen_use_cases.dart';
 import '../widgetbook/swap_use_cases.dart';
 import '../widgetbook/voting_use_cases.dart';
+import '../widgetbook/address_verify_use_cases.dart';
 import 'zip321_prefill_use_cases.dart';
 
 typedef FigmaCompareScenarioBuilder = Widget Function(BuildContext context);
@@ -1617,6 +1618,34 @@ const figmaCompareScenarios = <FigmaCompareScenario>[
     id: 'activity-gift-card-redeemed-detail-mobile',
     description: 'Mobile redeemed card with saved fiat',
     builder: buildGiftCardRedeemedDetailPreview,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'verify-address-code-block',
+    description:
+        'Desktop full-address viewer: recessed code block with inline Copy',
+    builder: buildVerifyAddressCodeBlockUseCase,
+  ),
+  FigmaCompareScenario(
+    id: 'verify-address-action-footer',
+    description:
+        'Desktop full-address viewer: wrapping address with Copy address CTA',
+    builder: buildVerifyAddressActionFooterUseCase,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-verify-address-code-block',
+    description:
+        'Mobile full-address sheet: recessed code block with inline Copy',
+    builder: buildMobileVerifyAddressCodeBlockUseCase,
+    desktop: false,
+    mobile: true,
+  ),
+  FigmaCompareScenario(
+    id: 'mobile-verify-address-action-footer',
+    description:
+        'Mobile full-address sheet: wrapping address with Copy address CTA',
+    builder: buildMobileVerifyAddressActionFooterUseCase,
     desktop: false,
     mobile: true,
   ),

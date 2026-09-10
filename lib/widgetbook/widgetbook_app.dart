@@ -1592,6 +1592,22 @@ class WidgetbookApp extends StatelessWidget {
                       name: 'Known contact',
                       builder: buildVerifyAddressKnownContactUseCase,
                     ),
+                    WidgetbookUseCase(
+                      name: 'Code block copy',
+                      builder: buildVerifyAddressCodeBlockUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Action footer copy',
+                      builder: buildVerifyAddressActionFooterUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Mobile code block copy',
+                      builder: buildMobileVerifyAddressCodeBlockUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Mobile action footer copy',
+                      builder: buildMobileVerifyAddressActionFooterUseCase,
+                    ),
                   ],
                 ),
                 WidgetbookComponent(
